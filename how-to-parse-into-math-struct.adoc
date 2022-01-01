@@ -1,0 +1,100 @@
+== how to formalize perceptions into mathematical expressions
+
+=== introduction
+
+this is hacking (reverse engineering, experimentation, and formal modeling) technique: systematic detective work to understand anything for which we're given litte or no interpretation.
+
+your perceptions are either:
+
+* ideas that you know
+* observations of physical reality
+* linguistic constructs (e.g. books or listening to someone speak)
+
+.general
+
+all *things* are *matter* & *form* [arrangement/relation/orientation]. the simplest type of thing is called an *atom*. atoms are formless. a collection of atoms of different types is called a _basis_ or _dimension_. for example, the basis of human perception is {sight, hearing, emotion, propioception,...}. sight can't be described in terms of hearing, so they're distinct types of atoms. *complex things* are a collection of atoms. particles are the atoms of the physical universe. symbols are the atoms of ideas (mathematical expressions.) in mathematics, all symbols are arbitrary, so all the meaning of ideas is in their form. be aware that some ideas (like _set_ [noun]) are merely synonyms for "thing" and so cannot be expressed in more detail. they have no regard to the number nor form of those things; it's a total vagry. as such, it's no different from a symbol, which itself is vacuous. the only essential thing that we can say about sets is that they have elements, i.e. they can be on the RHS of the ∈ relation.
+
+though complex things are composed of atoms, it's useful to say that things are composed of atoms or other things. this recursive definition allows us to consider things in terms of other things, rather than in terms of atoms. to express any thing in terms of any of its components (instead of just a meaningful symbol) is an _expansion_ of the thing. an expression of a complex thing exclusively it terms of atoms is called _fully expanded_. expansion allows us to _refactor_ expressions—a form a re-expression. consider (x + 5)^2^ + x; it expands to x^2^ + 5x + 5x + 25 + x. we can expand it further, but that wouldn't help us here. instead, let's just _simplify_ it now to x^2^ + 11x + 25. expansion enables us to consider other simplifications—here it allowed us to re-express a polynomial with an obvious vector expression: [1 11 25]. this expression is simpler than what we started with! to identify it, though, we had to make our original expression a bit messier for a bit. whereas the original expression used the factoring simplification scheme, our latter one uses the vectorization scheme. each interpretation [form] allows us to consider the same idea in different ways, and each suggests operations to perform on it: e.g. we know that vectors support norm, inner product, etc.
+
+[NOTE]
+_predicate_, _property_, _proposition_, and _axiom_ are used interchangably, though strictly speaking _axiom_ is decided whereas _property_ may be an implied consequence of some axioms. _form_, _pattern_, and _relation_ are used interchangably. axioms are relations of axiomatic primitives (i.e. binding clauses and boolean operators.) mathematical expressions are relations of mathematical primitives. the primitives are the basis of the universe of discourse. notice that i didn't mention symbols! again, symbols are vacuous and used only as notation. they aren't even present when relations & operators are expressed pointfree. e.g. ∀a,b. (a + b)/2 can be expressed in pointfree prefix notation as `(/2)+`. `2` is a shorthand for an expression of basis of real numbers (a generalization of peano numerals.) expression in terms of the peano basis `(0, ∆)` explicitly: `(/(∆∆0))+`. note that this notation is valid iff each subexpression's arity is unambiguous.
+
+.physical simple & complex things
+====
+atoms [physics] are arrangements of particles; if the particles were changed or rearranged then the atom would be different. not every combination of particles and orientations satisfy physical laws (*axioms*.) the arrangement of an atom's particles can be described many ways, but the simplest is to simply state the number of protons and electrons. we can use such a simple description because the rest of the description is implied by physical laws about atoms must be arranged, e.g. that the number of protons equals the number of neutrons, and that the protons & neutrons are always together in a compact geometry approximating a sphere, and that the electrons orbit that geometry.
+====
+
+.mathematical simple & complex things
+====
+"a magma is a set equipped with a single binary operation that must be closed." it can thus be described symbolically, fully expanded as (S, ·) : (∀ a, b ∈ S. a · b ∈ S). we could specify that · : S × S -> S, but that's implied by the closure predicate.
+====
+
+.linguistic simple & complex things
+====
+from wikipedia: "the β-sheet is a common motif of the regular protein secondary structure [henceforth RPSS for brevity]." from this i know that β-sheet has the type motif(RPSS). _motif_ is a noun, which means that it's a property of the RPSS. all properties are predicates [axioms], but posession is a noteworthy property: "tom has a hand" is expressed by the proposition ∃hand. hand ∈ tom.
+
+next i lookup _motif_: "in a chain-like biological molecule (e.g. protein or nucleic acid,) [it]'s a common 3D structure that appears in various evolutionarily unrelated molecules." now we know that the RPSS is chain-like. there'd be a contradiction in our statements, otherwise. that it occurs in various molecules, or that those molecules are evolutionarily unrelated isn't relevant to my interests, so i discard it, but remember it a bit just in case something relates to it later in my study.
+====
+
+NOTE: though you can study a thing in its entirety, it's wise to know what the extent of your interest is in it, so that you consider it only insofar as it'll benefit you. if you don't know, then you're left to discover what you can about the thing until you've enough information to decide how to further study it.
+
+=== the technique
+
+. identify terms (or, of physical phemonena, identify physical properties) as arrangements of other terms, etc, until those terms are in terms of atoms. obviously you don't check things that you already know; each time you consider something, you consider it only in the most complex terms that you already know that you can describe in terms of atoms. 
+. identify arrangement of terms and predicate to which that arrangement conforms.
+  .. in math expressions are nested relations
+  .. in linguistics terms are grammatically related
+  .. in physics sets of matter are related by interaction/forces
+. now you have a description of the thing; next you must understand it by matching its form to some forms that you already know or identifying properties that it satisfies
+. deduce implications of definitive and implied properties
+. re-express whenever useful. helps make patterns obvious.
+
+that's it. it's abstract, so examples follow.
+
+.example properties (of a structure or multiple structures)
+
+these are properties of structures/functions. structures are equivalent to functions: every structure can be expressed by a dual generating and traversal functions. properties of multiple things are really _comparisons_ of properties of each. for example, we can look at the form of two things and judge that they're equal or not, i.e. that the things are isomorphic or not. isomorphism is just a re-expression of difference of properties of each: iso x y = propset x ∩ propset y. `atom` is in the following list; you can compare the atom sets of two things. there's not a name for that, though one could be chosen. because one hasn't been, though, the non-comparitive form `atom` is used.
+
+* commutativity (order isn't meaningful)
+* recursion
+* variation or lack of variation under transforms (e.g. eigenvectors)
+* extent (same cononical complexity)
+* isomorphism (same form)
+* bijection (ability to convert between two forms without loss of information)
+* subset/superset (relation of extension/intension)
+* atoms
+
+.example re-expressions
+
+* simplify
+  ** reduce (β-reduction or discard redundancies)
+  ** factor: to match an expression e by pattern f(a,b,c,...)
+  ** algebraic re-expression: to apply an operation f to an expression E, but change E into E' such that f(E') = E. this can be accomplished at least two ways:
+    *** identity. E -> 1·E. supported by monoids &c. e.g. x + 2 = 2(x + 2)/2. in this example, a multiplication by a clever form of 1, the monoid is (×,1).
+    *** inversion. E -> f(inv(f)(E)). supported by groups &c. x = (sin ∘ asin)(x) with the new domain restricted to [-1,1]. also note that (sin ∘ asin) ≠ (asin ∘ sin)! such non-obvious facts are possible in real analysis, but not in groups!
+    *** possibly others. in fact, identity may be a variety of inversion or vice versa. it seems so, but also no so.
+  ** group & sort
+* recursion (e.g. [1 2 3 4] becomes (1 . (2 . (3 . 4))) or continued fraction forms of irrationals)
+* series (e.g. taylor series for transcendentals)
+* generalization: identify a form, parameterize it, then change its parameters. you know which new values to change it to by the set to which both the old & new values belong. e.g. [1 2 3 4] matches the pattern `length = 4`. we can change 4 to something else. we know what else there is: `4` is a positive integer; the positive integers are a subset of all integers, which are a subset of reals, which are a subset of complex numbers. let's say that complex numbers are the most general number type that we know. we can say that the complex number type [form] `a + bi` is isomorphic to the non-commutative sequence [a b]—another sequence to generalize. we can generalize its length, let's say to 4. that means a number of form `a + bi + cj + dk`—quanternions. instead of 4, we can generalize to ∞, or even 3 + 2i, though i don't immediately see an interpretation for that. it may be a very useful idea; in fact, forms that seem the most absurd either truly are absurd (rare) or permit astonishing interpretations.
+* change of basis. for example, the cartesian basis is less elegant than the spherical basis for describing a slinky. transforms (generalizations of u-substitution) are used to make integration easier (or possible, at least by current know methods.)
+  ** _elegance_ is a measure the inverse of the complexity of an expression. complexity is the number of an expression's symbols & relations, or, of multiple expressions, the sum of their complexities.
+* pointfree
+* polish notation
+* isomorphism, bijection, &c. being that these are properties only of multiple things, they're also inherently re-expressions.
+* fourier transform
+* laplace transform
+
+.example forms (of expression)
+
+* graphs
+* matrices
+* vectors
+* general expression (composition of various axiomatic relations/operators)
+
+existence of any one of expression, form, or property implies existence of the other two. re-expression is a relation of axiomatic forms. properties are patterns of expressions or relations.
+
+[quote, james tanton]
+we can do anything in math. we just have to live with the consequences.
+
+we can leverage all mathematics knowledge; all of math is just identifying #implications# of #axiomatic# #forms#. the the highlights identify the above three classes of examples. data science has many tools for identifying patterns of data. we just need to use them for linguistic data instead of numerical. the power of these methods is that everything is data; we consider even definitions as mathematical structures; we manipulate them using common mathematical transformations. we can generalize descriptions of meaning by considering their elements as points in sets, and change them to different elements in the same of more general sets. we can ask what modifications of implied properties would necessitate about the corresponding definition. we can compare these differences, and if there's no difference, then we've identified a symmetry. we can increase or decrease the number of degrees in a geometry, and discover link:https://en.wikipedia.org/wiki/Hyperbolic_geometry#Properties[hyperbolic spaces]. if we assume the premise that we can divide by zero, we find various implications, such as link:https://en.wikipedia.org/wiki/Wheel_theory[wheels].

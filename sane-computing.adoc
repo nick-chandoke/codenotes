@@ -1,0 +1,159 @@
+TODO: consider multiple programs connecting to a common sql db for ipc; atomicity means that we can use sql to wait for events (though hopefully not inefficiently; surely we can use even a simple server to simply communicate between programs when one program has committed to the db so that the other program can read therefrom) and that our parsing is as simple as using vectors (table rows.) there also won't be any dealing with pipes; there'll only be a fault-tolerant connection to the db!
+
+.general principles
+
+. it's better to hack together currently existing code (regardless of language!) than to write your own
+  . programs can achive IPC via cmdline invocation
+  . startup times are negligible for programs running as servers
+    . smaller languages with smaller runtimes are better than larger languages with larger VM requirements anyway
+  . cmdline IPC means:
+    . i/o, but that's not considerably slower
+    . parsing, which may take some time
+  . marshalling and ffi is the best solution
+. there's *data*, manipulations thereof (*functions*,) and how we express those manipulations (*syntax*.)
+  . there're also _hooks_ (code executed upon asynchronous events.) a hook on a synchronous event is just another expression of procedural code. however, handling async events is a special consideration of computer programming that doesn't typically have a mathematical analogue (except the process (i.e. π) calculus.)
+  . _programs_ are data that permit interpretations as morphisms, either pure or stateful, which are really equal, differing only semantically about which context is considered. being that programs are orderly, the code used to encode them must follow a grammar.
+. functions can be data just as verbs can be gerunds or infinitives
+. the manipulations are functions/proofs (see curry-howard correspondence) and/or structures. structures are at least related to functions [algorithms]: every algorithm is neatly implementable for a given data structure, i.e. every data structure supposes [at least one] natural morphism over it.
+. use parallel algorithms & systems. GPUs or other parallel matrix tech is good.
+. constraint solvers generalize type systems, compute most efficient solutions, and take least amount of programming (they're declarative)
+
+.basic technique
+
+basically: *pipe data and call functions. disregard languages.*
+
+non-lisp languages suck because they can only get in the way of the actual logic. consider haskell: it's expressive, and commonly good, but it's not perfect: sometimes its syntax is inelegant. if it were a lisp, then we could just add syntax via a macro. instead, to augment its syntax, one would need to modify the haskell compiler's source code. yikes.
+
+the very fact that non-lisp languages are not as general/simple as possible implies that they're more convenient for some things and less convenient for other things. rarely will any given language perfectly suit your needs, so you'll need to consider the conveniences and inconveniences that any language provides. this is fine for small projects, but god forbid that those should grow into larger projects, you may well find yourself uncomfortably beholden to that language.
+
+fortunately, languages aren't much a concern because each one supports:
+
+. reading from stdin and outputting to stdout or stderr
+. running extenal programs via command lines, e.g. `os.execute("ls", "-a")`
+
+this means that all programs are interoperable! if there's functionality implemented in a language that you don't want, then you can make a little "main shim" (cmdline invocation to either a running server or a program to be launched) in that language that simply parses a command line or stdin, and rest assured that you'll never need to code anything more in that language. alternatively you could have one program write to a database or filesystem, then instruct another program to read therefrom. this is useful for caching. for example, a program may request data from a remote server over a slow connection, then effectively pass it to another program. if that second program had an error, then we'd be able to retry without re-requesting; we'd just pull from the database or filesystem.
+
+commonly databases make parsing easier, too. for example, i create a table corresponding to a struct. in one program i easily insert an object of that struct type, then in another program i read the record such that each field is a separate object in an array or dict. this is handled by sql libraries each written for their program's language.
+
+''''
+
+so whenever you're using a computer, decide: what functionality do i want? what offers it? how easy is each option to use? even if the language is nice, installing it or using its tooling may suck.
+
+functionality is the domain of structures—not languages. algorithms are usually easily-enough translated among languages.
+
+.particular tools
+
+* lisp(s) for code (e.g. racket, chicken, janet, fennel,....) these have nearly as little syntax as a language can have: it's just [parens-]delimited funcalls, and maybe some data literal syntaxes.
+  * usually i prefer janet for scripting and typed racket for large/complex programs, especially if safety is needed
+  * its syntax is extensible via macros, for convenience, only when & where desired
+  * simple to parse and refactor
+  * using delimiters instead of indentation means that anything can be a one-liner. this is often useful when mixing languages, e.g. `ls -1 | janet -e '(loop [l :in (string/split "\n" (file/read stdin :all))] (when (string/has-suffix? "adoc" l) (print l)))'`
+  * there are many lisps, but usually their syntaxes are mostly the same
+  * for each of many languages (especially popular ones,) there is at least one lisp that transpiles to it. therefore you hardly need to waste time familiarizing yourself with various syntaxes. remember! a program is not its syntax! it's the logic referred to by the syntax!
+* databases for data. their data management is far better than anything you'd personally implement.
+  * sqlite is excellent for non-distributed systems:
+    * ACID
+    * small
+    * easy to use and install
+    * supported by many languages
+* a good parser (i generally recommend janet pegs)
+
+.sane computing
+
+* concern yourself with knowing the logic—not much the language that describes it nor tools that implement it
+* as with everything, identifying something mathematically will tell you exactly what it is and nothing of what it isn't
+* keep everything minimalist and simple. this way, you can easily write scripts and create small systems that resolve specific problems. because everything you're working with is simple, you'll've not spent much time nor effort learning it, which will emotionally free you to use other solutions. your norm will be using "whatever works" rather than becoming attached to any particular tools. instead, you'll be attached to particular _principles_, techniques, or other _abstractions_.
+* C isn't bad. hacking lua (for fennel) or many other lisps (including janet, chicken, guile, or racket, in that order) have easy C ffi.
+
+.data vs code
+
+code is expressible by an AST, which is obviously a data structure. where code and data appreciably differ is
+
+* nestability: functions' outputs are easily passed as inputs to other functions, e.g. `(+ 10 (* 20 3))` this has 5 data—`+`, `10`, `*`, `20`, and `3`—arranged in a tree. remember that trees are isomorphic with nested lists.
+* executability (of primitives/builtins): in the above example, `+` and `*` are irreducable (i.e. inexpressable by other terms) functions that produce outputs.
+* side effects: data can't have side effects, but code can, especially doing so without useful return value (viz null or void)
+* scope: every identifier [symbol] in code must be resolvable in its context. databases do not have scope beyond nullity of result sets.
+
+these aren't strict differeneces; they more are common patterns. in fact, we can do all of our programming in sql, and it'd actually be useful to do so. the only inelegance there is the need to create tables for each data structure. commonly we have anonymous structures (denoted by lists or tuples) in programming languages. finally sql databases don't support dictionaries.
+
+many of these are better supported by small csv files. large csv files don't have the efficient writing or reading (nor ACID) that db's have.
+
+.stability & sanity
+
+programming as a field is always seeing new tools, people, techniques. often we're expected to know them because new, useful software uses them, or because an employer or customer demands so, or because we're collaborating with others who use these novel things. keeping up with it all is hopeless: there's too much, and much of it isn't even useful! often "new" technologies are just common ones being marketed differently. for example, currently blockchain, machine learning, and orchestrated containerization are being applied _everywhere_, though they're needed (or even useful/appropriate) in few places.
+
+we find ease in the things that do not change: algorithms, data structures, common software that's been around for a very long time, and is so known to be reliable. we also find ease in minimalism: using few, flexible tools—again, databases and lisps, but also the likes of kakoune, kmonad, tmux, nmap.
+
+.prefer (sql) databases
+
+databases are the most advanced common software. they implement all the most difficult aspects of programming:
+
+* concurrency
+* atomicity
+* optimization for both speed and memory for large datasets
+* memory (databases are assumed to be much larger than RAM, and their operations account for this)
+
+and they implement some less-difficult yet appreciable conveniences:
+
+* sorting & grouping
+* union & intersection
+* repl (effectively, by transactions)
+
+therefore to use a database is to make an efficient program. the only places where databases are as good as general purpose proglangs are:
+
+* certain algorithms
+* IPC or interaction with remote services
+* stateful imperative logics
+* hardware interaction
+
+basically, databases are good for everything that involves data, but inappropriate or unaccomodating to everything else (namely anything involving i/o.) not only this, but databases may work locally as a program, or run as a server, which makes database code automatically work for either single-host or distributed use cases.
+
+.cheating
+
+know when you need to program for perfection or not. for example _linearize_ (use a linear approximation of) mathematical expressions, or estimate mathematical expressions over reals by a series of bitshift and linear algebra operations. know when it's better to use a hard-coded lookup table or use an algorithm to produce values. code for your purpose rather than a "good" implementation. for example, your situation may call for random numbers. your choices are a random number source like `/dev/urandom` or a pseudo-random number generation algorithm. you can use the former if it provides enough data. if using an algorithm, then it only needs to be seemingly random—something that depends on what the value is to be used for. don't waste your time making a super-unpredictable algorithm if no user will notice the difference. an algorithm may be convincing enough for pseudo-random game events but horribly obviously not truly random for producing a grayscale image of white noise.
+
+remember: this is coding, not mathematics. we often can't afford perfect mathematical precision, whether it be real analysis or combinatronics. for most applications it's better to use approximate solutions then adjust their results for sensibility, than to calculate as exact a solution as could be considered reasonable.
+
+this may seem obvious, and maybe it's only a problem for few people, but please resist any inclination to make the best solution that you can simply because it's the best and you can; prefer simpler, faster, lesser yet sufficient solutions (except when you're uncertain about how the solution may need to generalize in the future. this can be tricky to predict, and is very particular to each situation.)
+
+.fundamental computer science
+
+programming is just recursion, lists & maps / alists (i.e. lists of pairs) / tagged unions (lua shows that these are all the same structure,) and concurrency. computer science is implementing mathematics by these. vectors, lists, stacks,...they're implementation details, which can be important, but only for efficiency rather than result state. graphs are the most general data structure (though not the most general mathematical structure) but are implemented in terms of arrays & maps. ADTs are useful, but they're expressible recursively by lists and maps. strictly, pair is the smallest data structure. it corresponds to the fundamental mathematical principle of _association/relation_—the basis for all super-singleton structures.
+
+given pairs' fundamentality, we see that every structure can be considered or traversed as: itself naturally; a tensor/matrix; a graph. if you're familiar with these structures, it should be clear how databases or parallelized GPU operations can be very useful here.
+
+again, *keep it basic*. much of programming or computer work today—even what's considered brilliant and popular—is really just about making needlessly complicated things simpler—even though they end-up being still overly-complicated (or limited, or difficult to use outside a very specific use case.) let's not forget how simple things are, and be very careful when promoting anything more complex than maps & lists. and guard yourself against anything more complex! there are many such things, and they sound good, and they do work, and so they're tempting! it's very easy to accidentally find yourself in an ocean of complexion, wondering how you strayed so far from simplicity. obviously this is true only for large programs/systems. however, i encourage that you not go too much out of your way to try to discover/learn the hottest tech or try to learn all the tech in order to make yourself seem versatile. there's too much, and it'll corrupt your mind. however, on that note, i do encourage, if you're so inclined & capable (i'll offer a course later on this,) to consider mathematical structures' applications to computer science, such as universal algebra / category theory, linear types, or using tensors for general computations; or cs-specific things like AVL trees. considering these problems and solutions will improve your programming. again, though—generally—mathematics affects how the program is described, whereas cs affects the efficiency of the program.
+
+everything (all data, and functions) can be represented by *pairs/lists* as used in scheme. maps (isomorphic with *alists*) are structures composed of pairs. *tagged unions* are isomorphic to maps from symbols to values. lua is a good language (semantically) because its one structure is a list/table. these are the same structure: a table is another term for a map: lookup values by indices (of any type.) a list (again, specifically in lua) is just a table whose indices are always positive integers. javascript has objects that are similar, and so javascript would be (and used to be) as good as lua; however, recent revisions of javascript introduce special semantics and syntaxes that void that elegance of simplicity.
+
+all programs can be described by the lambda calculus, wherein functions are represented by _lambdas_: simple mappings from inputs to outputs, e.g. `(lambda (a b) (* 2 b (+ a 3)))`. the meaning is obvious. the fact that this is an s-expression implies that it is data—namely it's isomorphic to its quoted form in its evaluation context.
+
+so whenever someone mentions something like chef, ansible, kubernetes, or any of many popular softwares whose name gives absolutely no hint whatsoever as to what it does, and you go to each's respective website, and you encounter astonishingly vague language, or it describes some revolutionary new system or some junk, ask yourself: how do i express this thing as a graph, table, list, or abstract mathematical structure? for example, ansible is basically `map`, but maps stateful modifications over a list/set of machines. nix is a system for executing arbitrary pure functions (usually to an executable program or a library) whose domain is dependencies, with caching support. dependencies is a graph (specifically a DAG.) people love telling what you can do with their software, but that's hardly a concern for us hackers, since hackers understand structures (including functions) and muse about all the different ways that they can use them. besides this, a software's ability tells us nothing about what it is, how to think about it, etc.
+
+this thinking removes all mystery. for example, scheme continuations are usually difficult to learn, but if you realize that all programs (and very clearly lisp programs) are trees (viz ASTs) and that there's a map (table) from identifiers to syntax contexts with values, then continuations are very simple to understand: they're just nodes in a tree, and moving around continuations is just looking-up in a map. despite being moot, continuations' brilliance is that the objects of the table and map are execution contexts! that's the kicker. haskell is a relatively good language simply because it associates data with types, and types are logical constructs that support implication and testing. the _association_ and _logic_ make it good. that's the magic. how is the logic implemented? there's a loop over a couple sets of logical propositions. that's a significant portion of the implementation of a professional programming language! programming isn't hard. the only reason that programming (or using computers) is difficult is because either 1) you're using bad tools or techniques; 2) the problem is inherently tricky, even if not initially obvious. for example, computing the integral of e^(x^1) is easy, but e^(x^2) is not. in other words: we typically consider a solution to a problem, but encounter trouble when expanding it to a general solution. while you should always strive to know how general your solution needs to be, predicting future needs can be very difficult, so just do your best with what you have. though not particularly covered in this course, there is a technique to design systems for flexible generalizing. i might offer that in another course, but it requires a strong foundation in a variety of mathematics that i alone have identified and haven't finished my seminal book on.
+
+almost always, the more that software obscures the simple structures that underlie it, the worse the software is: it's difficult to keep track of options, there are more options than appropriate, the options or operations do not compose well (or at all,) and there's a decent chance that the software will make certain operations easier than others, which may or may not be a problem for you depending on your use case.
+
+.special techniques
+
+* fuzzing
+* parsers & antiparsers
+* typing (note that types are predicates, i.e. logical statements)
+  * composing types and seeing which programs they beget, e.g. a list or tree or dag or graph editor, which would work on bookmarks, spreadsheets, playlists, etc
+* streaming
+* parallelization
+  * MIMD is better than parallel threads
+* concurrency
+* purity
+* memoization
+
+.saneware
+
+software is only as good as it is when it fails. when software works like it's supposed to, then that's good, but it should be expected that it'll fail (or that you'll want to use it in an uncommon way,) and when that happens, if you can't overcome that error or find a way to implement your desired behavior, then the software is worthless.
+
+these wares follow the description of sane computing: simple, serverized or main-shimmed, use funcalls and standard ports. these wares use self-descriptive names and have neither special usage nor installation guides. furthermore, as a practical consideration, these wares do not suck (they do what all they're supposed to and have no needless quirks.) each program does one thing, and for programs that are commonly used work together, any new user does not need to know about these common usages in order to use any subset of tools together.
+
+* link:https://github.com/mawww/kakoune/blob/master/doc/design.asciidoc[kakoune]
+* language server protocol (lsp)
+* link:https://w3c.github.io/webdriver/[webdriver]
+* link:https://nyxt.atlas.engineer/article/technical-design.org[nyxt] (uses xml-rpc to bridge controller (nyxt/lisp) & view (webkit))

@@ -1,0 +1,783 @@
+== best paradigms
+
+there are only two properties to make a program ideal: efficiency and elegance.
+
+.TODO's
+
+* ensure that i mention the importence of anonymous ADTs: for them to express a program elegantly they must be anonymous, just like functional programming without lambdas (i.e. with only named functions) would be horrible.
+* use racket's unique feature: language definition! make lots of _algebra-specific languages_!
+* see https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
+
+things to do after i'm done with stocks:
+
+* look into agda and f*
+* learn lenses further
+  ** consider HKDTs
+* read about free theorems (walder 1987)
+* refactor util.rkt:795~ into lenses or arrays
+
+.summary
+
+abstractions with (possibly many) numerical _degree(s)_ are ideal. e.g. recursion schemes, tensors, ADTs, functions. all of these structures represent both data structures and transforms.
+
+* algebraic (symmetrical except ad-hoc definition of algebra's rules)
+  ** the more symmetry something has, the fewer data are needed to describe it, and the more uniform & predictable its behavior. therefore algebras should be compared by a measure of symmetry in order to identify the best algebra.
+  ** pointfree
+  ** the duals recursion schemes & generation rules (generative functions and/or recursive ADTs)
+    *** functions instead of data structures
+* tacit (e.g. group operation notation)
+* branchless (comparisions still allowed.) requires using entirely numbers instead of boolean?
+* fixed-point arithmetic
+
+typing (unsure if should be used:)
+
+* complex tensor types? linked lists? functions instead of linked lists? depends on runtime, e.g. if state[ful|less] ops are faster.
+  ** remember: all structures are mathematically just (recursively) nested relations. any operator that doesn't lose information is a relation: `->`, `cons`, `[a b]` (array). all structures isomorphic to any structure can be used interchangably. therefore the question of which structure to use is purely dependent on the language/runtime's special considerations of those structures. because all graphs can be expressed by linked lists, and graphs are the most general data structure, we know that arrays and functions can each express any data structure.
+* definitely functions instead of type classes
+* types are first class & algebraic (i.e. you can write type families just like ordinary lambdas)
+  ** anonymous data types
+* typing follows type theory convention & arithmetic (seeing types as expressions of numbers and algebraic operators)
+
+=== algebra-based programming
+
+carbon is such an interesting element that an entire branch of chemistry is devoted to carbon-containing compounds. that subfield even uses unique notations. of all the elements, carbon is the only one that has such devotion. compounds are merely relations of elements. however, these relations must obey certain rules; some combinations of elements combine to produce compounds and some do not. this is the chemistry algebra: the set of elements, and the set of axiomatic operatiors that enable the production of compounds. we as programmers should seek the mathematical analogues of carbon: versatile elements of the algebra's set that enable us a great variety of compounds via their great support of various composition rules. that is what i mean by _algebra-based programming_.
+
+NOTE: technically _category_ is more correct than _algebra_ since we're considering particular elements, but the premise & method are similar to both. certain cases are more categorical than algebraic, but they're similar enough that for brevity i'll refer to them and related things simply as "algebra[ic]."
+
+usually we're progarmming for a purpose beyond play or exploration of structure for its own sake. so disregard programming _languages_! we don't want _expressivity_; we want to encode sensible ideas with least effort! we aren't trying to _express ideas_; we're trying to identify solutions to problems! we want a program that satisfies some needs, and we don't care how it's found or what its form is so long as it's easy and works. expressivity just gets in the way; it offers more options than are necessary. expressivity burdens us with the confounding responsibility of identifying expressions that work elegantly together—no mere feat!
+
+.(a)symmetry
+
+[options="header"]
+|==============================================
+| ad-hoc polymorphism | parametric polymorphism
+| asymmetry           | symmetry
+| ∃                   | ∀
+| no closure          | closure
+| enumeration         | generation rule
+| finite/bounded      | infinite/unbounded
+| closed exprs        | non-closed exprs
+|==============================================
+
+* axioms or basic rules (e.g. the peano numeral data type definition) should be the only ad-hoc statements.
+* ad-hoc polymorphism appropriately encodes constraints, whereas parametric polymorphism expresses variable freedom.
+
+the combination of ad-hoc & parametric polymorphism enables specification of any mathematical rule with exact specificty. this is true of types as well as functions. for example, bounded recursion is a coupling of an asymmetrical rule (base case) and a symmetrical one (recursive case.) commonly ad-hoc rules limit the extension of generation rules. beware types that seem to be symmetrical, e.g.
+
+[source,haskell]
+unfoldr :: (b -> Maybe (a, b)) -> b -> [a]
+
+there's asymmetry in the `case` on `Maybe`'s constructors. "but, wait!" you say? "`Maybe` is simply a monoid!" if that's the case, then we should be able to express it in terms of monoidal functors:
+
+[source,haskell]
+unfold :: Applicative f => (b -> f (a,b)) -> b -> [m]
+
+then reify that to `Maybe` and run it. it's impossible to define `unfold` without `case` on `Maybe`'s constructors. asymmetry is required for halting.
+
+programs should be calculated, preferably by a computer, but at least by hand. efficient calculation requires *symmetry*: for everything to obey the same axioms without (*ad-hoc*) exception. ad-hoc (asymmetry) means arbitrary association, and must be accounted for by `cond`—a generalization of `case` or `if`. (see §branchless for examples.) aside from the syntactic cruft of branching blocks, ad-hoc means more rules—more cases for us to account for, which means more varieties of behaviors to reason about, which means more thinking, more code, and greater chance that we'll fail to account for edge cases. precisely the trouble with asymmetry is lack of closure. operations that aren't closed over a set are much more of a hassle to reason about.
+
+.suggestivity
+
+a good algebra has few operations and few ways to express any program. this means that if a programmer doesn't know how to code a program, or they're unfocused, then glancing the algebra itself, or a list of common patterns/idioms, suggests to the programmer a definition, so that programming happens more automatically.
+
+.algebraic interpretation play
+
+this section suggests identifying consequences of unusual interpretations.
+
+relation equivalnce allows us to consider interesting things: `a -> b -> c` can be described by `[a b c]`. how can we use matrices to compute or reason about types? if we describe types by numbers, e.g. arity, or a sequence of arities (e.g. `(a -> b) -> b -> b` has arity sequence `[1 0 0]`) &c, can we calculate particularly useful function types, then from that derive a suggested function definition? if that sounds like a one-in-a-million shot, remember that functions are just lambdas, and their only supported operation is application/composition. if we consider that all n-ary functions can be described by applications of unary functions (demonstrated by currying) then all functions are trees of unary functions, which may be expressed as tuples or any other binary relation. it's easy to identify calculi about such simple structures.
+
+we can express a graph by an adjacency matrix. we can take eigenvalues of matrices (generally vectors.) what do the eigens of an adjacency matrix represent or tell us? under which varieties of graphs is this operation sensible? is the cardinality of the operation on adjacency matrices any less useful than it is on matrices for which the operation is already assumed useful? if not, why? if not, this must mean that, despite matrices and graphs being isomorphic, there's a difference in either axioms or amount of information between adjacency matrices and matrices for which eigens are useful! if eigns are found to have meaning, perhaps that can give a better implementation of some common structure/method that we've been using.
+
+=== branchless
+
+not only is branching slow, but we must write extra code to account for it. it's also slower for any computer to calculate because it can only predict (often badly, and always entailing extra computation) what the upcoming code is. if there's no branching, then it obviously loads whatever code is next; however, if it branches, then it must load some code from wherever the branch tells it to go (determined during runtime,) which generally is impossible to know in advance.
+
+[source,c]
+----
+//branching
+//faster b/c compiler optimized into 3 instructions
+int min (int a, int b) { if (a < b) return a; else return b; }
+
+//branchless. relies on comparison statements returning 0 or 1 instead of true | false
+//slower b/c the assembly outputted by the compiler was poor
+int min(int a, int b) { return a * (a < b) + b * (b <= a); }
+
+//branching
+void upper(char* d, int n) {
+  for (int i = 0; i < count; i++)
+    if (d[i] >= 'a' && d[i] <= 'z')
+      d[i] -= 32;
+}
+
+//branchless. 7x faster.
+void upper(char* d, int n) {
+  for (int i = 0; i < count; i++)
+    d[i] -= 32 * (d[i] >= 'a' && d[i] <= 'z');
+}
+----
+
+general branchless is a × cond~a~ + ... + z × cond~z~.
+
+NOTE: be careful that whatever method you choose is efficient as *output* by your compiler!
+
+* branchless handcoded assembly is always faster than branching handcoded assembly
+* array-based programming on some architectures (e.g. intel) avoids branching but still loops, by using `esi` & `edi` special looping-designated registers. instructions like `cmp ...; cmovg ...` are branchless but still obviously use conditionals.
+  ** SIMD/AVX branchless is the fastest variety of cpu (cf gpu) programs. many apl programs should be easily translatable to SIMD branchless.
+
+=== kakoune [polyglot] philosophy
+
+use multiple specialized languages:
+
+[options="header"]
+|============================================
+| lang                  | specialization
+| jq, graphql           | JSON
+| sql                   | data
+| burlesque, apl, j     | computation
+| typed racket, haskell | grammars
+| picolisp              | i/o and interfacing
+|============================================
+
+=== general mathematical principles
+
+TODO: read link:https://en.wikipedia.org/wiki/Curry%E2%80%93Howard_correspondence#Curry%E2%80%93Howard%E2%80%93Lambek_correspondence[curry-howard-lambek correspondence (wikipedia)]
+
+==== relation
+
+cons cells or unary functions (they're isomorphic) exactly represent (binary) relation. (linked) graphs and recursion are consequent structures. in untyped lisps `cons` is the only primitive except value (number, char) and maybe string. every cons pair is ad-hoc; a universal analogue is a rule for consing, such as an anamorphism.
+
+recursion is the method of traversal: the very fact that the primitive relation (cons) is binary implies that:
+
+. all arbitrary data structures are expressible by cons
+. trees (graphs with exactly one path to any node) can be traversed entirely by simply recursively unconsing
+  . this assumes that cons is applied symmetrically: (... . (c . (b . a))...). if a different rule were used—e.g. (d . ((b . a) . c))
+
+thus we see that there are *rules* for *generating* data structures, and *inverse* rules for traversing them—unfolds & folds. therefore types that describe rules for generating structures also describe traversals. recursion is simply closure over application/parameterization.
+
+type systems are algebraic. they're abstract structures, not data structures. they're collections of abstract rules, not collections of data.
+
+recursive types' base case examples:
+
+[source, haskell]
+----
+List a := Nil | Cons a (List a)     -- base case & recursion are both constructors
+StateT s m a := Monad m => (s, m a) -- StateT is a monad transformer: a monad parameterized by another monad.
+                                    -- it's therefore recursive. the base case is m being not a transformer,
+                                    -- i.e. a monad not parameterized by another monad.
+----
+
+==== symmetry (universality / rules)
+
+ad-hoc specs are effort; symmetrical is implied. ad-hoc means that you're specifying something specific in order to accomodate a specific problem.
+
+the key is not amount of abstraction, but appropriateness: the basis functions should work *together* well. e.g. semirings are awesome.
+
+abstract structures are better than data structures, too: we can easily compare abstract structures' definitions, whereas data structures are usually defined (and designed) separately, in the manner of, "we're doing such-and-such with some *blocks of memory*; what's a structure that accomodates exactly that and no more, so that it's efficient?" this kind of thinking gets us a large selection of incompatible structures whose definitions are hidden in implementation details. such thinking is entirely devoid of symmetry and mathematical property. by contrast, we can easily relate abstract structures: a monoid and monad are obviously similar, as are semigroups and monoids.
+
+we want:
+
+* freedom from redundancy (e.g. using fold when map would do)
+  ** defaults (parameters) are a good way to do this. however, whereas commonly "parameters" regards functions, we should consider structural parameters, e.g. when a category is unspecified, `Identity` is assumed, or in the case of numeric division, 1 is assumed as the numerator if only one arg is specified. in the case of map & fold, we need default parts of the function itself! thta's true abstraction & reification!
+* using appropriate basis (e.g. using polar for a cylinder rather than cartesian)
+
+it's been noted that programmers commonly spend significant time fixing things that they've made, which is interpreted as unnecessary difficulty, as opposed to dealing with natural difficulty. while true, there're universal & subtle varieties of this:
+
+* no matter what code we write, whatever designs we use, we must make other code or designs work with them.
+* whatever designs we use, we're constrained to them. commonly we must change their internals, augment them, and sometimes split them into parts. efficient autoadaptation or re-solving are ideal. both require a goal [predicate], and respectively require 1) each component being context-sensitive or 2) a (not necessarily deterministic) method for solving the system.
+
+thus we want a small variety of structures that we know fit together easily and still express all programs elegantly (clearly, tersely.)
+
+==== quotient
+
+any separation of data is partitioning, whether it be `a` vs `b` in `(a, b)` or `split(f)-at` or `partition` (which should be called `split-on` aka `group`)
+
+==== modularity
+
+remainder is a partitioning scheme and modulo arithmetic forms a ring. remainders are as common in programming as are partitions / splits / groups / equivalence relations. it's the most fundamental and so most pervasive pattern in programming. for example, we see it in many recursive loops: the structure that we're iterating over is partitioned, and some of that data is consumed into an output, leaving the remainder for the next iteration. this is basic, not insightful. the interesting question is whether recursion also forms a ring.
+
+==== abstract structures
+
+* contrast with data structures
+* the subject of universal and/or abstract algebra and/or category theory
+* an algebra is axiomatic operations on any set
+  ** in universal algebra the set is never particular; it's always free. i.e. it's discussion about the operations alone, where the operations all operate over any arbitrary set
+    *** you may think of universal algebra as point-free algebra
+  ** in abstract algebra each algebraic structure (e.g. groups) may consider special sets (e.g. vector space over a _field_)
+  ** categories' (classes of) objects are ad-hoc/particular/bound rather than parametric/free. the arrows particularly consider classes of objects.
+* abstract structures are _interpretations_. abstract structures interpret data structures, but also identify classes of data structures.
+
+.structures
+
+* functors
+  ** applicatives (strong lax monoidal functors)
+    *** monads
+* semigroups
+  ** monoids
+* ring
+  ** modular arithmetic
+  ** boolean
+  ** semirings
+* groups
+* vector spaces
+* optics
+* recursion schemes
+* hughes' arrows
+* algebraic effects
+* barbie/HKDTs (good idea, but flawed in generality & reification under type systems that i know of (scala, typed racket, haskell))
+
+.structure derivation
+
+TODO: this section needs research
+
+Q: what does cons (the primitve relation operator) necessitate about traversals?
+
+trying to implement a doubly-linked list as e.g.
+
+[source,scm]
+'((0 . 1) . (1 . 2) . (2 . 3)) : (Listof (Pairof a a))
+
+does not work insofar as given only any element of the structure, we cannot navigate either to the left nor right of the structure. given any element, we want to be able to navigate to the rest of the structure; that implies that the rest of the structure must be present inside the current element. well, the "rest of the structure" means "a traversable cons chain" because every structure is a cons chain. well, lists are a common cons chain. let's try replacing elements by lists: `(Listof (List a) (List a))`. well, that's not right. its rank seems off. `(Pairof (List a) (List a))` (a zipper) works. indeed, it's two lists, which corresponds to the two directions that we want to navigate. furthermore, it's symmetrical, whereas list is a non-symmetrical type: its recursive case is on its RHS. such (a)symmetry and rank determine which recursion schemes to use to traverse structures.
+
+.operation properties
+
+* associativity
+* commutativity
+* distributivity
+* closure/recursion
+* inversion (nb. usually called _inverse element_, but the element' inversion property is always relative to an operation. no element is _inherently_ an inversion of any other element.)
+  ** involution
+* identity
+* idempotency/fixedness
+* information change [amount] (e.g: integration adds a constant: injections in some sense lose information but bijections don't: forgetful functors. isomorphisms)
+* short-circuiting (achieved by multiplication by the additive identity)
+
+.set/category properties
+
+* order
+
+.general properties
+
+* analogue (e.g. homomorphisms)
+* uniqueness
+* basis [vector spaces] / generating set [groups]
+
+=== numerics
+
+unless you've special need (which i can't imagine, but assume may be possible,) use fixed-point arithmetic (including ratios) instead of floating-point. they're faster and exact rather than approximate.
+
+=== typing
+
+typing can be its own programming language if done properly. types describe data/functions, which are equivalent, i.e. there's a bijection between types and functions. this is a reflection of the curry-howard-lambek correspondence.
+
+types add (and enforce) structure
+
+.benefits
+
+* polymorphism
+* provability: encoding or guaranteeing specific properties as types rather than verifying by predicates at runtime
+  ** especially useful for preventing unobvious invalid values. if a program crashes due to invalid data, then it's obvious where/why. however, handlable invalid data is unobvious, e.g. `(* precondition: x ≠ 0 *) (de [x] (send-to-remote-api "DoThing" (add1 x)))`. usually dependent typing (e.g. ada's) is needed to avoid this class of errors.
+  ** lessens probability that a program will crash
+* defining grammars. yes, types, to the extent that they're specific (e.g. dependent typing is more specific than non-dependent) types can implement parsers.
+* identifies improper/incomplete refactoring. e.g. if i change a type's shape but fail to account for that change in functions of that type, then the checker immediately tells me. this is especially useful for polymorphic types.
+* we can use types to identify what we know; this is a metric of how well each part of the program is understood. 
+
+.when types are inappropriate
+
+* types are only useful when you're working with distinct types that are valid only in particular relations. for example, types are useless for arithmetic, since only one type (complex numbers) is used.
+* types are only (quite a bit of) trouble when we're having trouble identifying structure. typing directly oppose flexibility.
+  ** types are uneful exactly insofar as they're specific; (unqualified) general types (the most extreme being `Any`) are not helpful. a qualified general type like `C a => a -> T a -> a` is useful and most powerful.
+  ** jack-in repls or eDSLs are good cases of whether types usefully add structure or limit expression
+
+in languages without good type inference (e.g. typed racket:)
+
+* typing syntax adds cruft, which competes with brevity
+  ** passing polymorphic functions to higher-order functions (and `->`) is a hassle
+
+NOTE: typed racket is faster than untyped, since types are used instead of contracts! therefore it's better (though possibly with less helpful error messages) to use other lisps for untyped code.
+
+.when types aren't needed
+
+algebra-based progamming does not need typing because all of the operations and valid compositions thereof satisfy laws. therefore the question is no longer typechecking, but rather whether the described program is valid. invalid programs will be caught at compile time. an invalid program can only be one containing any invalid (g ∘ f), i.e. codomain/domain mismatch.
+
+types may be useful if they obey an algebra, again with closure. see §_data/function equivalence_ below.
+
+==== aside: haskell's fatal flaws
+
+haskell is a good case study of a language based on abstract structures with a good type system that nonetheless is not the most preferable language. it currently has the most capable & elegant type system of all languages. here're the reasons that i don't use haskell:
+
+* lacks:
+  ** (elegant) row types
+  ** (elegant or efficient) dependent types
+  ** type sequences (`a ...` in racket)
+  ** list types capable enough to iterate over `a b c ...`
+  ** refinement types
+* ghc (at least) fails to infer multiparameter type class instances
+* uses nominal typing (only)
+  ** neither isomorphic nor equivalent types are implicitly coercible
+  ** by haskell's design, they're needed for type class instance lookup. this is yet another suggestion that type classes have flawed design
+  ** suggests seeing a type for its intended purpose rather than for its form
+  ** no anonymous types
+    *** no anonymous newtypes. we can't bind type classes to type forms on-the-fly
+
+a simple example expression that haskell cannot handle: a function that applies an elementwise operation over a tensor of types.
+
+.nominal typing & type classes
+
+simple example problem: the `Eq` type class implies that things can be compared by only one equivalence relation. it doesn't directly imply this; we could define `Eq2`, `Eq3`, &c (even though that's obviously stupid.) still the _real_ trouble comes as functions use types like `Eq t => t -> t -> Bool`. now if i want to use this function with a different equivalence relation, then i'd need to create a new type. oh, wait! that's easy because i can use `newtype`. but this is obviously less elegant than the obvious way: simply saying, `t | a == b = ...`—on-the-fly overrides.
+
+newtypes' only utility is changing a type's type class instances. very strange & inelegant idea compared to the obvious solution:
+
+. types are considered for their form alone
+. like lambdas, types are algebraic expressions and may be bound to identifiers; the binding and expression are separate (y'know, like they are in typed racket?)
+. types are algebraic: they're composed of only primitive operations. equivalence, isomorphism are considered by the type system and calculated by the same laws of lambda calculus: α-translation, β-reduction, η-reduction. given that haskell's elected to not have row types (and so type composition/application cannot be commutative) the least it can do is make its type compositions follow the same rules as actual haskell code, i.e. the lambda calculus!
+
+e.g. haskell's rose `Tree` type would be a mere `type` alias for `∀a. rec r: a × (List (r a))`, which, considering that `List := ∀a. rec r: 1 + (a × r a)` expands to
+`∀a. rec r: a × (rec s: 1 + ((r a) × s (r a)))` which may or may not β-reduce; i've not learned type theory well enough to say. i'm also not sure if these types should be expressed by `rec` or μ.
+
+rather than type classes, we want context-specific _interperations_ or _roles_:
+
+* derive morphisms from types that satisfy some property, e.g. a predicate on a type that refinemes it into (or derives) a type class instance
+* instead of type classes, use functions from *types* to output *functions*, e.g. `∀a b. a × b` ↦ `(\(a,b) -> a == b) : (∀a b. a × b) -> 2`  (this example assumes that `==` is defined on ∀a b. a × b)
+  * this breaks haskell's separation of types and functions, excepting type families, which are defined ad-hoc, but are recursive, so more complex values can be derived, albeit inelegantly and generally inefficiently (increased compilation times)
+  * this point is somewhat incorrect/flawed. i'll come back to it later.
+
+lenses are a perfect example of how a single type replaces a type class of methods `get` & `set`, and instead of instancing a type class, each lens is simply defined as a function. even better, this makes lenses composable! this is possible because, unlike type classes, functions are types and obey symmetric type algebra rather than being ad-hoc. *ad-hoc inherently structures resist axioms.*
+
+==== type-based programming
+
+. languages that don't feature ADTs, like c++ or java, types merely augmentat _actual_ program logic in order to prevent errors
+. ADT-based langs like ocaml or haskell use types to help ensure correctness but also to design programs and both attribute & enforce axioms
+. type systems with dependent & refinement typing like agda's or f*'s are capable of encoding the entirety of programs "purely as types" because predicates are part of the types and the only other code needed is pattern matching (type deconstruction) and funccalls (which, by including recursion, includes looping.)
+
+the ultimate use of types is their implicit computation of every implied fact, so that the programmer never needs to specify any implied (redundant) information. this entails some kind of solver.
+
+the power of function types is that they describe all λ-exprs and that they're explicit. data types vs functions is a false dichotomy. that's why it's so difficult to decide how abstract to make data types; should they be higher-kinded? should their constructors take function parameters, or should we use functions on the data type whose constructors take data parameters? these questions are unnecessary and can easily lead one to waste time trying to specify the best definition of a data types—ones that're flexible and elegant and work together. functions already satisfy all of those conditions, and are *anonymous*.
+
+NOTE: the following entails a summary of link:https://chrilves.github.io/types/[christophe calvès' series of articles on types]
+
+.example: type that represents currency conversion
+
+    val currencies: Set[String] = Set("EUR", "USD", "JPY")
+
+    final case class Conversion(
+      from: String{currencies.contains(from)},
+      to: String{currencies.contains(to) && from < to }
+    )
+
+    type ConversionRates = Map[Conversion, rate:Double{rate > 0}]
+
+* `rate > 0` is dependent typing
+* `currencies` is an enum of strings to effectively identify a subset of all strings (haskell `Currency = EUR | USD | JPY` but more generalizable)
+* `Conversion` is an unordered tuple type
+  ** the predicate `from < to` ensures that: 1) pairs are of distinct currencies; 2) no pair of currencies can be specified twice e.g. USD->JPY and JPY->USD being defined separately, and so possibly being inconsistent
+    *** a map is used instead of tuples to complement point (2)
+
+NOTE: in type theory, the uninhabited type is called `0`; the unit type is `1`, booleans are `2`, &c
+
+===== data/function equivalence
+
+.conceptual
+
+in referentially transparent programs, such as those of haskell, programs are mathematica functions. i'm going to say the same thing 3 times for clarity:
+
+. all data are thus either program inputs or outputs, or inputs or outputs of the functions whose composition is `main`.
+. program inputs (hard-coded data) are passed to a function, whose output is passed to another function, ..., whose output is passed to a function upon whose evaluation the program halts.
+. a datum `b : b` may be produced from an `a` by a function `f : a -> b`. if `b` is to be used anywhere (which is must, if it's to be useful,) the only way that it can be used is by being passed to another function, say `g : b -> c`. this is equivalent to morphisms `a -> b -> c`—"a to b to c"—expressed by the function `g ∘ f : a -> c`. entire programs are function composition; therefore all intermediate data are function parameters.
+
+again, because all binary relations are isomorphic, and recursing on them produces all structures, all structures are isomorphic independent of relation opreator. many haskell libraries, e.g. lenses, use functions instead of data. *curry & uncurry* demonstrate equivalence of product types and function types by being bijections between the two.
+
+.technical
+
+every data is bijective with a pair of inverse functions; therefore data & functions are equivalent. a common (though only as an implementation detail) example is `build`, which generates a list using a function. another example is `StateT`, which is essentially (i.e. excepting kleislihood) a chain of function compositions evaluate to a final state, like how `build` evaluates to a list.
+
+.unit types (constructors are unparameterized)
+[source,haskell]
+----
+--- 0 as data & function
+
+data Void
+type VoidFn = ∀ a. a
+d2f :: Void -> VoidFn
+d2f x = case x of {}
+
+f2d :: VoidFn -> Void
+f2d x = x
+
+--- 1 as data & function
+
+data Unit = Unit
+type UnitFn = a -> a
+unitFn :: UnitFn
+unitFn x = x
+
+d2f :: Unit -> UnitFn
+d2f Unit = unitFn
+
+f2d :: UnitFn -> Unit
+f2d f = f Unit
+
+--- 2 as data & function
+
+data Bool = True | False
+type BoolFn = a -> a -> a
+
+true,false :: BoolFn
+true  a _ = a
+false _ b = b
+
+d2f :: Bool -> BoolFn
+d2f True  = true
+d2f False = false
+
+f2d :: BoolFn -> Bool
+f2d f = f True False
+
+--- &c
+----
+
+* a nullary product type is the unit. this is why unit is written `()`; cf `(A,B)`.
+
+.products
+[source,haskell]
+----
+data Prod a ... = Prod a ... -- constructor is of type a -> ... -> Prod a ...
+type ProdFn a ... = ∀ c. (a -> ... -> c) -> c`
+
+constructor :: a -> ... -> ProdFn a ...
+constructor a ... f = f a ...
+
+d2f :: Prod a ... -> ProdFn a ...
+d2f (Prod a ...) = constructor a ...
+
+f2d :: ProdFn a ... -> Prod a ...
+f2d f = f Prod
+----
+
+.coproducts (each constructor has different parameters)
+[source,haskell]
+----
+data Coprod a ... = A a | ... -- each constructor is of type t -> Coprod a ...
+type CoprodFn a ... = ∀ c. (a -> c) -> ... -> c
+
+-- n represents the nth constructor
+injN :: ∃ n ∈ (a ...). n -> CoprodFn a ...
+injN n ... _ ... f ... _ = f n -- f :: (n -> c)
+
+d2f :: Coprod a ... -> CoprodFn a ...
+d2f = \case
+  (A a) -> injN a
+  ⋮
+  (N n) -> injN n
+
+f2d :: CoprodFn a ... -> Coprod a ...
+f2d f = f A ... N
+----
+
+an example of non-obvious type equivalence as proven by inverse bijections:
+
+[source,haskell]
+----
+data N where
+  Z :: N
+  S :: N -> N
+
+f :: Maybe N -> N
+f Nothing = Z
+f (Just n) = S n
+
+invF :: N -> Maybe N
+invF Z = Nothing
+invF (S n) = Just n
+----
+
+therefore N ≅ Maybe N. considering that Maybe a ≅ 1 + a, N _is a solution to_ t ≅ 1 + t. in fact, it's the least fixed point of the type-level function `Maybe :: a -> Maybe a`! the greatest fixed point is an infinite peano.
+
+NOTE: μ: (* -> *) -> * is the least fixed point operator, i.e. T ≅ μ(F). μ(Maybe) = N. this example using an alternate λ-like notation: N = μT.(1 + T)
+
+as you'd expect, the function version of N is `a -> (a -> a) -> a`. morphisms between the GADT and such functions is obvious by now. this function is the primitive for all recursive structures.
+
+* each of all recursive types is the smallest solution of some type equation. this isn't a surprise when we consider that `fix` can be easily used to implement recursion.
+  ** List a = μ(1 + a × T)
+    *** streams are the greatest fixed point
+* ADTs are types expressible by relations of 0, 1, +, ×, and μ
+  ** BinTree a = μT.(1 + a + (T × T))
+
+TODO: how to express recursive types literally instead of in terms of μ?
+TODO: given this, do i want to add anything to the statement that recursion is closure under function application?
+TODO: types are inherently for pure programs. how to apply them to stateful programs (for speed, e.g. using vector instead of list)?
+
+.recursion schemes
+
+now that we know function/ADT equivalence and ADTs' basis, we're ready to consider recursion schemes: the factorization of recursive functions.
+
+[source,haskell]
+----
+-- one base case
+s1 :: a -> (Int -> a -> a) -> Int -> a
+s1 base rec = f
+  where
+    f :: Int -> a
+    f 0 = base
+    f n = let r = f (n-1) -- this is why Int type is present instead of a
+           in rec n r
+
+-- tail recursive version
+s1 base rec n = aux base 1
+  where
+    aux res i = if i <= n
+                then aux (rec i res) (i + 1)
+                else res
+
+fact,sum :: Int -> Int
+fact = s1 1  (*)
+sum  = s1 0  (+)
+list = s1 [] (:)
+
+-- two base cases
+s2 :: a -> a -> (a -> a -> a) -> Int -> a
+s2 base1 base2 rec = aux
+  where
+    aux 0 = base1
+    aux 1 = base2
+    aux n = rec (aux (n - 1)) (aux (n - 2))
+
+-- tail-recursive version
+s2 base1 base2 rec = aux bsae1 base2 2
+  where
+    aux b1 b2 i = if i <= n
+                  then aux b2 (rec b1 b2) (i + 1)
+                  else b2
+
+fib = s2 1 1 (+)
+
+type bintree a = forall c. (a -> c) -> (Tree a -> Tree a -> c) -> c
+data BinTree a = Leaf a | Node (BinTree a) (BinTree a)
+tree :: Int -> BinTree Bool
+tree = s2 (Leaf False) (Leaf True) Node
+----
+
+i used `BinTree` rather than `bintree` because it gives a more elegant definition of `tree`. now i wonder about function types' utility. their beauty is symmetry: they express both functions and ADTs symmetrically, AND they encode ADTs anonymously, thereby focusing on the ADT's form rather than its name or intended purpose. they extend the *algebra* of (function) types, seeing ADTs as their arrows (constructors and dual pattern matching) rather than as categories or choices or structs! therefore function types are the fundamental algebra of computation.
+
+however, they're troublesome to use in current languages (except maybe f*, coq, or agda, as i'ven't learned them yet.) our programming language really should elegantly support algebraic operations on types, including implicitly solving a type-algebraic equation for a type solution. perhaps, however, recursion schemes & optics are together enough to express all programs elegantly.
+
+at least function/data equivalence allows us to systematically derive data types from functions, which may or may not be useful.
+
+==== numeric typing
+
+rather than latent or general typing, by _numeric typing_ i mean using complex numbers as the only data type. complex numbers have many useful algebraic properties and describe much of the natural world, which should describe at least most practical (cf theoretic) programs; usually programs compute things that laypeople can understand, let alone things that can be described by complex numbers! a generalization (albeit losing some algebraic properties) of binary complex numbers is arrays (n-ary numbers,) or even more generally, tensors (arrays of arbitrary nesting patterns.)
+
+benefits of complex numbers:
+
+* great cardinality
+* contain the boolean ring
+* fast & efficient computation, and ubiquitous (especially regarding both cpu & gpu opcodes)
+
+=== tacit (pointfree)
+
+benefits:
+
+* consider whole program at once. no being lost in detail.
+
+compose pointfree operators:
+
+[options="header"]
+|===================================================================================================================
+| how                                                                                                      | lang
+| threading macro (esp. supporting insertion point via underscore, e.g. `(-> (foldl + _ (range 3)) sub1)`) | lisp
+| pointfree composition                                                                                    | haskell
+| concatenative programming                                                                                | apl
+|===================================================================================================================
+
+ideally the language would infer pointfree, e.g. `(+ car last)` would be shorthand for `(λ (a) (+ (car a) (cdr a)))`. haskell's applicative `->` is decent—`(+) <$> head <*> last`—but lacks elegant generalization (viz nesting.)
+
+no programmatic entities should be given names; they should be given symbols that are either arbitrary, or correspondent (e.g. ∧ & ∨, whose vertical inversion describes their duality,) or common not for their _use_, but for their behavior, e.g. + & × are used when they're defined to obey the common identities, associativity, &c. the reason to never name based on usage is that:
+
+. the name is not as descriptive as the definition itself
+. definitions are often modified incrementally as new uses arise, but names do not support such _small/elegant_ alterations where the new name describes its difference from the original
+. homomorphisms abound. it should be assumed that in every case where something has some purpose, there's a separate case where the purpose is different but analagous. having separate names for entities with closely related mathematical definitions hides their similarity. finally, there are too many axes of similarity for words to elegantly describe: in addition to homomorphic (a difference of context,) things may differ in abstraction, implementation, arity, axioms, &c. composable symbols are the best (and arguably the only decent) notation that we have.
+
+==== stack
+
+* functions are called _words_
+* purely functional: all functions implictly have the stack as the only argument. thus each function is implictly a stack endomorphism.
+* no arguments are named. no local binds.
+  ** refactoring functions is practically moot compared to applicative languages
+* *satisfy algebraic design*; functions are the only elements and composition is the only operation on them. this allows us to see the program for its structure rather than purpose.
+  ** e.g. stack words `bi` & `dup` are `\f g -> \x -> [f x, g x]` and `\f g -> \x -> g x (f x)` where x is on the stack.
+* plural symmetry: returning or accepting multiple values is no different from one
+  ** *composing variadic functions is just as easy as unary ones*. this enables interesting tacit programming.
+* prefers more simpler functions than fewer complex ones. this encourages writing higher-order functions and makes programs tacit, again preferring a composition of many small functions to create various composite functions on-the-fly still without requiring much code
+
+==== identifying algebras
+
+as i'ven't yet identified a method for determining an algebra from a set of needs, here i'll fumble with vagries that can be explored.
+
+* goal: all _specific/complex functions_ have small, simple, pointfree definitions. this requires good choice of _common/fundamental functions_.
+* generation functions that guarantee certain data forms
+  ** implies that other functions don't need to check their inputs
+
+=== data & abstract structures (for general use)
+
+obviously if a problem begs a particular structure then that should be used. for everything else, what efficient, elegant structure can we assume that satisfies our current needs, and our future needs without much refactoring? or can the most appropriate structure be automatically chosen at compile time and automatically interfaced efficiently with other differently-typed automatically-chosen structures?
+
+structures are ranked by their specifity (to a problem) and speed for a set of operations. common operations:
+
+* get
+* set
+* insert
+  ** at end
+  ** at beginning
+* traversal
+* search (ordered or not)
+* concatenation
+
+the classes of solution structures are:
+
+TODO: no structure should be considered a substructure of "graph;" graph may be considered as an abstract object, but for data structures, it's much more sensible to identify cons as the primitive relation operator, then consider appropriate generation & traversal rules for your needs; the data structure follows.
+
+[NOTE]
+for efficiency, all structures should be built & consumed non-strictly; then `consume ∘ produce` allocates no memory. to implement non-strict in an otherwise strict runtime, use _sequences_: functions from index to element. notable index types are `0`, `Int`, `(Array Int)`.
+
+* array
+  ** static
+  ** dynamic
+* (linked) graph (cons)
+  ** skip list (apparently generally superior to balanced trees)
+  ** DAG
+    *** tree
+      **** balanced tree
+        ***** binary search tree, heap, splay tree
+      **** rose tree
+      **** finger tree
+      **** list
+        ***** stack
+        ***** ring buffer
+        ***** alist
+* hashmap 2,2
+* zipper 1,2
+
+.choosing a structure
+
+_here we're assuming that we're choosing a data structure instead of a generation function or recursion scheme, in case it's worth entertaining._
+
+it's far too easy to assume a structure or framework simply because of its popularity or support from builtin functions. we need to plainly but carefully consider our reasons for using given structures:
+
+. efficiency
+  .. speed
+  .. memory
+. elegance/naturality
+. convenience (it and/or functions on it are already implemented)
+. recommendation (either explicitly or implicitly, e.g. being a language's builtin type)
+
+instead ponder:
+
+. why are you putting your data in a structure? why do you need to structure unstructured data? what properties should your data have after being structured? what's the least structure that you need to implement in order to achive the desired relations of data?
+. how will it be generated? (function output)
+. how will it be consumed? (function input)
+
+you may make your own structure (which should be very easy if you follow these best paradigms) or you'll know which of many already-available ones to choose.
+
+structures are for code, not readability! whatever structure you impose—whether data structure, abstract structure, or structured functions, do so expressly to the end of expressing *program logic* better. an example is recursion schemes. *not* an example is a `Person` struct of name, age, &c. that's descriptive data, not programmatic data! all descriptive data should be stored either in a database or by common types, here (again, like a database) as a matrix: an unordered list of vectors of known size. always use basic structures when they'll do. just like you should never assume use of basic structures for implementing program logic, so should you never consider anything beyond basic structures for descriptive data, i.e. data that isn't calculated in a way that significantly affects the program's behavior.
+
+==== arrays & lists
+
+implemenations of ads := [a...z] -> [b - a, ..., y - x]:
+
+[source,scm]
+----
+(define (ads s) (map - (cdr s) (drop-right s 1))) ; (drop-right _ 1) is O(n), which makes this impl O(2n)
+(define (ads s) (map - (cdr s) s)) ; O(n). if map were to return at end of shortest list rather than requiring all same length
+(define (ads s) (let r ([p (car s)] [s (cdr s)]) (or-null s (let ([e (car s)]) (cons (- e p) (r e (cdr s))))))) ; O(n)
+_TODO ; stack paradigm, implemented by a zipper
+;; i couldn't find a way to do it with fold
+
+(define-syntax-rule (| a is ...) (array-slice-ref a (list is ...)))
+(define (ads a) (array- (| a (:: 1 #f 1)) (| a (:: 0 (sub1 (array-size A)) 1))))
+----
+
+both:
+
+* relate arbitrary data
+  ** support nesting, which means multidimensionality like a matrix (an array (the primitive relation) of arrays) or a matrix of matrices (which supports flattening). the former doesn't increase depth, but the latter does.
+* are equally apt for iteration
+* run in parallel just the same (on cpus): we can perform multiple `map` operations in separate (virtual) threads.
+  ** pointwise ops use one gpu cycle, so arrays are, only on such architectures, faster than lists.
+* support n-ary operations (in scheme, `map` is like haskell's `zipNWith`)
+
+neither suggests a traversal; traversals are problem-specific. iteration clearly depends on shape, e.g. a tensor, cycle, general graph with(out) cycles, DAG, tree, list, stack.
+
+arrays (tensors):
+
+* random access
+  ** a structure that's nothing more than direct data access. it's the simplest arbitrary-size random access data structure possible.
+* generalize bitwise operations
+* can encode:
+  ** graphs
+  ** linear transformations
+* fixed rectangular shape (determined by the size of each axis)
+* O(1) get & set
+* O(1) length
+* O(1) removal or duplication of axes
+* O(1) transpose
+* slow addition of shape
+* parallelizable pointwise ops (since matrices can be considered as columns or rows)
+* especially good for combinatronics (for both efficiency/parallelism and expression elegance)
+
+linked list (graphs):
+
+* sequential access
+* support ragged matrices
+* O(1) push & pop
+* O(m) get & set
+* O(n) length
+
+zippers:
+
+* eliminate the trouble of choosing take or spilt-at
+* naturally iterate: input on the right, output on the left if all elements are consumed; else old elements on the left and a separate output list.
+
+i'm also considering a synchronizable untyped structure `(struct fs (f stack v))` (or encoded as a closure): elements are pushed to it until a condition is met, and then `(begin (set! v (apply f stack)) (set! stack '())`
+
+* arrays are superior for fixed-shape rectangular data. graphs are better for data of irregular pattern and shape
+* arrays impurely update their state efficiently in both imperative and functional paradigms
+* matrix-style solutions are much faster and simpler to define than the build-based ones! which of the matrix solutions (using lists or arrays) is faster depends on the matrix implementation's speed for parallelized (pointwise) operations and any memory copying that it may be doing, vs speed of uncons (and in this case, drop-right, which a modified version of map would not require.) really, in this case, the `Array` method should surely be the fastest, since there're no memory operations, since the modified array refers to the same block of memory, just with modified indices. how this generalizes is yet unclear.
+  ** typed racket's math's array library uses relative indices (iirc!), so:
+    *** rotating an array is as simple as changing its starting offset.
+    *** slicing, reshaping, removing axes or duplicating axes are O(1)
+* if slicing operations seem ineffective, consider them on the transpose of an array
+
+lists aren't as powerful as arrays, but i've yet to identify which powers are useful:
+
+* we can start & end array iteration at arbitrary indices, whereas we must start list iteration at its beginning, and though we can stop iteration after an arbitrary number, we cannot express this number in terms of its length without having O(n) traversal.
+* suppose we've a db-style m×n matrix (rows are records, cols are fields.) in this case, the array's shape is known at compile time. we can just as well declare n lists each of length m. if we need fast lookup, we can use a treeset. it's not O(1), but O(log~2~n) isn't bad. a proper B-tree or splay tree or skip list (latter both are implemented in racket's `data-lib` lib) is even better. this being said, matrices don't need balancing!
+
+verdict: sequences (lazy lists) and vectors defined by index functions to elemetns are best; these don't require upfront allocation (or, often, _any_ allocation,) and they support fusion. array implementations often come with better functions than lists; such functions shoud be defined & used for lists, too. for example, scalar extension is done on arrays of any shape (tensors,) but this functionality isn't standardly implemented for lists; for lists you'd need to nest `map` multiple times, and you'd need to make the nesting relative to the nested lists' shape. (optics & recursion schemes solve this.)
+
+*open questions*:
+
+* how commonly do structures sizes change? why?
+* when (and how often) do we know the shape of our data when we initialize it?
+
+=== array-based tacit languages (abtl)
+
+j & apl, and probably bouth burlesque & bqn.
+
+advantages:
+
+* array-based. array algebra, because it works on multiple data automatically, is a simpler alternative to iteration; rather than performing an operation on each element, an operation is performed on all elements at once. furthermore we can consider a whole structure easily rather than using functions that go element-by-element, which are inelegant whenever we need to consider specific substructures.
+* implicit plurality & mapping
+* simple & regular
+* polymorphic
+* algebraic (viz boolean and [modular] integer rings)
+* suggestive. they're small but *particular* languages.
+* instead of defining polymorphism or kwargs, abtl uses idioms, which can be modified inline as different functionality is desired.
+  ** relieves burden of designing collections of functions modularly, which usually entails careful forethought about polymorphism, default values, and when functions should be split into multiple smaller functions.
+  ** an example is apl's grade operators: they break a sort operation into multiple parts, so that one may easily choose only part of a sorting operation, or the whole thing, without any appreciable difference in effort.
+
+=== abtl algebra
+
+* reshaping uses modular arithmetic
+* (in apl at least) _rank_ differs from _depth_: a matrix (array of arrays) has depth 1 but rank 2. "The length of the shape of an array is equal to its rank. Therefore, we can find the rank of an array with ⍴⍴—the shape of the shape. Since a scalar is rank 0 (i.e it has no dimensions) the shape of a scalar has length 0 and is an empty vector: ⍬"
+* scalar operations are applied to all points without changing shape
+* if α f ω, if α or ω is scalar, then f is applied to all elements of ω or α (this is called _scalar extension_). if both are arrays of the same shape, then f is applied pointwise. _incompatible_ shapes raise an error: if shapes differ, then the smaller shape is repeated until it's the same size as the larger array (in t.racket's `math/array` this is called _broadcasting_). this makes expressions like `1 2 3+(3 2 1) (¯1 ¯2 ¯3) ((44 71 11) 1 (32 0.5) )` valid. this example's β-reduction is `(4 3 2) (1 0 ¯1) ((47 74 14) 4 (35 3.5) )`; `1+` is mapped over `(3 2 1)`, `2+` is mapped over `(¯1 ¯2 ¯3)`, and `3+` is mapped over `((44 71 11) 1 (32 0.5))`.
+  ** this expression is invalid in t.racket's `math/array` (error "expected rectangular data"). however, for arrays of the same shape, broadcasting is obvious: `(array+ (array [1 2 3]) (array [[3 2 1] [-1 -2 -3] [44 71 11]]))` => `(array [[4 4 4] [0 0 0] [45 73 14]])`. see §6.3.1 _broadcasting rules_ for complete spec. i haven't understood the rules technically enough to want to try to find an array representation that accomplishes the same result as the abtl (viz apl) version.
