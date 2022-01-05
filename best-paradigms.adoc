@@ -651,13 +651,16 @@ structures are ranked by their specifity (to a problem) and speed for a set of o
     *** traverse all elements
   ** particular element(s) e.g. max of maxheap
   ** particular element(s) as determined by (particular) predicate e.g. predicate `(> 5)` for a heap
-* transform (change structure's shape)
-  ** insert at arbitrary position
-  ** add to or extend a side (concat, cons, snoc)
-  ** rearrange (e.g. matrix transpose)
-  ** delete
+* reshape
+  ** reindex (e.g. matrix transpose or reversing a sequence)
+  ** rearrange (change a graph's edge set)
+  ** resize
+    *** insert at arbitrary position
+    *** add to or extend a side (concat, cons, snoc)
+    *** delete
 
 * traverse generalizes get & set from one element to subsets. anything that can be gotten can be set or traversed.
+  ** note, however, that some structures, like red/black trees, spend effort to reshape themselves after a set
 * each structure permits particular traversals, and, because all structures are relations among data, all traversals can be expressed as recursion schemes
 
 traversal is partitioned into 3 classes because reasoning about each can be quite different depending on the structure. for example, traversing an element in a list is similar to but a bit easier than traversing a substring, traversing the whole list is easiest since that's what we already have, and traversing all but the last element is is the slowest possible traversal of a (singly) linked list. parallelism is no consideration for individual traversals, and easiest to consider for complete traversals.
@@ -673,7 +676,7 @@ as with everything, data structures should not be seen as "some few things each 
 . structures can be defined by other structures
 
 .structure symmetry
-*every structure permits terse, elegant traversals & transforms when these functions are written in terms of the structure's symmetries.* reasoning by symmetry allows easily identifying solutions that would be very difficult to reason about by studying "frame-by-frame" updates to structures. non-coincidentally this is the same as reasoning about recursion: it's difficult to trace every function call, but much easier to understand in terms of closure and base & recursive cases.
+*every structure permits terse, elegant traversals & reshapes when these functions are written in terms of the structure's symmetries.* reasoning by symmetry allows easily identifying solutions that would be very difficult to reason about by studying "frame-by-frame" updates to structures. non-coincidentally this is the same as reasoning about recursion: it's difficult to trace every function call, but much easier to understand in terms of closure and base & recursive cases.
 
 for example, it's difficult to understand folds over rose trees unless you understand the rose tree's symmetry.
 
