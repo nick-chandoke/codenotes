@@ -17,7 +17,7 @@ all *things* are *matter* & *form* [arrangement/relation/orientation]. the simpl
 though complex things are composed of atoms, it's useful to say that things are composed of atoms or other things. this recursive definition allows us to consider things in terms of other things, rather than in terms of atoms. to express any thing in terms of any of its components (instead of just a meaningful symbol) is an _expansion_ of the thing. an expression of a complex thing exclusively it terms of atoms is called _fully expanded_. expansion allows us to _refactor_ expressions—a form a re-expression. consider (x + 5)^2^ + x; it expands to x^2^ + 5x + 5x + 25 + x. we can expand it further, but that wouldn't help us here. instead, let's just _simplify_ it now to x^2^ + 11x + 25. expansion enables us to consider other simplifications—here it allowed us to re-express a polynomial with an obvious vector expression: [1 11 25]. this expression is simpler than what we started with! to identify it, though, we had to make our original expression a bit messier for a bit. whereas the original expression used the factoring simplification scheme, our latter one uses the vectorization scheme. each interpretation [form] allows us to consider the same idea in different ways, and each suggests operations to perform on it: e.g. we know that vectors support norm, inner product, etc.
 
 [NOTE]
-_predicate_, _property_, _proposition_, and _axiom_ are used interchangably, though strictly speaking _axiom_ is decided whereas _property_ may be an implied consequence of some axioms. _form_, _pattern_, and _relation_ are used interchangably. axioms are relations of axiomatic primitives (i.e. binding clauses and boolean operators.) mathematical expressions are relations of mathematical primitives. the primitives are the basis of the universe of discourse. notice that i didn't mention symbols! again, symbols are vacuous and used only as notation. they aren't even present when relations & operators are expressed pointfree. e.g. ∀a,b. (a + b)/2 can be expressed in pointfree prefix notation as `(/2)+`. `2` is a shorthand for an expression of basis of real numbers (a generalization of peano numerals.) expression in terms of the peano basis `(0, ∆)` explicitly: `(/(∆∆0))+`. note that this notation is valid iff each subexpression's arity is unambiguous.
+_predicate_, _property_, _proposition_, and _axiom_ are used interchangably, though strictly speaking _axiom_ is decided whereas _property_ may be an implied consequence of some axioms. _form_, _pattern_, and _relation_ are used interchangably to mean an expression whose symbols have been abstracted out, leaving a sort of template. axioms are relations of axiomatic primitives (i.e. binding clauses and boolean operators.) mathematical expressions are relations of mathematical primitives. the primitives are the basis of the universe of discourse. notice that i didn't mention symbols! again, symbols are vacuous and used only as notation. they aren't even present when relations & operators are expressed pointfree. e.g. ∀a,b. (a + b)/2 can be expressed in pointfree prefix notation as `(/2)+`. `2` is a shorthand for an expression of basis of real numbers (a generalization of peano numerals.) expression in terms of the peano basis `(0, ∆)` explicitly: `(/(∆∆0))+`. note that this notation is valid iff each subexpression's arity is unambiguous.
 
 .physical simple & complex things
 ====
@@ -41,7 +41,7 @@ NOTE: though you can study a thing in its entirety, it's wise to know what the e
 === the technique
 
 . identify terms (or, of physical phemonena, identify physical properties) as arrangements of other terms, etc, until those terms are in terms of atoms. obviously you don't check things that you already know; each time you consider something, you consider it only in the most complex terms that you already know that you can describe in terms of atoms. 
-. identify arrangement of terms and predicate to which that arrangement conforms.
+. identify arrangement(s) of terms and predicate(s) that expression satisfies.
   .. in math expressions are nested relations
   .. in linguistics terms are grammatically related
   .. in physics sets of matter are related by interaction/forces
@@ -53,12 +53,12 @@ that's it. it's abstract, so examples follow.
 
 .example properties (of a structure or multiple structures)
 
-these are properties of structures/functions. structures are equivalent to functions: every structure can be expressed by a dual generating and traversal functions. properties of multiple things are really _comparisons_ of properties of each. for example, we can look at the form of two things and judge that they're equal or not, i.e. that the things are isomorphic or not. isomorphism is just a re-expression of difference of properties of each: iso x y = propset x ∩ propset y. `atom` is in the following list; you can compare the atom sets of two things. there's not a name for that, though one could be chosen. because one hasn't been, though, the non-comparitive form `atom` is used.
+these are properties of structures/functions. structures are equivalent to functions: every structure can be expressed by a dual generating and traversal functions. properties of multiple things are really _comparisons_ of properties of each. for example, we can look at the form of two things and judge they're equality or equivalence; those are just a functions of properties of each—namely their forms and canonical fully-reduced forms. `atom` is in the following list; you can compare the atom sets of two things. there's not a name for that, though one could be chosen. because one hasn't been, though, the non-comparitive form `atom` is used.
 
 * commutativity (order isn't meaningful)
 * recursion
 * variation or lack of variation under transforms (e.g. eigenvectors)
-* extent (same cononical complexity)
+* complexity of most elegant form (see the definition of _elegance_ in the following section, §_example re-expressions_)
 * isomorphism (same form)
 * bijection (ability to convert between two forms without loss of information)
 * subset/superset (relation of extension/intension)

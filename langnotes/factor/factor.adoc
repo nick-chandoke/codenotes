@@ -1,0 +1,205 @@
+== factor
+
+continue on page 49 of dls
+
+=== design
+
+* stack paradigm
+* postfix; read left to right, e.g. `2 even? [ "OK" ] [ "Cosmic rays detected" ] if` for `2|2 ? "OK" : "Cosmic ..."`
+  ** pipeline [unix cmd pipe] design
+* design influenced by forth, joy, cat, oop, metaprogramming
+* like lisp, factor is made for dynamicism: scripting, macros, and repl.
+* like haskell, data are just nullary functions
+  ** all syntactic objects are simply called _words_
+* all control flow is `if` branching or recursion
+  ** both branches of `if` must have the same stack effects
+  ** factor guarantees tail-call optimization!
+* excepting row-polymorphic combinators and macros, all words must accept and output a fixed number of words
+* latently typed
+* has static stack checking in addition to dynamic type checking
+* program is words pushed to the stack from left to right, which is naturally also function composition (like other stack langs)
+* modules are called _vocabularies_
+  ** for maximum flexibility & interactivity, even private identifiers are usable in greater contexts if explicitly referenced
+  ** like java public classes, each vocabulary must be defined in a file of the same name
+* factor is oop, but all methods are generic
+* uses _virtual sequences_, i.e. functions from index to element
+
+=== semantics
+
+* pushing quotations does not use memory
+
+=== the repl
+
+* runs as a gui rather than cli program
+* is a client that connects to a repl server
+* tracks the stack for you, which makes easy both working with state and debugging
+
+=== syntax
+
+* spaces are required adjacent to delimiters; otherwise, like lisp, they're seen as part of an identifier
+
+|===========================
+| {}             | array literal
+| []             | quotation (like lisp)
+| '[ ... _ ... ] | threading macro, e.g. `5 '[ _ + ]` is equivalent to `[ 5 + ]`
+|===========================
+
+==== word definition
+
+[source,factor]
+----
+: foo stack-effect
+  body ... ;
+----
+
+where `stack-effect` is the syntax `( input ... -- output ... )`
+
+* the stack effect is for documentation and stack checking only. it's required syntax.
+* indentation is purely conventional. `:` & `;` delimit definitions
+
+===== row-polymorphic definitions
+
+`each` has effect `( seq quot -- )`. `quot` may be any effect that balances correctly, e.g:
+
+* `( x elt -- x' )`
+* `( x y elt -- x' y' )`
+* &c
+
+e.g. `quot` can be a function from one value to one value, or two to two, &c.
+
+* `..a` identifies a row-polymorphic variable, where `a` is any character, and may appear in inputs or [inclusive] outputs
+* quotation inputs can be given stack effects by form `name: ( input ... -- output ... )` and row vars in those nested effects will be unified with row variables of the same name in the outer effect or other nested effects.
+
+.fully-expanded stack effect of `each`
+[source,factor]
+----
+( ..a seq quot ( ..a elt -- ..a ) -- ..a )
+----
+
+===== named inputs
+
+[source,factor]
+----
+:: foo ( input ... -- output ... )
+  body ... ;
+----
+
+* with `::` instead of `:`, inputs are lexically scoped and available in `body ...`.
+* `expr :> id` or `expr :> ( id ... )` binds to identifiers
+
+this form permits elegant solutions to e.g. factors of a quadratic, whereas joy does not.
+
+=== oop/generics
+
+probably the easiest & most flexible oop ever:
+
+[source,factor]
+----
+TUPLE: circle r ;
+TUPLE: rect l w ;
+GENERIC: area ( shape -- area )
+M: circle area r>> dup * pi * ;
+M: rect area [ l>> ] [ w>> ] bi * ;
+----
+
+* >>foo writes, foo>> reads.
+* what are
+  ** multiple dispatch (planned inclusion in factor, but currently implemented by a library)
+  ** predicate classes
+?
+
+three functions from class to class:
+
+* derivatino
+* union (n-ary)
+* intersection (n-ary)
+
+three types of classes:
+
+* primitive
+* tuple
+* derived
+* predicate (subclass B of A where A consists of instances satisfying a predicate)
+
+primitive & tuple classes use >> & << (but not derived ones?)
+
+=== common funcs
+
+==== stack shuffle
+
+|====================
+| drop | x --
+| dup  | x -- x x
+| over | x y -- x y x
+| swap | x y -- y x
+|====================
+
+* remember that input & output names are programmatically unrelated
+
+mentally tracking stack effects is troublesome. you should use three easy-accounting fundamental combinators:
+
+[options="header"]
+|======================================================================================================
+| word   | description                            | example
+| cleave | apply multiple operations to one datum | 5 { [ 1 + ] [ 2 - ] } cleave -> 6 3
+| spread | pointwise application                  | "A" "b" { [ >lower ] [ >upper ] } spread -> "a" "B"
+| napply | apply an operation to n stack items    | "A" "B" [ >lower ] 2 napply -> "a" "b"
+|======================================================================================================
+
+bi & tri combinators are a bit more convenient: they eliminate braces or a number argument:
+
+* `bi` & `tri` are 2- & 3-cleave
+* `bi*` & `tri*` are 2- & 3-spread
+* `bi@` & `tri@` are 2- & 3-apply
+
+==== combinators
+
+_
+
+==== analagous or equivalent
+
+[options="header"]
+|===============
+| factor | other
+| each   | mapM_
+| map    | map
+| reduce | fold
+|===============
+
+==== unique to factor
+
+[options="header"]
+|=================================
+| word or syntax | meaning
+| :              | define new word
+| --             | stack effects-
+|=================================
+
+=== examples
+
+each example here is a 1-liner
+
+[source,factor]
+----
+{ 1 2 3 4 } 0 [ + ] reduce
+{ "hello" "there" "boi" } [ print ] each
+[ "#" head? not ] filter [ string>number ] map 0 [ + ] reduce
+----
+
+.tail, naïve, and sequence factorial
+[source,factor]
+----
+: tail-factorial ( acc n -- n! )
+  dup 0 =
+  [ drop ]
+  [ [ * ] [ 1 - ] bi tail-factorial ]
+  if ;
+
+: factorial ( n -- n! ) 1 swap (factorial) ;
+
+[1,b] product # not even defined as its own function b/c it doesn't need to be; it's not recursive
+----
+
+=== caveats
+
+* `print` doesn't accept numbers (generic word `string-lines` does not define a method for the fixnum class)

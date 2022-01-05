@@ -2,6 +2,8 @@
 
 there are only two properties to make a program ideal: efficiency and elegance.
 
+structure:: generally means _form_, i.e. arrangement (of data), i.e. particular relation (of data.) i parenthesize "of data" to emphacize that structure is independent of data, but ultimately is useless unless applied to data; structure is abstract over data, and like all abstractions, represents useful truth, but in practice must eventually be reified. pointfree functions are example structure abstracted over data.
+
 .TODO's
 
 * ensure that i mention the importence of anonymous ADTs: for them to express a program elegantly they must be anonymous, just like functional programming without lambdas (i.e. with only named functions) would be horrible.
@@ -598,15 +600,31 @@ no programmatic entities should be given names; they should be given symbols tha
 
 ==== stack
 
-* functions are called _words_
+NOTE: functions are called _words_
+
 * purely functional: all functions implictly have the stack as the only argument. thus each function is implictly a stack endomorphism.
 * no arguments are named. no local binds.
   ** refactoring functions is practically moot compared to applicative languages
-* *satisfy algebraic design*; functions are the only elements and composition is the only operation on them. this allows us to see the program for its structure rather than purpose.
+  ** it's like whole programs are implicitly in the threading macro 
+* *satisfies algebraic design*; functions are the only elements and composition is the only operation on them. this allows us to see the program for its structure rather than purpose.
   ** e.g. stack words `bi` & `dup` are `\f g -> \x -> [f x, g x]` and `\f g -> \x -> g x (f x)` where x is on the stack.
 * plural symmetry: returning or accepting multiple values is no different from one
   ** *composing variadic functions is just as easy as unary ones*. this enables interesting tacit programming.
 * prefers more simpler functions than fewer complex ones. this encourages writing higher-order functions and makes programs tacit, again preferring a composition of many small functions to create various composite functions on-the-fly still without requiring much code
+* functions are printable
+* lisp-like macros (homoiconic)
+* continuations (which is a tuple of stacks)
+  ** coroutines
+  ** exception handling
+
+it's interesting that the word `short` can modify `head` &c to take what's available instead of erroring. i should try to implement that in scheme.
+
+* om seems to be the best catlang. however, it needs funding & development.
+* joy, factor, forth, seem to be the best available catlangs. however:
+  ** forth is like C: no types, so reflection isn't feasible; fast, low-level, less suggestive of functional paradigm
+  ** despite being beautiful and algebraic, joy is apparently, at least currently, slower and less practical than factor.
+
+i'm choosing factor as the language that i'll use at least until om is ready.
 
 ==== identifying algebras
 
@@ -618,30 +636,54 @@ as i'ven't yet identified a method for determining an algebra from a set of need
 
 === data & abstract structures (for general use)
 
-obviously if a problem begs a particular structure then that should be used. for everything else, what efficient, elegant structure can we assume that satisfies our current needs, and our future needs without much refactoring? or can the most appropriate structure be automatically chosen at compile time and automatically interfaced efficiently with other differently-typed automatically-chosen structures?
+abstract structures are defined by their axioms/behaviors; being algebraic, they aren't defined in terms of particular data. differently, data structures always contain particular arbitrary data, and are defined for fast particular operations, viz search, get, set. an abstract consideration of data structure is concerned with both the algebraic properties of the data, but also storing the data such that desired operations are efficient.
 
-structures are ranked by their specifity (to a problem) and speed for a set of operations. common operations:
+an example is the heap: it requires its elements be totally ordered. the definition [implementation] of the structure is strictly dependent on this property. therefore the structure itself is imbued with algebraic truth, allowing simpler definitions of search, get & set—at least when search is a predicate only of the ordering, e.g. defined in terms of `<`, `not`, and ordered constants. a search for numbers that divide 3 would be no better here than in a data structure defined without regard to algebraic properties. minheaps or maxheaps even enforce O(1) access of a set's min or max. very cool.
 
-* get
-* set
-* insert
-  ** at end
-  ** at beginning
-* traversal
-* search (ordered or not)
-* concatenation
+it's silly to choose a _structure_; it's more sensible to identify relevant algebraic properties of data, then identify a structure defined about those properties; *data structure should always be derived from abstract structure* unless you're using a probabilistic data structure, in which case obviously the structure should correspond with a probability distribution of certain events.
 
-the classes of solution structures are:
+structures are ranked by their specifity (to a problem) and speed for a set of operations. *there are only two data structure operations: traverse & transform*.
 
-TODO: no structure should be considered a substructure of "graph;" graph may be considered as an abstract object, but for data structures, it's much more sensible to identify cons as the primitive relation operator, then consider appropriate generation & traversal rules for your needs; the data structure follows.
+.data structure operations
+* traversal (identify a subset of elements)
+  ** arbitrary element(s)
+    *** traverse a proper subset of elements
+    *** traverse all elements
+  ** particular element(s) e.g. max of maxheap
+  ** particular element(s) as determined by (particular) predicate e.g. predicate `(> 5)` for a heap
+* transform (change structure's shape)
+  ** insert at arbitrary position
+  ** add to or extend a side (concat, cons, snoc)
+  ** rearrange (e.g. matrix transpose)
+  ** delete
 
-[NOTE]
-for efficiency, all structures should be built & consumed non-strictly; then `consume ∘ produce` allocates no memory. to implement non-strict in an otherwise strict runtime, use _sequences_: functions from index to element. notable index types are `0`, `Int`, `(Array Int)`.
+* traverse generalizes get & set from one element to subsets. anything that can be gotten can be set or traversed.
+* each structure permits particular traversals, and, because all structures are relations among data, all traversals can be expressed as recursion schemes
+
+traversal is partitioned into 3 classes because reasoning about each can be quite different depending on the structure. for example, traversing an element in a list is similar to but a bit easier than traversing a substring, traversing the whole list is easiest since that's what we already have, and traversing all but the last element is is the slowest possible traversal of a (singly) linked list. parallelism is no consideration for individual traversals, and easiest to consider for complete traversals.
+
+.always encode traversals as sequences
+NOTE: for efficiency, all structures should be built & consumed non-strictly; then `consume ∘ produce` allocates no memory. to implement non-strict in an otherwise strict runtime, use _sequences_: functions from index to element. notable index types are `0`, `Int`, `(Array Int)`. examples of sequence superiority: 1) `range 10` doesn't allocate memory; 2) traversing [2 3 4], then traversing [6 4 7] is faster than traversing [2 3 4] ++ [6 4 7] since it elides O(n) concatenation.
+
+TODO: all data structures are graphs; how does graph theory relate to identifying data structures? graph theory obviously considers traversal & structure. it's also related to group/galois theory, which concerns symmetries. frankly, link:https://en.wikipedia.org/wiki/Outline_of_discrete_mathematics[all discrete mathematics] should be considered by one structure. see _Graph Theory_ by Russell Merris (Wiley Series in Discrete Mathematics & Optimization.)
+
+as with everything, data structures should not be seen as "some few things each complex and worthy of study." instead, usually, each structure should be seen as no more particular than one number out of an infinite number of numbers. structures should be implemented on-the-fly just like lambdas. this is almost always feasible because:
+
+. most structures are bulit on few symmetries
+. structures can be defined by other structures
+
+.structure symmetry
+*every structure permits terse, elegant traversals & transforms when these functions are written in terms of the structure's symmetries.* reasoning by symmetry allows easily identifying solutions that would be very difficult to reason about by studying "frame-by-frame" updates to structures. non-coincidentally this is the same as reasoning about recursion: it's difficult to trace every function call, but much easier to understand in terms of closure and base & recursive cases.
+
+for example, it's difficult to understand folds over rose trees unless you understand the rose tree's symmetry.
+
+.compositional definition
+rose trees and zippers are simple compositions of lists. rose trees use particular nestings of lists whereas zippers use multiple non-nested lists. how could i identify particular substrings of a list? a substring is defined by the triple (list, start, end). multiple would then be [(list, start, end)], but i know that the list is constant over all substrings, so i can factor it out: (list, [(start, end)]). that's technically a "new" data structure. if we want only to traverse the list of intervals in any order, or fifo, then we're done. however, if we want to traverse in _order_ of substring length, then we're store them in a data structure defined by order, e.g. a heap. for this we'd need to tell the heap to sort on `end - start`. racket's `data-lib`'s binary heaps are constructed over a <= operation.
 
 * array
   ** static
   ** dynamic
-* (linked) graph (cons)
+* cons/pointer digraph
   ** skip list (apparently generally superior to balanced trees)
   ** DAG
     *** tree
@@ -653,8 +695,10 @@ for efficiency, all structures should be built & consumed non-strictly; then `co
         ***** stack
         ***** ring buffer
         ***** alist
-* hashmap 2,2
-* zipper 1,2
+* hashmap
+* zipper
+
+hashmaps are an interesting solution to making alists faster.
 
 .choosing a structure
 
@@ -681,7 +725,7 @@ structures are for code, not readability! whatever structure you impose—whethe
 
 ==== arrays & lists
 
-implemenations of ads := [a...z] -> [b - a, ..., y - x]:
+suppose ads := [a...z] ↦ [b - a, ..., y - x]. the following are various implemenations:
 
 [source,scm]
 ----
@@ -689,11 +733,12 @@ implemenations of ads := [a...z] -> [b - a, ..., y - x]:
 (define (ads s) (map - (cdr s) s)) ; O(n). if map were to return at end of shortest list rather than requiring all same length
 (define (ads s) (let r ([p (car s)] [s (cdr s)]) (or-null s (let ([e (car s)]) (cons (- e p) (r e (cdr s))))))) ; O(n)
 _TODO ; stack paradigm, implemented by a zipper
-;; i couldn't find a way to do it with fold
 
-(define-syntax-rule (| a is ...) (array-slice-ref a (list is ...)))
-(define (ads a) (array- (| a (:: 1 #f 1)) (| a (:: 0 (sub1 (array-size A)) 1))))
+(define-syntax-rule (sp/ a is ...) (array-slice-ref a (list is ...)))
+(define (ads a) (array- (sp/ a (:: 1 #f 1)) (sp/ a (:: 0 (sub1 (array-size A)) 1))))
 ----
+
+NOTE: i couldn't find a way to do it with fold
 
 both:
 
