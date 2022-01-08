@@ -1,5 +1,7 @@
 == best paradigms
 
+disregard givens; design from scratch by _first principles_: defining [adj] constraints and their implications. each _problem_ (i.e. thing that needs solving) is partitioned into two classes of constraints: the _desire_ and _universal constraints_. we always seek the (optimized subset of the) the interesction of those constraints. a simple though abstract example is a solution set of linear equations. we may have one solution, none (i.e. the empty set,) or many (particularly in linear algebra, _many_ always implies _infinite_.) a less abstract example: the universal constraints of physics are the laws of physics, and we desire to fly. our solution is then the intersection of mathematical expressions that describe flight and physics' universal constraints. this is obviously a complex example: its solution is not obvious, and many solutions exist, naturally partitioned into flight that's either valid only in fluid or valid otherwise. be it not pretty or simple, it's realistic. if we want to find the best solutions, then we must consider problems in their grand complexity, not artificially approximated in terms of cookie-cutter niceties—such mental tools as [for computer science] _lists_ or other _common_ data structures. *all models more specific than predicate logic skew truth.* such "prefab" solutions must be abolished. they may be easier to reason about for humans, but their inherit arbitration makes them more difficult to systematically reason about. this is particularly consequential when we consider that computers are ideal for solving problems systematically! both humans and computers can reason well by rules rather than easy piecewise composition of seemingly "neat" structures not described by predicates. *algebra* is a study of axioms' implications irrespective of the set over which the axioms hold. this means reasoning only about properties—not mentally tracing dataflow nor the state of a program, which is error-prone, annoying, and unnecessary. example algebraic design are programs _described_ by stacks, arrays, or the lambda calculus. i say _described_ and not _describable_ to mean that the programmer reasons in terms of these structures rather than programs merely permitting expression by such structures. this begets elegance in the same way that an algorithm elegantly expressed in polar coordinates is nicer than one reasoned in descartian coordinates, despite polar/descartian equivalence. we want the user to know how to express programs by an algebra simple enough that the computer can heavily optimize the program; or express a desire in terms of an algebra that a computer can solve in the given context of universal constraints.
+
 there are only two properties to make a program ideal: efficiency and elegance.
 
 structure:: generally means _form_, i.e. arrangement (of data), i.e. particular relation (of data.) i parenthesize "of data" to emphacize that structure is independent of data, but ultimately is useless unless applied to data; structure is abstract over data, and like all abstractions, represents useful truth, but in practice must eventually be reified. pointfree functions are example structure abstracted over data.
@@ -7,8 +9,9 @@ structure:: generally means _form_, i.e. arrangement (of data), i.e. particular 
 .TODO's
 
 * ensure that i mention the importence of anonymous ADTs: for them to express a program elegantly they must be anonymous, just like functional programming without lambdas (i.e. with only named functions) would be horrible.
-* use racket's unique feature: language definition! make lots of _algebra-specific languages_!
 * see https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
+* reconsider type classes in terms of factor's oop system
+* discuss randomized algorithms & probabilistic data structures
 
 things to do after i'm done with stocks:
 
@@ -25,20 +28,16 @@ abstractions with (possibly many) numerical _degree(s)_ are ideal. e.g. recursio
 * algebraic (symmetrical except ad-hoc definition of algebra's rules)
   ** the more symmetry something has, the fewer data are needed to describe it, and the more uniform & predictable its behavior. therefore algebras should be compared by a measure of symmetry in order to identify the best algebra.
   ** pointfree
-  ** the duals recursion schemes & generation rules (generative functions and/or recursive ADTs)
-    *** functions instead of data structures
+  ** duals recursion schemes & generation rules (generative functions and/or recursive ADTs)
+    *** all structures are mathematically just (recursively) nested relations. any operator that doesn't lose information is a relation: `->`, `cons`, `[a b]` (array). all structures isomorphic to any structure can be used interchangably. therefore the question of which structure to use is purely dependent on the language/runtime's special considerations of those structures. because all graphs can be expressed by linked lists, and graphs are the most general data structure, we know that arrays and functions can each express any data structure.
+    *** function & data structure equivalence
 * tacit (e.g. group operation notation)
-* branchless (comparisions still allowed.) requires using entirely numbers instead of boolean?
+* branchless
 * fixed-point arithmetic
-
-typing (unsure if should be used:)
-
-* complex tensor types? linked lists? functions instead of linked lists? depends on runtime, e.g. if state[ful|less] ops are faster.
-  ** remember: all structures are mathematically just (recursively) nested relations. any operator that doesn't lose information is a relation: `->`, `cons`, `[a b]` (array). all structures isomorphic to any structure can be used interchangably. therefore the question of which structure to use is purely dependent on the language/runtime's special considerations of those structures. because all graphs can be expressed by linked lists, and graphs are the most general data structure, we know that arrays and functions can each express any data structure.
-* definitely functions instead of type classes
-* types are first class & algebraic (i.e. you can write type families just like ordinary lambdas)
-  ** anonymous data types
-* typing follows type theory convention & arithmetic (seeing types as expressions of numbers and algebraic operators)
+* types should be first class & algebraic (like in the lux proglang) i.e. you can write type families just like ordinary lambdas
+  ** support & use anonymous data types
+* typing should follow type theory convention & arithmetic (seeing types as expressions of numbers and algebraic operators)
+  ** see link:https://homotopytypetheory.org/[homotopy type theory]
 
 === algebra-based programming
 
@@ -225,7 +224,7 @@ remainder is a partitioning scheme and modulo arithmetic forms a ring. remainder
 * recursion schemes
 * hughes' arrows
 * algebraic effects
-* barbie/HKDTs (good idea, but flawed in generality & reification under type systems that i know of (scala, typed racket, haskell))
+* barbie/HKDTs (good idea, but flawed in generality & reification under type systems that i know of (scala or haskell.) not even available in typed racket.)
 
 .structure derivation
 
@@ -271,15 +270,16 @@ unless you've special need (which i can't imagine, but assume may be possible,) 
 
 typing can be its own programming language if done properly. types describe data/functions, which are equivalent, i.e. there's a bijection between types and functions. this is a reflection of the curry-howard-lambek correspondence.
 
-types add (and enforce) structure
+types add (and enforce) structure.
 
-.benefits
+.benefits/uses
 
 * polymorphism
 * provability: encoding or guaranteeing specific properties as types rather than verifying by predicates at runtime
   ** especially useful for preventing unobvious invalid values. if a program crashes due to invalid data, then it's obvious where/why. however, handlable invalid data is unobvious, e.g. `(* precondition: x ≠ 0 *) (de [x] (send-to-remote-api "DoThing" (add1 x)))`. usually dependent typing (e.g. ada's) is needed to avoid this class of errors.
   ** lessens probability that a program will crash
-* defining grammars. yes, types, to the extent that they're specific (e.g. dependent typing is more specific than non-dependent) types can implement parsers.
+* *defines/expresses grammars well*. yes, types, to the extent that they're specific (e.g. dependent typing is more specific than non-dependent) types can implement parsers.
+  ** especially useful when many similar but significantly/importantly distinct data & morphisms are used, e.g. git would benefit from types to easily know which similar operations work on branches vs commits vs files.
 * identifies improper/incomplete refactoring. e.g. if i change a type's shape but fail to account for that change in functions of that type, then the checker immediately tells me. this is especially useful for polymorphic types.
 * we can use types to identify what we know; this is a metric of how well each part of the program is understood. 
 
@@ -645,6 +645,7 @@ it's silly to choose a _structure_; it's more sensible to identify relevant alge
 structures are ranked by their specifity (to a problem) and speed for a set of operations. *there are only two data structure operations: traverse & transform*.
 
 .data structure operations
+
 * traversal (identify a subset of elements)
   ** arbitrary element(s)
     *** traverse a proper subset of elements
@@ -666,28 +667,56 @@ structures are ranked by their specifity (to a problem) and speed for a set of o
 traversal is partitioned into 3 classes because reasoning about each can be quite different depending on the structure. for example, traversing an element in a list is similar to but a bit easier than traversing a substring, traversing the whole list is easiest since that's what we already have, and traversing all but the last element is is the slowest possible traversal of a (singly) linked list. parallelism is no consideration for individual traversals, and easiest to consider for complete traversals.
 
 .always encode traversals as sequences
+
 NOTE: for efficiency, all structures should be built & consumed non-strictly; then `consume ∘ produce` allocates no memory. to implement non-strict in an otherwise strict runtime, use _sequences_: functions from index to element. notable index types are `0`, `Int`, `(Array Int)`. examples of sequence superiority: 1) `range 10` doesn't allocate memory; 2) traversing [2 3 4], then traversing [6 4 7] is faster than traversing [2 3 4] ++ [6 4 7] since it elides O(n) concatenation.
 
+.graphs
+
 TODO: all data structures are graphs; how does graph theory relate to identifying data structures? graph theory obviously considers traversal & structure. it's also related to group/galois theory, which concerns symmetries. frankly, link:https://en.wikipedia.org/wiki/Outline_of_discrete_mathematics[all discrete mathematics] should be considered by one structure. see _Graph Theory_ by Russell Merris (Wiley Series in Discrete Mathematics & Optimization.)
+
+you may generally think of data structures as graphs _in the graph theory sense_. for example, a zipper (a duple of lists) would be considered as the disjoint union of two paths. this is a rather strange yet apparently correct description. being not well studied in either group nor graph theory, i can't comment further, but i assume that both disciplines enlighten us to better interpretations of zippers, as with any other data structures. certainly we can intrepret every data structure as a graph, and optimize the structure by
+
+. optimizing traversal: minimizing the shortest path between given nodes
+. optimizing balancing: minimizing the difference between a graph and the rebalanced graph
+
+.no particulars
 
 as with everything, data structures should not be seen as "some few things each complex and worthy of study." instead, usually, each structure should be seen as no more particular than one number out of an infinite number of numbers. structures should be implemented on-the-fly just like lambdas. this is almost always feasible because:
 
 . most structures are bulit on few symmetries
 . structures can be defined by other structures
 
+typed racket's array library (part of the `math` package) usefully supports three varieties of strictness:
+
+strict:: array wrapping a vector. evaluation changes vector in memory.
+non-strict:: function from indexes to element. recomputed on each eval.
+lazy:: memoized function
+
+or, as a table:
+
+[options="header"]
+|===
+| strictness | caches values? | evaluates indexes → value function
+| strict     | yes            | on each evaluation
+| non-strict | no             | on every evaluation at each index
+| lazy       | yes            | on first evaluation at each index
+|===
+
 .structure symmetry
+
 *every structure permits terse, elegant traversals & reshapes when these functions are written in terms of the structure's symmetries.* reasoning by symmetry allows easily identifying solutions that would be very difficult to reason about by studying "frame-by-frame" updates to structures. non-coincidentally this is the same as reasoning about recursion: it's difficult to trace every function call, but much easier to understand in terms of closure and base & recursive cases.
 
 for example, it's difficult to understand folds over rose trees unless you understand the rose tree's symmetry.
 
 .compositional definition
+
 rose trees and zippers are simple compositions of lists. rose trees use particular nestings of lists whereas zippers use multiple non-nested lists. how could i identify particular substrings of a list? a substring is defined by the triple (list, start, end). multiple would then be [(list, start, end)], but i know that the list is constant over all substrings, so i can factor it out: (list, [(start, end)]). that's technically a "new" data structure. if we want only to traverse the list of intervals in any order, or fifo, then we're done. however, if we want to traverse in _order_ of substring length, then we're store them in a data structure defined by order, e.g. a heap. for this we'd need to tell the heap to sort on `end - start`. racket's `data-lib`'s binary heaps are constructed over a <= operation.
 
 * array
   ** static
   ** dynamic
 * cons/pointer digraph
-  ** skip list (apparently generally superior to balanced trees)
+  ** skip list
   ** DAG
     *** tree
       **** balanced tree
@@ -700,8 +729,19 @@ rose trees and zippers are simple compositions of lists. rose trees use particul
         ***** alist
 * hashmap
 * zipper
+* differn list (purely functional substitute for doubly-linked list)
 
 hashmaps are an interesting solution to making alists faster.
+
+.efficient general-purpose structures
+
+NOTE: this section currently isn't even attempting to be complete
+
+where these structures should be used is debatable. however, they're listed here simply because they're impressive, independent of their suitablity. they're efficient for many applications where not much forethought is put into the nature of their data.
+
+* finger tree
+* rope
+* skip list (apparently generally superior to balanced trees)
 
 .choosing a structure
 
@@ -789,7 +829,7 @@ i'm also considering a synchronizable untyped structure `(struct fs (f stack v))
 * arrays are superior for fixed-shape rectangular data. graphs are better for data of irregular pattern and shape
 * arrays impurely update their state efficiently in both imperative and functional paradigms
 * matrix-style solutions are much faster and simpler to define than the build-based ones! which of the matrix solutions (using lists or arrays) is faster depends on the matrix implementation's speed for parallelized (pointwise) operations and any memory copying that it may be doing, vs speed of uncons (and in this case, drop-right, which a modified version of map would not require.) really, in this case, the `Array` method should surely be the fastest, since there're no memory operations, since the modified array refers to the same block of memory, just with modified indices. how this generalizes is yet unclear.
-  ** typed racket's math's array library uses relative indices (iirc!), so:
+  ** typed racket's math's array library (at least when using non-strict arrays) uses relative indices, so:
     *** rotating an array is as simple as changing its starting offset.
     *** slicing, reshaping, removing axes or duplicating axes are O(1)
 * if slicing operations seem ineffective, consider them on the transpose of an array
