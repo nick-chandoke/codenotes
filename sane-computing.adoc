@@ -1,22 +1,28 @@
 TODO: consider multiple programs connecting to a common sql db for ipc; atomicity means that we can use sql to wait for events (though hopefully not inefficiently; surely we can use even a simple server to simply communicate between programs when one program has committed to the db so that the other program can read therefrom) and that our parsing is as simple as using vectors (table rows.) there also won't be any dealing with pipes; there'll only be a fault-tolerant connection to the db!
 
+NEXT: incorporate the following two points into the notes in their proper places, and revise this whole document into one that's useful in addendum to best-paradigms, which discusses some of the same topics that this document does but with better description; what this document provides that best-paradigms does not: the sway or kakoune style IPC design. this is separate because it discusses how to use multiple wares together to implement a given design, whereas best-paradigms discusses the designs only.
+
+* use haskell for developing typed combinators (e.g. lenses,) then use those in untyped langs. the trick is finding combinators that always combine sensibly, so that you're free to combine them in untyped languages without worry. identifying such types/combinators can be tricky, and thus is the ideal problem for which strongly typed systems (e.g. ghc's type calculator) is an ideal solution.
+* seek elegance rather than minimalism. elegance will always be minimalist, but never too much.
+
 .general principles
 
-. it's better to hack together currently existing code (regardless of language!) than to write your own
-  . programs can achive IPC via cmdline invocation
-  . startup times are negligible for programs running as servers
-    . smaller languages with smaller runtimes are better than larger languages with larger VM requirements anyway
-  . cmdline IPC means:
-    . i/o, but that's not considerably slower
-    . parsing, which may take some time
-  . marshalling and ffi is the best solution
-. there's *data*, manipulations thereof (*functions*,) and how we express those manipulations (*syntax*.)
-  . there're also _hooks_ (code executed upon asynchronous events.) a hook on a synchronous event is just another expression of procedural code. however, handling async events is a special consideration of computer programming that doesn't typically have a mathematical analogue (except the process (i.e. π) calculus.)
-  . _programs_ are data that permit interpretations as morphisms, either pure or stateful, which are really equal, differing only semantically about which context is considered. being that programs are orderly, the code used to encode them must follow a grammar.
-. functions can be data just as verbs can be gerunds or infinitives
-. the manipulations are functions/proofs (see curry-howard correspondence) and/or structures. structures are at least related to functions [algorithms]: every algorithm is neatly implementable for a given data structure, i.e. every data structure supposes [at least one] natural morphism over it.
-. use parallel algorithms & systems. GPUs or other parallel matrix tech is good.
-. constraint solvers generalize type systems, compute most efficient solutions, and take least amount of programming (they're declarative)
+* any discussion of a language or other tool that isn't exclusively about elegance is a worthless discussion. terseness/minimalism, nor prettiness, is no worth without regard to elegance. just in case it needs mention, any mention of people is worthless in a discussion about a tool. how some people sometime use a tool has nothing to do with the tool itself.
+* it's better to hack together currently existing code (regardless of language!) than to write your own
+  * programs can achive IPC via cmdline invocation
+  * startup times are negligible for programs running as servers
+    * smaller languages with smaller runtimes are better than larger languages with larger VM requirements anyway
+  * cmdline IPC means:
+    * i/o, but that's not considerably slower
+    * parsing, which may take some time
+  * marshalling and ffi is the best solution
+* there's *data*, manipulations thereof (*functions*,) and how we express those manipulations (*syntax*.)
+  * there're also _hooks_ (code executed upon asynchronous events.) a hook on a synchronous event is just another expression of procedural code. however, handling async events is a special consideration of computer programming that doesn't typically have a mathematical analogue (except the process (i.e. π) calculus.)
+  * _programs_ are data that permit interpretations as morphisms, either pure or stateful, which are really equal, differing only semantically about which context is considered. being that programs are orderly, the code used to encode them must follow a grammar.
+* functions can be data just as verbs can be gerunds or infinitives
+* the manipulations are functions/proofs (see curry-howard correspondence) and/or structures. structures are at least related to functions [algorithms]: every algorithm is neatly implementable for a given data structure, i.e. every data structure supposes [at least one] natural morphism over it.
+* use parallel algorithms & systems. GPUs or other parallel matrix tech is good.
+* constraint solvers generalize type systems, compute most efficient solutions, and take least amount of programming (they're declarative)
 
 .basic technique
 

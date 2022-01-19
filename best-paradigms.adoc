@@ -12,6 +12,8 @@ structure:: generally means _form_, i.e. arrangement (of data), i.e. particular 
 * see https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 * reconsider type classes in terms of factor's oop system
 * discuss randomized algorithms & probabilistic data structures
+* discuss ADT constructors/destructors [destructuring aka pattern matching] vs their functional equivalents: constructors & traversals
+* explore arrays as ad-hoc polymorphism e.g. a hierarchy of algebraic type classes can be expressed by a simple spec on arrays: the unit value is stored at position 0; + is stored at 1; × at 2; &c. as in this case, the number may have meaning rather than being arbitrary. the hierarchy is determined (calculable) simply by pointwise addition of arrays, checking which resultant cells are 0/nil. this is really using arrays as tuples that represent abstract structures, then using set-theoretic operations to relate those structures.
 
 things to do after i'm done with stocks:
 
@@ -38,6 +40,7 @@ abstractions with (possibly many) numerical _degree(s)_ are ideal. e.g. recursio
   ** support & use anonymous data types
 * typing should follow type theory convention & arithmetic (seeing types as expressions of numbers and algebraic operators)
   ** see link:https://homotopytypetheory.org/[homotopy type theory]
+  ** use types to design programs (namely primitive combinators,) then use an untyped runtime
 
 === algebra-based programming
 
@@ -125,35 +128,77 @@ NOTE: be careful that whatever method you choose is efficient as *output* by you
 * array-based programming on some architectures (e.g. intel) avoids branching but still loops, by using `esi` & `edi` special looping-designated registers. instructions like `cmp ...; cmovg ...` are branchless but still obviously use conditionals.
   ** SIMD/AVX branchless is the fastest variety of cpu (cf gpu) programs. many apl programs should be easily translatable to SIMD branchless.
 
-=== kakoune [polyglot] philosophy
+=== kakoune philosophy
 
-use multiple specialized languages:
-
-[options="header"]
-|============================================
-| lang                  | specialization
-| jq, graphql           | JSON
-| sql                   | data
-| burlesque, apl, j     | computation
-| typed racket, haskell | grammars
-| picolisp              | i/o and interfacing
-|============================================
+the kakoune philosophy is basically the unix one (*specialized* and *composable* via RPC/IPC/piping/sockets) plus *speed*, *simplicity*, *orthogonality* (ideally only one implementation of each function and functions' functionalities don't overlap,) *language-agnostic (but not form-agnostic!), and *the notation is the language* (as is the case in APL.)
 
 === general mathematical principles
 
 TODO: read link:https://en.wikipedia.org/wiki/Curry%E2%80%93Howard_correspondence#Curry%E2%80%93Howard%E2%80%93Lambek_correspondence[curry-howard-lambek correspondence (wikipedia)]
 
-==== relation
+==== relation & similarity
 
-cons cells or unary functions (they're isomorphic) exactly represent (binary) relation. (linked) graphs and recursion are consequent structures. in untyped lisps `cons` is the only primitive except value (number, char) and maybe string. every cons pair is ad-hoc; a universal analogue is a rule for consing, such as an anamorphism.
+in mathematics _relation_ is a coupling of 2+ things whereas _similarity_ is a set of common properties held by 2+ things. in mathematics objects like sets can be unordered collections. in programming this is akin to a block of memory being allocated then elements written to it in nondeterministic order. non-ordering implies that any operations on particular elements are less than ideal efficiency. these elements are truly unordered; the access and state of each element is entirely unrelated to any others. non-ordering is enabled by random-access memory. this being said, random access still supports sequential access; we can order array elements.
+
+if items are to be ordered, then they can either be ordered by *contextual* or *intrinsic* property. in the former case, we must use general structures (e.g. list) whereas in the latter case, we can use efficient structures that exploit inherit properties (e.g. heap.)
+
+[options="header"]
+|===============================================================================================================
+| access     | order type                | example structure | required relations
+| random     | n/a                       | array             | 0
+| sequential | arbitrary, contextual     | array, list       | n, unpredicated (not constrained to predicate(s))
+| determined | intrinsic, total ordering | heap              | 1, predicated (equivalence relation properties)
+|===============================================================================================================
+
+* in the case of sequential ordering, n relations are needed whether using a linked list or an array: in both cases each relation is a pointer. though there are pointers in an unordered array, they're irrelevant because they don't signify anything because there's no order to signify.
+* because sequential access is determined by unpredicated relations, both cons cells and unary functions exactly represent (binary) relation and are therefore isomorphic. (linked) graphs and recursion are consequent structures. in untyped lisps `cons` is the only primitive except value (number, char) and maybe string. every cons pair is ad-hoc; a universal analogue is a rule for consing, such as an anamorphism.
+
+NOTE: the default assumption for relations is that they'ren't symmetric/commutative. their order is seen as a lack of property rather than having the commutative property.
+
+===== self-relation & self-similarity
+
+TODO: merge with §data/function equivalence
+
+_self_-relation is noteworthy because it's the simplest class of cycles: loops. all unpredicated relations are equal; therefore `(a,b) = (a -> b)` etc. *self-relation on the unpredicated binary relation produces chains of arbitrary order* which is...common in programming? like really? is it more common than unordered or totally ordered structures? maybe it's important only because it describes linked lists, which are then used like unordered arrays but with more flexible (de)allocation? TODO
+
+self relation, if it were to have a degree, would obviously have a degree of 1. as with many things of degree 1, its significance (as its own concept) is its simplicity. self-relation commonly isn't anything special compared to general relation. for example, recursion (a loop) isn't worth distinguishing from corecursion (a cycle.) however, it commonly does make a difference, too. for example, in type theory, it's obviously best to use fully-reduced/simplified types, i.e. a recursive type of one recursive variable rather than many, when possible. self-relation...can describe structures of arbitrary size, composed of units.... TODO
+TODO: questions about self-relation usually specifically question equivalence relations: reflexivity, symmetry, transitivity. but this is true specifically of predicated structures.
+
+self-relation goes by many context-dependent names:
+
+[options="header"]
+|===================================
+| context            | name
+| graph theory       | cycle or loop
+| definition         | recursion
+| geometry           | fractal (maybe always recursive)
+| aristotelian logic | posture
+| general grammar    | reflexivity
+| program runtimes   | reflection
+| systems analysis   | feedback
+|===================================
+
+and there are many more, such as involution (a function that's its own inverse.) recursion is often treated as a special topic, but the more general self-relation or cycles should be considered instead. consequently the question of "recursive vs iterative" is foolish; they'ren't particularly related and certainly don't form a dichotomy. they're both essentially cycles that may halt if a branch is taken.
+
+====== fixed points
+
+TODO
+
+''''
 
 recursion is the method of traversal: the very fact that the primitive relation (cons) is binary implies that:
 
 . all arbitrary data structures are expressible by cons
 . trees (graphs with exactly one path to any node) can be traversed entirely by simply recursively unconsing
-  . this assumes that cons is applied symmetrically: (... . (c . (b . a))...). if a different rule were used—e.g. (d . ((b . a) . c))
+  .. this assumes that cons is applied symmetrically: (... . (c . (b . a))...). if a different rule were used—e.g. (d . ((b . a) . c))
+  .. traversal by uncons means that all data structures expressed entirely by cons can be traversed entirely by simple applications of `map` (though for graphs with cycles that would map over some elements multiple times)
+    ... this applies to structures that aren't really connected, but are expressed as such for convenience. for example, a zipper's two lists may be considered sepapate, but where zipper is a type alias for (cons L1 L2), a single nested map would iterate over both. in other words, in practice in languages like picolisp where cons is the only relation (no arrays,) all structures are graphs all of whose nodes share at least one edge with another node, even if that's not true of the abstract graph that they represent. in this case the structure traversal would need to know which edges are "true" edges vs merely implementation-necessary edges.
 
-thus we see that there are *rules* for *generating* data structures, and *inverse* rules for traversing them—unfolds & folds. therefore types that describe rules for generating structures also describe traversals. recursion is simply closure over application/parameterization.
+thus we see that there are *rules* for *generating* data structures, and *inverse* rules for traversing them—unfolds & folds. therefore types that describe rules for generating structures also describe traversals. recursion is simply closure over application/parameterization. where do we draw the line between recursion and repitition or loops? they're all about self-similarity/factorability. it's about *recurrence*.
+
+''''
+
+TODO: how did i get to talking about types here?
 
 type systems are algebraic. they're abstract structures, not data structures. they're collections of abstract rules, not collections of data.
 
@@ -267,6 +312,8 @@ does not work insofar as given only any element of the structure, we cannot navi
 unless you've special need (which i can't imagine, but assume may be possible,) use fixed-point arithmetic (including ratios) instead of floating-point. they're faster and exact rather than approximate.
 
 === typing
+
+verdict: type theory is good. typed languages are either so poorly typed as to be not considerably better than untyped langs (e.g. java, c++); or are well typed but have flawed type checkers (haskell, typed racket) that ultimately makes them good for most programs, but literally completely obtrusive for certain programs, and merely cumbersome for some programs. therefore it's best to use types and type calculators to design programs, but code the programs in untyped (or latently/dynamically typed) languages.
 
 typing can be its own programming language if done properly. types describe data/functions, which are equivalent, i.e. there's a bijection between types and functions. this is a reflection of the curry-howard-lambek correspondence.
 
@@ -666,7 +713,7 @@ structures are ranked by their specifity (to a problem) and speed for a set of o
 
 traversal is partitioned into 3 classes because reasoning about each can be quite different depending on the structure. for example, traversing an element in a list is similar to but a bit easier than traversing a substring, traversing the whole list is easiest since that's what we already have, and traversing all but the last element is is the slowest possible traversal of a (singly) linked list. parallelism is no consideration for individual traversals, and easiest to consider for complete traversals.
 
-.always encode traversals as sequences
+.always encode traversals as link:https://docs.factorcode.org/content/article-sequences.html[sequences]
 
 NOTE: for efficiency, all structures should be built & consumed non-strictly; then `consume ∘ produce` allocates no memory. to implement non-strict in an otherwise strict runtime, use _sequences_: functions from index to element. notable index types are `0`, `Int`, `(Array Int)`. examples of sequence superiority: 1) `range 10` doesn't allocate memory; 2) traversing [2 3 4], then traversing [6 4 7] is faster than traversing [2 3 4] ++ [6 4 7] since it elides O(n) concatenation.
 
@@ -731,7 +778,7 @@ rose trees and zippers are simple compositions of lists. rose trees use particul
 * zipper
 * differn list (purely functional substitute for doubly-linked list)
 
-hashmaps are an interesting solution to making alists faster.
+hashmaps are an interesting solution to making alists faster. however, with ordered keys, splay trees may be better than hashmaps since they grow & rebalance well, whereas, depending on the hashmap implementation, the hashmap may not grow quickly (say, if it uses dynamic arrays under the hood.)
 
 .efficient general-purpose structures
 
@@ -766,7 +813,7 @@ you may make your own structure (which should be very easy if you follow these b
 
 structures are for code, not readability! whatever structure you impose—whether data structure, abstract structure, or structured functions, do so expressly to the end of expressing *program logic* better. an example is recursion schemes. *not* an example is a `Person` struct of name, age, &c. that's descriptive data, not programmatic data! all descriptive data should be stored either in a database or by common types, here (again, like a database) as a matrix: an unordered list of vectors of known size. always use basic structures when they'll do. just like you should never assume use of basic structures for implementing program logic, so should you never consider anything beyond basic structures for descriptive data, i.e. data that isn't calculated in a way that significantly affects the program's behavior.
 
-==== arrays & lists
+==== arrays vs lists
 
 suppose ads := [a...z] ↦ [b - a, ..., y - x]. the following are various implemenations:
 
@@ -781,7 +828,7 @@ _TODO ; stack paradigm, implemented by a zipper
 (define (ads a) (array- (sp/ a (:: 1 #f 1)) (sp/ a (:: 0 (sub1 (array-size A)) 1))))
 ----
 
-NOTE: i couldn't find a way to do it with fold
+i couldn't find a way to do it with fold.
 
 both:
 
@@ -818,17 +865,24 @@ linked list (graphs):
 * O(1) push & pop
 * O(m) get & set
 * O(n) length
+* purely functional
 
 zippers:
 
-* eliminate the trouble of choosing take or spilt-at
+* eliminate the trouble of choosing take vs spilt-at; they're effectively the same. to split a zipper is the same as searching through a list.
 * naturally iterate: input on the right, output on the left if all elements are consumed; else old elements on the left and a separate output list.
+* generalize to arbitrary dimensions. xmonad's `StackSet` is an example of a non-linear zipper
+* are dual to queues. both are pairs of lists that transform into one list by reversing one list and appending to the other, but queues do so in a slightly different manner, and thus achieve different functionality.
+  ** queues and zippers are alternaties to doubly-linked lists.
+
+zippers are not a particularly fundamental structure; they're given as an example of a possible improvement on a list—namely when one would want to take or split a list. this segways into another point: each graph structure must be designed for particular traversals. however, this is not true of arrays! arrays support all possible traversals over arrays equally well, since arrays are O(1) get & set. therefore arrays are the default solution if you don't know how you'll traverse your data, but you know that it won't change size.
+
+it's impossible to make _strict_ purely functional doubly-linked lists. however, link:https://wiki.haskell.org/Tying_the_Knot[lazy ones] link:https://hackage.haskell.org/package/liboleg-2009.9.1/docs/Data-FDList.html[are possible]. being that even strict languages support non-strict functions by wrapping the original function in a lambda [thunk], construction &al traversals can be non-strict, thus making purely functional doubly-linked lists possible when implemented purely by functions rather than data structures i.e. the "data" of the structure is stored entirely as lambda arguments.
 
 i'm also considering a synchronizable untyped structure `(struct fs (f stack v))` (or encoded as a closure): elements are pushed to it until a condition is met, and then `(begin (set! v (apply f stack)) (set! stack '())`
 
 * arrays are superior for fixed-shape rectangular data. graphs are better for data of irregular pattern and shape
-* arrays impurely update their state efficiently in both imperative and functional paradigms
-* matrix-style solutions are much faster and simpler to define than the build-based ones! which of the matrix solutions (using lists or arrays) is faster depends on the matrix implementation's speed for parallelized (pointwise) operations and any memory copying that it may be doing, vs speed of uncons (and in this case, drop-right, which a modified version of map would not require.) really, in this case, the `Array` method should surely be the fastest, since there're no memory operations, since the modified array refers to the same block of memory, just with modified indices. how this generalizes is yet unclear.
+* when you don't know what variety of traversals you'll be doing on your data, but you know that the data's shape won't change, then arrays are best because all their supported traversals (and mutations) are equally fast
   ** typed racket's math's array library (at least when using non-strict arrays) uses relative indices, so:
     *** rotating an array is as simple as changing its starting offset.
     *** slicing, reshaping, removing axes or duplicating axes are O(1)
@@ -838,6 +892,7 @@ lists aren't as powerful as arrays, but i've yet to identify which powers are us
 
 * we can start & end array iteration at arbitrary indices, whereas we must start list iteration at its beginning, and though we can stop iteration after an arbitrary number, we cannot express this number in terms of its length without having O(n) traversal.
 * suppose we've a db-style m×n matrix (rows are records, cols are fields.) in this case, the array's shape is known at compile time. we can just as well declare n lists each of length m. if we need fast lookup, we can use a treeset. it's not O(1), but O(log~2~n) isn't bad. a proper B-tree or splay tree or skip list (latter both are implemented in racket's `data-lib` lib) is even better. this being said, matrices don't need balancing!
+* vector search always returns an index; if you want the index, then there it is; however, if you want the value, then it's trivial to get the value given an index. lists support search, but would need to return the index and value simultaneously in order to satisfy both needs without writing multiple functions. furthermore splitting lists would require either even more nearly-identical function definitions, or a more complex single function. splits are most elegantly done with zippers, but zippers are still less efficient than arrays, even if they're on the same order of magnitude.
 
 verdict: sequences (lazy lists) and vectors defined by index functions to elemetns are best; these don't require upfront allocation (or, often, _any_ allocation,) and they support fusion. array implementations often come with better functions than lists; such functions shoud be defined & used for lists, too. for example, scalar extension is done on arrays of any shape (tensors,) but this functionality isn't standardly implemented for lists; for lists you'd need to nest `map` multiple times, and you'd need to make the nesting relative to the nested lists' shape. (optics & recursion schemes solve this.)
 
@@ -848,7 +903,7 @@ verdict: sequences (lazy lists) and vectors defined by index functions to elemet
 
 === array-based tacit languages (abtl)
 
-j & apl, and probably bouth burlesque & bqn.
+j & apl, and probably both burlesque & bqn.
 
 advantages:
 
@@ -869,3 +924,31 @@ advantages:
 * scalar operations are applied to all points without changing shape
 * if α f ω, if α or ω is scalar, then f is applied to all elements of ω or α (this is called _scalar extension_). if both are arrays of the same shape, then f is applied pointwise. _incompatible_ shapes raise an error: if shapes differ, then the smaller shape is repeated until it's the same size as the larger array (in t.racket's `math/array` this is called _broadcasting_). this makes expressions like `1 2 3+(3 2 1) (¯1 ¯2 ¯3) ((44 71 11) 1 (32 0.5) )` valid. this example's β-reduction is `(4 3 2) (1 0 ¯1) ((47 74 14) 4 (35 3.5) )`; `1+` is mapped over `(3 2 1)`, `2+` is mapped over `(¯1 ¯2 ¯3)`, and `3+` is mapped over `((44 71 11) 1 (32 0.5))`.
   ** this expression is invalid in t.racket's `math/array` (error "expected rectangular data"). however, for arrays of the same shape, broadcasting is obvious: `(array+ (array [1 2 3]) (array [[3 2 1] [-1 -2 -3] [44 71 11]]))` => `(array [[4 4 4] [0 0 0] [45 73 14]])`. see §6.3.1 _broadcasting rules_ for complete spec. i haven't understood the rules technically enough to want to try to find an array representation that accomplishes the same result as the abtl (viz apl) version.
+
+==== case study: fibbonacci
+
+TODO: interpret this section into terms of recursion schemes, then generalize to arbitrary computations, generalizing matrices if/when necessary.
+
+recursive -> iterative -> matrix. credits to https://rybczak.net/2015/11/01/calculation-of-fibonacci-numbers-in-logarithmic-number-of-steps/
+
+.recursive definition
+
+fib n := fib (n - 2) + fib (n - 1), fib 0 := 0, fib 1 := 1
+
+.iterative optimization
+
+TODO: how was this reformulation derived from the recursive form? what subset of recursion schemes support this optimization?
+
+fib n = go n 0 1 where go k a b = (k == 0) * a + go (k - 1) b (a + b) # branchless style
+
+.matrix reformulation
+
+the iterative definition is a linear combination, in the recursive case, even in branching form. therefore it can be expressed by a matrix. being that fibbonacci is a 2nd-degree recscheme (i.e. over 2 recursive variables) our matrix will be a 2x2: [[0 1] [1 1]], which satisfies the recursive identity: T * [[F~n~] [F~n+1~]] = [[F~n+1~] [F~n~]] = [[F~n+1~] [F~n+2~]]. it preserves the original increment between the 1st & 2nd recursive variables, i.e. the difference between (n + 1) - n = (n + 2) - (n + 1) = 1. the transform is applied to the recursive variables column vector.
+
+* it'll always be a square matrix because we aren't adding nor subtracting degrees of freedom / variables.
+* notice that 0 & 1 here are not mere scaling factors; they determine abscence or not of variables, which means that they describe the actual code (inclusion of identifiers in code or not.)
+  ** this is exactly the same as branchless programming or using predicates as masks.
+  ** we can use matrices of 0's & 1's to both describe and _computationally encode_ the structure of algorithms themselves. of course matrices might not be able to well describe any code (though they may perhaps) and so we'd use other structures such as graphs or semilattices to describe program logic. the significance of such encodings is that these structures exhibit known mathematical properties, and so can be systematically optimized/reduced, transmuted, compared, and other goodies. this is in the direction of computationally producing, optimizing, and hacking together programs, as well as formally discussing the structure and therefore *form* of programs independent of each their expected runtime contexts/purposes.
+    *** as with all vector spaces, matrices encode linear combination. linalg is neat & useful, but how do matrices compare with other algebraic structures for their description and computability of programs? btw _macros_ don't count; they are programs that produce others, but they don't compute programs algebraically; they just follow arbitrary instructions. it's impossible to write a macro to optimize some source code. syntax trees are not algebraic.
+
+thus the iterative form is reformulated into F~n~ := (matref (T^n^ * [[F~0~] [F~1~]]) [0 0]). we can compute matrix exponentiation, but as is common with any recursion, e.g. factorial, we can preferably omit redundant intermediate operations. in fact, one can study any system's evolution to see common patterns (e.g. self-similarity or other forms of modulus) and then factor-out those patterns and apply any reductions. perhaps rather than "recursion" you may think of 
