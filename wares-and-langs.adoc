@@ -1,0 +1,138 @@
+== wares & langs
+
+which wares (incl langs) to use or not and why or how. wares that aren't particularly preferable aren't listed; those are expected to be taken from nix package lists. for example, ncdu is a good disk space analyzer, but isn't particularly better than baobab, unless you assume that tui is inherently better than gui; therefore neither ncdu nor baobab is listed. by contrast, ht and bbe are both good hex editors, but are designed differently, and would thus be featured here to tell when to use either.
+
+=== wares
+
+[TODO]
+
+=== langs
+
+.efficiency & speed
+
+. c[++] & rust
+. ocaml
+. (common) lisp (henceforth _cl_)
+. go
+. ocaml
+. haskell
+. c#
+. racket
+. ruby, perl, python, lua
+
+unknown:
+
+. bqn
+. apl
+. j
+. bqn
+. burlesque
+. janet
+. picolisp
+. julia
+. factor
+
+==== ideals
+
+===== efficiency
+
+c is too basic. c++ is too complex. cl, go, and ocaml are good. haskell's too complex, though ghc's type calculator is useful for designing programmatic patterns. c# and less efficient languages are not worth using.
+
+===== design
+
+====== tacit
+
+tacit programming based on function combinators is best. of course, elegance is our primary objective. array-based [tensor] programming is good because:
+
+* implies plural instead of single by default
+* efficient on gpus
+* arrays can describe programs simply/succinctly, which makes programs computable data structures rather than complex syntax trees and nested continuations
+* being that arrays are indexed, we can perform array transforms expressed as index transforms are fast, since we're changing only how we traverse an array rather than touching memory
+
+remember that this is array-*based* programming; if you aren't reasoning in terms of tensors, then there's no benefit to arrays; you may as well use lists.
+
+j is inelegant as inconsistent semantics, e.g. associativity of nouns, verbs, and conjunctives.
+
+====== stack-based
+
+stack based langs goodness is again, like array-based langs, their implicit plurality, which makes function composition always effortless e.g.
+
+[source,scm]
+----
+(define (h x) (values x (add1 x) (sub1 x)))
+(let-values ([(x y z) (h 6)])
+  (+ (* x z) (/ y 2)))
+----
+
+can be expressed `6 h swap 2 / [ * ] dip +`. furthermore, stack langs are based on composition, i.e. dataflow programming, so their standard libraries help much.
+
+====== minimal
+
+the language should be small & simple. mostly we don't need data structures. we need little more than the ability to parse cmdline args, call functions from shared objects, read from stdin, write to stdout & stderr, perform elementary arithmetic, relate objects, and evaluate relations. the program itself may be the relation. thus programs should always be data structures that can be manipulated by other programs.
+
+this assumes that we're building logic "from scratch." if instead we're accomodating a pre-existing logic, then other frameworks may be more appropriate, e.g. using type systems to keep (needlessly) complicated systems straight.
+
+to the extent that "mastery of a language" does not mean "mastery of programmatic/mathematical structure," the language is bad. we reason in terms of languages; to pick a poor language is to reason poorly.
+
+====== safety
+
+safety implies danger, so what dangers exist? rather, _things_ must be dangerous; therefore simple languages are limited in their possible danger. it's much easier to not do something rather than to do it well, though both are better than doing poorly.
+
+a common example is variable names. the prescence of variable names has begotten:
+
+* scoping
+  ** namespaces
+  ** parameters / "fluid" let
+  ** macro hygeine
+* keyword/named function parameters
+* naming conventions, including for required identifiers for which no good name exists
+
+NOTE: scoping is the same problem as state! neither variable names nor in-place memory updates _in one context_ are problematic. trouble arises only when crossplay (ambiguity and mutable memory used in multiple _not-procedurally-related_ contexts respectively) occurs! the "trouble with state" is tracking state, which is obviously only troublesome if the graph describing mutations is complex.
+
+so let's just not name things unless it's really useful. catlangs factor and om don't have identifiers (though factor supports them, they're rarely used), and apl &al have only identifiers `α` & `ω` to define unary or binary functions (the only 2 supported arities.)
+
+if you take away enough things, then the _safety_ means less, and so we should feel free to do things usually considered unsafe, for the sake of flexibility/expressiveness.
+
+==== per lang
+
+.picolisp
+
+* like cl, very basic in core design, but unlike cl (and like scheme) its core design is its whole design
+  ** better than scheme or janet, since it's simpler
+* uses fexprs/eval rather than macros. has no special forms; everything is either an atom or list, and lists can be evaluated.
+* though exclusively interpreted, its implementation is so terse that being interpreted doesn't have significant impact on efficiency
+* exactly satisfies the needs for a good language
+* prefers iteration to recursion...how is this, though? `(apply * (range 1 100))` is fast, but how does it work? `(let n 1 (for i 100 (setq n (* i n))))` is equally fast. what about `fold`? clearly state isn't slow. apparently recursion's longer execution times are entirely due to...funccalls? stack manipulation? guess so; push & pop are O(1), but compare that to doing no push & pop, and suddenly we're at O(0.5), which is about the speedup that we see with picolisp.
+
+examples of brilliance:
+
+* link:https://picolisp.com/wiki/?recurInPicoLisp[anonymous recursion]
+
+.jula
+
+applicative in the worst way. inelegant: intricate funcargs rules, `do` syntax, multiple equivalent syntaxes. as always, the existence of inelegance overrides any particular niceties, such as builtin array support.
+
+.haskell, ocaml
+
+since realizing that structure can (and so should) be encoded in recursion schemes and other functions rather than ADTs, i'm preferring languages that lack builtin support for ADTs or anything about types or oop, as their inherent prescence inevitably leads to their pervasive use, and thus all libraries will be infected by it. i also don't trust type checkers' competency, so i elide them. as a matter of fact, all features are opportinuties for mistakes. the fewer features, the less liklihood of inelegance or incapability. the fewer features, the more quickly one can consider a language, and determine if the few core design features are worthy or not. with a language such as cl, the builtin features are few, though the popular idioms are many, as the supplemental features are many, and vary in popularity. therefore the expectation with using/learning cl is that one can't be expected to know all the idioms; therefore it must be easy to learn each one. it's easy to learn cl, then learn whatever lib is provided—*the leisure of incrementally learning any cl code.*
+
+* the best language is one that requires one to not learn the language, but learn the math behind the language.
+* features are no good if they aren't designed altogether, to work together
+
+.burlesque
+
+based on both stacks and arrays. it may be good to see such a combination. however, burlesque has many builtin functions, and the essential ones aren't marked, leaving us to wonder where the elegance is vs the convenience. in fact, it may be possible for burlesque to be nothing more than many nice ideas thrown together without consideration of a systematic way to derive solution programs to arbitrary problems.
+
+the combination of stacks & arrays may be misleading; if factor has many array operations when arrays are on the stack, then burlesque is inferior to factor.
+
+.apl
+
+cf j, link:https://ngn.bitbucket.io/k.html[k] (multiple implementations.)
+
+dyalog apl is the best apl implementation, but is free only for non commerical use. j is free. gnp apl is slow af; avoid.
+
+* operator overloading is sometimes sensible (multiple reifications of a common abstraction) but sometimes not (unambiguous dispatch to unrelated functions.)
+
+.k
+
+smaller than apl or j. simpler. whitney wrote a whole operating system in it, so it's obviously not a dsl.

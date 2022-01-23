@@ -1,5 +1,11 @@
 == best paradigms
 
+.keep in mind while reading
+
+_relation_ has the same meaning as _relation of data_, since _data_ just means _stuff_. _data_ or _datum_ is exactly equal to vacuous unqualified mathematical symbols.
+
+.some big paragraph that i wrote
+
 disregard givens; design from scratch by _first principles_: defining [adj] constraints and their implications. each _problem_ (i.e. thing that needs solving) is partitioned into two classes of constraints: the _desire_ and _universal constraints_. we always seek the (optimized subset of the) the interesction of those constraints. a simple though abstract example is a solution set of linear equations. we may have one solution, none (i.e. the empty set,) or many (particularly in linear algebra, _many_ always implies _infinite_.) a less abstract example: the universal constraints of physics are the laws of physics, and we desire to fly. our solution is then the intersection of mathematical expressions that describe flight and physics' universal constraints. this is obviously a complex example: its solution is not obvious, and many solutions exist, naturally partitioned into flight that's either valid only in fluid or valid otherwise. be it not pretty or simple, it's realistic. if we want to find the best solutions, then we must consider problems in their grand complexity, not artificially approximated in terms of cookie-cutter niceties—such mental tools as [for computer science] _lists_ or other _common_ data structures. *all models more specific than predicate logic skew truth.* such "prefab" solutions must be abolished. they may be easier to reason about for humans, but their inherit arbitration makes them more difficult to systematically reason about. this is particularly consequential when we consider that computers are ideal for solving problems systematically! both humans and computers can reason well by rules rather than easy piecewise composition of seemingly "neat" structures not described by predicates. *algebra* is a study of axioms' implications irrespective of the set over which the axioms hold. this means reasoning only about properties—not mentally tracing dataflow nor the state of a program, which is error-prone, annoying, and unnecessary. example algebraic design are programs _described_ by stacks, arrays, or the lambda calculus. i say _described_ and not _describable_ to mean that the programmer reasons in terms of these structures rather than programs merely permitting expression by such structures. this begets elegance in the same way that an algorithm elegantly expressed in polar coordinates is nicer than one reasoned in descartian coordinates, despite polar/descartian equivalence. we want the user to know how to express programs by an algebra simple enough that the computer can heavily optimize the program; or express a desire in terms of an algebra that a computer can solve in the given context of universal constraints.
 
 there are only two properties to make a program ideal: efficiency and elegance.
@@ -14,6 +20,16 @@ structure:: generally means _form_, i.e. arrangement (of data), i.e. particular 
 * discuss randomized algorithms & probabilistic data structures
 * discuss ADT constructors/destructors [destructuring aka pattern matching] vs their functional equivalents: constructors & traversals
 * explore arrays as ad-hoc polymorphism e.g. a hierarchy of algebraic type classes can be expressed by a simple spec on arrays: the unit value is stored at position 0; + is stored at 1; × at 2; &c. as in this case, the number may have meaning rather than being arbitrary. the hierarchy is determined (calculable) simply by pointwise addition of arrays, checking which resultant cells are 0/nil. this is really using arrays as tuples that represent abstract structures, then using set-theoretic operations to relate those structures.
+* note in the appropriate place that using data structures add only readability to function composition—"let over lambda."
+* fully expand (to completeness) §programming mindset
+* merge discussions of languages with ./wares-and-langs.adoc
+* discuss beauty as a heuristic for elegance. to determine beauty, express code by audial or visual space, e.g. a beautiful FSM graph will appear beautiful. a visual description of syntax (a la link:https://www.sqlite.org/lang_select.html[sqlite]) will appear beautiful if symmetrical and simple enough. or perhaps it may appear beautiful yet infinitely complex like fractals.
+* revise section on linearity into one that discusses _units_: 1 as the base case and also the seed for generation, e.g. naturals as (0,1,+), and integers with the addition of inverse, and rationals with addition of division.
+  ** n-dim structures are products of (n-1)-dim, for both continuous and discrete spaces; discuss this fact respective to arrays, lists, and continuous spaces, finally seeing them all as relations over universally-qualified variables whose meaning is found once a space is assumed, e.g. "∀x" meaning symmetry about x where x is either an integer or real depending on whether the statement is considered in discrete or analytic mathematics. e.g. 0-dim is a point. introduce one "∀", and now you've added a dimension: 0-dim := ∃p. p = _. 1-dim is ∀[x : 0-dim]. x. 2-dim is ∀[x : 1-dim]. &c. this is _true_ dimensionality. _pseudodimensionality_ is emulation of dimensionality by modulus, which allows reshaping, e.g. all arrays of shape [a][b]...[c] where a × b ... × c is constant can be reshapen into other i.e. reshaping is symmetric about cardinality.
+  ** discuss array/list equivalence by matrix representation of tree, and compare to 3d and higher-dimensional structures.
+* rearrange this document: 1) overview; 2) common fallacies; 3) what programs must be (we've a lot to consider even when we're considering only the most basic language!), and how lisp is the natural language for programs; 3.x) subsection on "programs" as evaluable relations, and that's implications on how programming relates to general math, language, game theory, &c formal systems; 4) now that we've identified the basis for programs, consider structure of complex programs (this is where (0,1,+) (i.e. monoids) will be discussed, not just wrt programs, but in general, again e.g. constucting numbers); 5) why monoids are not enough (we want to be able to calculate programs rather than merely evaluate them.) this section will consider SMT solvers and hoare's work, evaluating how appropriate each is.
+  ** to introduce both algebra and programming/relation as primitives, first discuss unit & relation, then evaluation, then axioms as a particular variety of relations, and logic as a particular variety of evaluation. this simultaneously introduces the fundamental(s) of mathematics, and demonstrates programs as nothing more than mathematical expressions, where computers can evaluate them.
+  ** where should i discuss denotational semantics?
 
 things to do after i'm done with stocks:
 
@@ -42,11 +58,88 @@ abstractions with (possibly many) numerical _degree(s)_ are ideal. e.g. recursio
   ** see link:https://homotopytypetheory.org/[homotopy type theory]
   ** use types to design programs (namely primitive combinators,) then use an untyped runtime
 
+.programming mindset
+
+when designing or programming, have this mindset, think in these terms, ask these questions.
+
+before development:
+
+. what predicates/structure (predicate = axiom, which are the only things that define abstract structures) define the problem & solution?
+  .. what, if any, transforms between them do we need to identify? how are they similar i.e. which defining properties or implied properties/behaviors do they exhibit?
+. which tools work well with these structures?
+
+during development:
+
+. of a structure
+  .. describe it as an element of an algebra or a point in space e.g. binrec is point 2 in the space of recurrence relations.
+  .. describe it as both abstract structure and data structure. one defines properties/behaviors; the other implements it in terms of relations [of atoms]. e.g. the λ-calculus is an abstract structure of 3 unary operations (ɑ,β,η) (ɑ is parameterized by the value to rename to, much like ln is unary b/c the base e is implied) over the set of lambda expressions. i haven't identified its structure more specific than merely an abstract structure—seems more lattice-like than field-like, but who knows? anyway, its data structure representation/implementation in fp is...λ's. we get direct translation! cool. that's the most efficient evaluation model. however, if we wanted to manipulate lambdas as data, then our programmatic representation would be lists or macros—whatever method considers lambdas as a relation of a list of formals and an output expressed in terms of the formals. the only reason to express lambdas as lists is because of the language design. fortunately lisps make lambdas exactly equivalent to lists, the only difference between the two being whether, at any point in a program, the list is evaluated as a lambda or not. lisp invested the term _sexp_ to unify lists and lambdas.
+  .. of which sets/categories is it a member i.e. what're its types? e.g. binrec is in the set/category of recursion schemes.
+  .. what're its properties and to which sets do they belong? for example, binrec has some property of value 2. this property can be called _degree_, _norm_, _rank_, w/e.
+
+TODO: revise this whose section into parts: 1) initial concept; 2) reasoning to that concept's conclusion; 3) reasoning about programs in terms of that conclusion.
+
+these...aren't quite correct considerations; following these considerations to their conclusions, we find that sexps are the natural structure of programs. however, sexps aren't always the best _implementation_. the only alternative is arrays, whose inherent difference is only SIMD support and memory allocation & traversal concerns. both of their _formal semantics_ are identical. in fact, the λ-calculus can be entirely reduced: ɑ-translation isn't needed when all η-reductions have been applied, and β-reduction is equivalent to running a program; therefore programs expressed only as the composition of pointfree functions obviates the λ-calculus; for such programs, the only λ calculus is β-reduction, which is moot since it's the only thing that separates a program from data i.e. it describes programs as executable data and highlights how programs are ultimately merely binary strings that hardware translates into physical phenomena to achieve computation.
+
+obviously programming directly in bitstrs isn't practical. still, we should program in a practical algebra most similar to bitstrs i.e. the least-complex practical algebra. matrices may work. on the principle that everything of degree 2+ can be expressed by compositions of things degree 1 (i.e. every element is expressible in terms of a unit element,) i suggest matrices (_linear_ transforms, i.e. transforms of degree 1) and matrix composition (which may or may not be matrix multiplication, which is function composition when we consider matrices as representations of linear functions.) nonlinear expressions (e.g. x^2^ - x) are expressible by matrices, e.g. in this case [[1 -1]] or the point (1, -1) in the polynomial vector space P(2). *linearity is essential in all contexts; any set whose elements cannot be expressed linearly can itself be expressed linearly* as is this quadratic polynomial example demonstrates. another example is binrec being composed of two linrecs. note that we must consider whether these linear combinations are linearly independent or not! *the linearity is not of the calculation, but of the program itself.* i conjecture that all computations are inherently linear i.e. can be expressed by compositions of linear structures, regardless of structure. we may search for counter-examples simply by trying to express any given algorithm/program/function only by linear structures, requiring as many structures as necessary. also, our consideration of our program is only up to the conditions under which the program halts. our consideration does not concern memory manipulation nor other runtime constraints since we can express in-place updates as a pure function that shadows an identifier e.g. we don't consider whether a swap function returns a new tuple or updates in-place; we care only that both are single steps forward in an algorithm, considering that swap := (a,b) ↦ (b,a) is the same function whether used as `let x = swap x in ...` or `let x' = swap x in ...` or `x <- swap x; ...`. such useless concerns cannot exist in pointfree systems. an example class of systems in which this concept is degenerate/singular is cat-stack-langs such as factor: all factor functions are simultaneously pure and impure, all updating the stack in-place. we may say that functions take from the stack and put new elements, and so they're pure, but what's the difference between updating memory in-place vs popping from the stack and replacing what used to be there with an updated value? the state monad also demonstrates that _purity_ is an illusory concept. therefore fp is no more suited to provability than procedural designs; in fact, *precisely, systems are provable iff they're algebraically described*.
+
+we want a notation that makes the asymmetry (there exists) obviously distinct from the symmetry (for all.) we want self-similar bases—bootstrap-driven development.
+
+if you can't describe a structure by only numbers and the set to which it belongs, then you don't have a good concept. lambdas cannot be, though certain classes of them can, e.g. recursive combinators.
+
+=== programming fallacies
+
+TODO: complete this section
+
+. state is unsafe
+. safety should be a concern
+. that _programming language_ is [should be] a countable noun
+. 
+
+.state
+
+.safety
+
+.language cardinality
+
+a language is a tuple of (semantics,syntax). there's no particular reason to couple these things. useful uncoupling is the variety of syntaxes that translate to instruction sets such as jvm, clr, asm. clojure and java both go to jvm. c and abcl. in fact, abcl is an example of how one syntax (common lisp) may compile to multiple semantic/runtime systems, e.g. CL->asm, CL->C.
+
+while we're at it, lisps (most notably picolisp) do not have syntax beyond a literal encoding of data relations, which is the bare minimum needed to express a program, or _any_ structure for that matter! so why have syntax? it clearly isn't needed or even commonly useful. but let's assume that sometimes it may be nice; then we use macros (or, again most notably in the case of picolisp, `eval`.)
+
+so now we've reduced language _out of existence_ (or _beyond a degenerate form_) to the truth of
+
+. some bare-necessity syntax (viz one that describes relations)
+. optional "on-demand" syntax for convenience i.e. the "syntax" is merely a small & particular system of relation. usually the relation is a function or constraint on composition of functions of particular forms. it's important to note that _functions_ aren't special; they're just relations. instead, evaluation is special; it enables reasoning about ideas / enacting instructions. notice i didn't say `eval`! `eval` is only one variety of evaluation. another example variety is type checking, which, rather than executing instructions, parses relations of logical elements, checking for logical consistency or net implication.
+. semantics/runtimes
+
+compilers are maps from syntax to semantics: they parse strings obeying syntactical constraints into executable systems obeying semantic constraints. the particularity of syntax is enforced by the compiler and assumed by the programmer. compilers are thus another version of evaluation. compilers evaluation is (usually reductional) translation, whereas interpreters' evaluation is execution. there are an unknown and ever-changing number of various evaluators, and many of them can work together, which means that the number of evaluation systems is the sum of simple evaluation systems and compound ones—a number bound to remaining unknown since it's so large and difficult to calculate.
+
+for example, chicken scheme compiles to C, which can then be compiled to bytecode or machine code by e.g. llvm or cc. in this case we're bound to the union of scheme  and C semantics: we cannot use chicken to express an operation that'd be impossible in C, nor can it express an operation impossible in scheme,...though in this case, C's semantics are probably a superset of scheme's, so we're really compiling to C doesn't further restrict our program's semantics to scheme's.)
+
+finally, let's discuss _semantics_. that's a plural word. why should we group certain semantic properties? an example is strictness. some languages are "lazy-eval" whereas others are "strict-eval"...by default. anyone can delay evaluation by using coroutines, generators, quoting, wrapping in a lambda, &c. what about typing? that's a common semantic property. well, frequently it too is optional! python, racket, & js (to name a few) introduced typing retroactively. furthermore, what exactly is _typing_? it's logical consideration of structure. but we don't need typing in order to have that; contracts are an example alternative mechanism. what about typing being more than mere checks, such as type classes for ad-hoc polymorphism? python and racket (and probably js) already have that. frankly, all typing boils-down to if statements or some equivalent system and—you guessed it!—particular relations.
+
+at this point, i'll just say it: every bit of syntax or semantics is just constraints on relations. *_code_ is just data under some interpretation.* if data has order [structure] (isn't chaotic nonsense) then it has information, and we can extract that information. "code" or "language" is nothing more than how we choose to parse/represent structure. the natural language is then one that only encodes relations, and whose syntax uses the minimal number of characters needed to unambiguously represent relations. a natural consequence of such a primitive language is that more complex and convenient notations (e.g. '(1 2 3) to represent '(1 . (2 . (3 . ())))) can be written as mere relations. as it turns-out, lisp is this language; it is nothing more than homoiconic relations an arbitrary subset of which can be evaluated.
+
 === algebra-based programming
+
+.general idea
 
 carbon is such an interesting element that an entire branch of chemistry is devoted to carbon-containing compounds. that subfield even uses unique notations. of all the elements, carbon is the only one that has such devotion. compounds are merely relations of elements. however, these relations must obey certain rules; some combinations of elements combine to produce compounds and some do not. this is the chemistry algebra: the set of elements, and the set of axiomatic operatiors that enable the production of compounds. we as programmers should seek the mathematical analogues of carbon: versatile elements of the algebra's set that enable us a great variety of compounds via their great support of various composition rules. that is what i mean by _algebra-based programming_.
 
-NOTE: technically _category_ is more correct than _algebra_ since we're considering particular elements, but the premise & method are similar to both. certain cases are more categorical than algebraic, but they're similar enough that for brevity i'll refer to them and related things simply as "algebra[ic]."
+.algebras?
+
+the terms _category_, _algebra_, and _space_ are similar and frequently discussions are not so specific that either term is more appropriate than another. an appropriate term that generalizes all of them is _[abstract] structure_. however, i prefer the term _algebra_ because:
+
+. it's simultaneously unambiguous & terse; _structure_ could refer to _data structure_, _abstract structure_, or some general notion of form. the disambiguation _abstract structure_ is lengthy.
+. it connotes algebraic [axiomatic] structure & operations. elementary algebra is familiar: permits systematic, axiomatic, deterministic solving algorithms based on iterated inverse operations and re-expressions for certain classes of structures, and naturally suggests other methods, such as galois theory or calculus, to solve problems for which the algorithm fails to produce solutions.
+
+the particular distinctions:
+
+* _categories_ consider particular elements
+* _algebras_ consider axiomatic operations irrespective of their sets[' elements]
+* _space_ link:https://math.stackexchange.com/questions/174108/difference-between-space-and-algebraic-structure[is vague] and certain spaces may be algebraic structures or not. regardless, _spaces_ are abstract structures that formally generalize notions of geometric space—namely that all spaces have points; all elements of all spaces can be appropriately described by ordered tuples, and a point's numeric value always immediately relates it to other points i.e. all points have neighborhoods.
+  ** many abstract structures that feature "space" in their term are not truly spaces, e.g. the suggestion that probability spaces generalize euclidean spaces is at least misleading and at best probably not helpful
+
+spaces are the most common, so by "algebra" i mean "abstract structure satisfying properties (ir)respective of its associated collection where that collection may be defined ad-hoc and/or procedurally, whose elements' relations are described either ad-hoc or by an equivalence relation."
 
 usually we're progarmming for a purpose beyond play or exploration of structure for its own sake. so disregard programming _languages_! we don't want _expressivity_; we want to encode sensible ideas with least effort! we aren't trying to _express ideas_; we're trying to identify solutions to problems! we want a program that satisfies some needs, and we don't care how it's found or what its form is so long as it's easy and works. expressivity just gets in the way; it offers more options than are necessary. expressivity burdens us with the confounding responsibility of identifying expressions that work elegantly together—no mere feat!
 
