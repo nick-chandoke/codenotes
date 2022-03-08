@@ -108,7 +108,11 @@ examples of brilliance:
 
 * link:https://picolisp.com/wiki/?recurInPicoLisp[anonymous recursion]
 
-.jula
+pitfalls:
+
+* dynamically scoped. better rarely use variable names! on the other hand, this makes it completely hackable during runtime.
+
+.julia
 
 applicative in the worst way. inelegant: intricate funcargs rules, `do` syntax, multiple equivalent syntaxes. as always, the existence of inelegance overrides any particular niceties, such as builtin array support.
 
@@ -136,3 +140,90 @@ dyalog apl is the best apl implementation, but is free only for non commerical u
 .k
 
 smaller than apl or j. simpler. whitney wrote a whole operating system in it, so it's obviously not a dsl.
+
+.scheme
+
+standardized lisp much more minimal than cl, so that's good. scheme improves lisp macros by introducing template macros which are convenient and also enforce hygeine. this is commonly—perhaps ever always—good. like lisp scheme is untyped and flexible. further research would be needed into how good scheme macros are, but i won't do it; i know that scheme has top level forms; it treats macros differently from functions, which is inelegant. picolisp is better.
+
+otherwise, scheme is ok, but could be better by:
+
+* using () instead of #f. lisp is about lists. why have #f, making us check `null?`? just wrecking symmetry, folks. besides this, lists generalize maybe, and so are better.
+
+.racket
+
+racket adds two features atop scheme macros:
+
+* more powerful macro template engine of the `syntax/parse` module
+  ** convenient
+* syntax objects, which endow sexps with metadata. this is non-optional; it's the foundation of racket's syntax model.
+  ** good for error messages
+
+however good for writing _templates_, racket is not suited to general metaprogramming:
+
+* being a scheme implementation, it treats macros differently from functions, and considers certain top-level forms special
+* it can be quite finicky, often to the point of being inexplicable, non-obvious, or simply limited
+* phases
+
+consider the following code which fails to run:
+
+[source,scm]
+----
+#lang racket
+(require (for-syntax syntax/parse (only-in syntax/stx stx-null?)))
+
+(define-syntax (cond/given stx)
+  (syntax-parse stx [(_ [kw a] ...)
+                     #`(cond [(not (stx-null? (syntax (kw #,(datum->syntax #f '...))))) a] ...)]))
+
+#| expands correctly into
+(cond [(not (stx-null? #'(one ...))) #'(displayln "one!")]
+      [(not (stx-null? #'(two ...))) #'(displayln "two!")])
+|#
+(expand-syntax-once #'(cond/given [one #'(displayln "one!")]
+                                  [two #'(displayln "two!")]))
+
+;; fails b/c one & two used outside a template
+(define-syntax (f stx)
+  (syntax-parse stx
+    [(_ (~alt (~seq #:1 one) (~seq #:2 two)) ...)
+     (cond/given [one #'(displayln "one!")]
+                 [two #'(displayln "two!")])]))
+----
+
+`cond/given` is a macro. its invocation in `f` should, as macros do, replace its invocation with its expanded syntax. but that doesn't happen:
+
+. i can't get `cond/given` to evaluate as a macro because, even though it's not being evaluated within a `syntax` quote, apparently `one` & `two` are being evaluated not as symbols in an xexpr, but something more sophisticated, which means that i need to use `#'(one ...)` &c instead.
+. ok, so i do that, modifying `cond/given` accordingly. now it says that `cond/given` isn't in reference. what the hell? if i define two functions in the same context, i can make them mutually recursively defined, but i can't even use one macro in the definition of another? it's that weird phase shit, huh?
+. ok, so i wrap its definiton in `begin-for-syntax` and, within that form, `(require (for-syntax ...))` the same stuff as above, plus `racket/base`. i try running it again. now it says that `cond/given` is returning `void` rather than a syntax object
+. it continues to give the `void` error. i tried looking through the macro stepper in drracket...and even after i found the expansion, i couldn't decipher it—which has never happened before, but hey there's a first time for everything, yeah?
+
+one may suggest that we can use `defmacro` within racket, which is available via the `compatibility/defmacro` module of the `combatibility-lib`. true, but, as the documentation notes, "although `define-macro` is non-hygienic, it is still restricted by racket's phase separation rules. this means that a macro cannot access run-time bindings, because it is executed in the syntax-expansion phase. translating code that involves define-macro or defmacro from an implementation without this restriction usually implies separating macro related functionality into a begin-for-syntax or a module (that will be imported with for-syntax) and properly distinguishing syntactic information from run-time information."
+
+that basically spells-out how racket's forces us to work around its particular design. for this particular example, `defmacro` might or might not help. either way, the very fact that i need to ask such questions demonstrates that there's a design problem with racket's metaprogramming.
+
+thus the "solution" to these problems is to effectively try to use racket in a way that it's not meant to be, which can be attempted, but will inevitably lead to working around obstructive constructs, inelegant code, and unforseen errors. use picolisp instead.
+
+.arc
+
+a lisp created by paul graham to, as john mccarthy originally created lisp to be, be a homoiconc elegant canonical basis for programs...? at least that's how he described it. reading his tutorial i can't see that at all.
+
+* implemented in / runs on racket, which has some implications about performance and install size
+
+goods:
+
+* good example
+* has `is` & `iso` to compare pointers vs structure
+* `[ ... _ ...]` unary lambda syntax
+* negate (`~`) and compose (`:`) syntaxes
+* `push`, `pop`, `=`, &c are stateful and can be applied to any substructure
+  ** `zap`
+
+bads:
+
+* has both `let` & `with` where `with` generalizes `let`. what's with that redundancy.
+* builtin hash tables. trees or skip lists are better. 
+* lots of builtin ad-hoc polymorphism, e.g. `coerce`, `=` to set inside various structures
+* has both quote and quasiquote. again, the latter's more general than the former, so why have the former?
+* uses traditional macros with gensym (here called `uniq`). why the fuck would you decide to throw away lexical scoping?! i'd rather write a normal function then use `eval`! names, and everything about them, are stupid!
+  ** macros being different from functions breaks symmetry. lisp is about lists: relations. the data within the lists is latently typed; from the perspective of the language itself, there's no typing. all of a program's structure is directly represented by nested parentheses. or rather, that's the idea anyway.
+  ** `eval-when` should be used to change whether exprs are evaluated at compile time or runtime, rather than deciding this by choosing to define either a macro or function

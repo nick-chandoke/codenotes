@@ -2,7 +2,8 @@
 
 .keep in mind while reading
 
-_relation_ has the same meaning as _relation of data_, since _data_ just means _stuff_. _data_ or _datum_ is exactly equal to vacuous unqualified mathematical symbols.
+* _relation_ has the same meaning as _relation of data_, since _data_ just means _stuff_. _data_ or _datum_ is exactly equal to vacuous unqualified mathematical symbols.
+* smc means _self-modifying code_
 
 .some big paragraph that i wrote
 
@@ -14,6 +15,8 @@ structure:: generally means _form_, i.e. arrangement (of data), i.e. particular 
 
 .TODO's
 
+* revise notes. reserve _function_ for the mathematical concept, and use _continuation_ (or some other possibly more-appropriate term) to refer to memory addresses that the instruction pointer can validly have, i.e. those that can be `goto`'d.
+* i think i understand "better 100 fns on 1 data structure than 10 on 10." true, but even better is 30 fns on 1 structure. consider using lists for everything. now the empty element is `()`, like `false` in python or `0` in C. that's an element instead of a function, but it's the same principle. an example with functions is using `assoc` (lookup in alist) which returns `()` or the list where the first found element is. this is better than `find`, which returns `Maybe a`, since it also allows zero-cost traversal of the rest of the list. this makes parsers easy without lack of efficiency. again we test the object for truthiness instead of asking whether it's `Nothing` or `Just _`. also using lists for everything means that we need only some few functions, and we can use them for all kinds of traversals or constructions. of course, better than lists are zippers or trees, but still, these are implemented in terms of lists, so lists are inevitable, if even only as a low-level implementation. this being said, a good language would determine whether to use lists or trees depending on the constraints on each structure given by the programmer.
 * ensure that i mention the importence of anonymous ADTs: for them to express a program elegantly they must be anonymous, just like functional programming without lambdas (i.e. with only named functions) would be horrible.
 * see https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 * reconsider type classes in terms of factor's oop system
@@ -30,12 +33,66 @@ structure:: generally means _form_, i.e. arrangement (of data), i.e. particular 
 * rearrange this document: 1) overview; 2) common fallacies; 3) what programs must be (we've a lot to consider even when we're considering only the most basic language!), and how lisp is the natural language for programs; 3.x) subsection on "programs" as evaluable relations, and that's implications on how programming relates to general math, language, game theory, &c formal systems; 4) now that we've identified the basis for programs, consider structure of complex programs (this is where (0,1,+) (i.e. monoids) will be discussed, not just wrt programs, but in general, again e.g. constucting numbers); 5) why monoids are not enough (we want to be able to calculate programs rather than merely evaluate them.) this section will consider SMT solvers and hoare's work, evaluating how appropriate each is. however, i must be careful to not consider these systems if they're foolishly concerned with trivialities, such as excluded middle (continuum fallacy; truth can be a real value) or "whether constructivism is correct", and i must avoid formal systems' common nonsensical considerations such as russel's paradox (improper definition.) such things are correctly not the concern of practical programmers! note that such nonsenses are always of logic and never of math: they discuss truth/validity rather than structure! as programmers, we care only about _useful_ ideas/programs. we deal with numbers & relations. yes we use logic & math, but only insofar as it helps us program! any math that won't eventually be implemented by relations of numbers isn't relevant to us.
   ** to introduce both algebra and programming/relation as primitives, first discuss unit & relation, then evaluation, then axioms as a particular variety of relations, and logic as a particular variety of evaluation. this simultaneously introduces the fundamental(s) of mathematics, and demonstrates programs as nothing more than mathematical expressions, where computers can evaluate them.
   ** where should i discuss denotational semantics?
-* think about goto vs delimcont vs retroactively adding algebraic evaluation rules. this is similar or may include bottom-propogation. consider `(println (+ x (* y (if (= z 0) ⊥ z))))`; if z = 0 then the println statement won't execute b/c the whole expression will be ⊥. the propogation boundary must be defined. for example, if this println were in a `begin` block, we'd need to allow `begin`'s other statements to evaluate, unless they're explicitly linked to the println. such propogation boundary determination may require the partitioning of all expressions as being 1) part of another expression; 2) in a `begin` block; 3) in a `let*` block. propogation would occur for (1) & (3) only, since these are the cases when things are dependent. in the case of a `let` block, when all bound values are assumedly needed, it'd be sensible to have `or` on expressions that can produce ⊥. (or,⊥) is an alternative to `if`. (cond,v) where v is any value which propogates, generalizes and is an alternative to maybe, either, etc insofar as short circuiting or addition (i.e. +0 or ×0) and is also an alternative to synchronous exception handling, and backtracking [parsing].
+* think about goto vs delimcont vs retroactively adding algebraic evaluation rules. this is similar or may include bottom-propogation. consider `(println (+ x (* y (if (= z 0) ⊥ z))))`; if z = 0 then the println statement won't execute b/c the whole expression will be ⊥. the propogation boundary must be defined. for example, if this println were in a `begin` block, we'd need to allow `begin`'s other statements to evaluate, unless they're explicitly linked to the println. such propogation boundary determination may require the partitioning of all expressions as being 1) part of another expression; 2) in a `begin` block; 3) in a `let*` block. propogation would occur for (1) & (3) only, since these are the cases when things are dependent. in the case of a `let` block, when all bound values are assumedly needed, it'd be sensible to have `or` on expressions that can produce ⊥. (or,⊥) is an alternative to `if`. (this is simply nixy trees.) (cond,v) where v is any value which propogates, generalizes and is an alternative to maybe, either, etc insofar as short circuiting or addition (i.e. +0 or ×0) and is also an alternative to synchronous exception handling, and backtracking [parsing].
+  ** related: raising exceptions as a control flow mechanism. this is a variety of hook or event-based control flow. perhaps this is what the π-calculus is about?
 * discuss [consequences of [technique]] using list instead of maybe, citing ~/programming/nicholaschandoke-me/articles/racket-macros.adoc:§_keyword args:general correct solution_ as example if needed. the idea is simply that list (recursive product with base case 0 = '()) generalizes maybe (coproduct with 0 = Nothing.) because lists feature recursion, they're superior to maybe. one might suggest that (maybe,cons) is just as good as list, but they're probably isomorphic. anyway, list is terser and still familiar, and therefore remains preferable.
   ** discuss algebra of lists and maybe e.g. #f × n = #f, #f + n = n. cite haskell notes on how maybe generalizes link:https://en.wikipedia.org/wiki/Boolean_ring[boolean rings], and see wikipedia on boolean link:https://en.wikipedia.org/wiki/Boolean_algebra_(structure)[lattice] structure. discuss how this structure is homomorphic in maybe and list, and see that article and my haskell notes on maybe+list semirings. consider how the lattice generalizes the link:https://en.wikipedia.org/wiki/Two-element_Boolean_algebra[2-element boolean algebra] so commonly used in cs.
 * discuss recursion in terms of unit. algebraically it likely lacks 0, having only the recursion operationo over a set, which would make it a semigroup. is there any useful conception of it as a monoid or more-endowed structure?
+* `unquote` should be available anywhere. outside of a qq, it's `eval`. also, mentioning just b/c it's related, `splice` should be useful outside of qq, instead of `apply`
+* suggest a syntax (both for natural language and computer langs) for "base case & recursive case," e.g. "int &rec list +" to mean an int wrapped in a list, or that wrapped in a list, .... "int &rec list *" would mean int, or int wrapped in a list, or that wrapped in a list....
+  ** perhaps (list ... int) and (list ...+ int)
+* as an example...of something probably mentioned elsewhere herein, use lists instead of maybe for optionality/short-circuiting, and show traditional lisps (i.e. those with `t` & `'()`) the empty list as 0: + (append) 0 is identity, and × (cartesian product) [TODO: are these correct? product and coproduct should be dual. can i describe cart-prod as a categorical dual of append? likely not. anyway, monadic join is defined in terms of #f or cartesian product, both of which are practically multiplication by 0, i.e. #f or (). point is: we don't need maybe. list generalizes maybe, and is therefore better.
+* (point a00-45) say i've a loop `(let loop ([x 0] [y 0]) ...)`, and for the first _n_ iterations, `x` is used, but thereafter it isn't. usually it'd stick around in memory. we can say `(let loop ([args '(0 0)]) ...)` so that we can reduce the amount of memory used. however, without special optimization, we'll lose time in cons & uncons. still, this is an interesting solution.
 
-things to do after i'm done with stocks:
+.wrt point a00-45
+
+we can refactor
+
+[source,scm]
+----
+(define (ema p)
+  (let ([α (/ 2 (add1 p))])
+     (let next ([k 0] [x 0])
+       (λ (y) (if (< k p)
+                  ;; x accumulates a mean
+                  (cons "NaN" (next (add1 k) (+ x (/ y p))))
+                  ;; x is the most recent ema value
+                  (let ([x (+ (* α y) (* (- 1 α) x))])
+                    (cons x (next k x))))))))
+----
+
+into
+
+[source,scm]
+----
+(define (ema p)
+  (letrec ([α (/ 2 (add1 p))]
+           [next (λ (x y) (+ (* α y) (* (- 1 α) x)))]
+           [f (λ (x) (λ (y) (let ([x (next x y)]) (cons x (f x)))))])
+    (let loop ([k 0] [x 0])
+      (λ (y) (if (< k p)
+                 (cons "NaN" (loop (add1 k) (+ x (/ y p))))
+                 (let ([x (next x y)])
+                   (cons x (f x))))))))
+----
+
+both of which are effectively equal. an example invocation:
+
+[source,scm]
+----
+(void (for/fold ([p (ema 3)]) ([x '(0 0 0 1 0 2 5)])
+        (let ([P (p x)])
+          (printf "~a " (car P)) (cdr P))))
+----
+
+prints `NaN NaN NaN 1/2 1/4 9/8 49/16`. note that we discard for/fold's return value, which is a procedure.
+
+* we not only omit the eventually-redundant `k` parameter, but also the `if` statement that branches upon it.
+* we need to use the `next` function in both the average-accumulating and ema-accumulating cases.
+
+''''
+
+things to do when i've enough time:
 
 * look into agda and f*
 * learn lenses further
@@ -61,6 +118,7 @@ abstractions with (possibly many) numerical _degree(s)_ are ideal. e.g. recursio
 * typing should follow type theory convention & arithmetic (seeing types as expressions of numbers and algebraic operators)
   ** see link:https://homotopytypetheory.org/[homotopy type theory]
   ** use types to design programs (namely primitive combinators,) then use an untyped runtime
+* how can asymmetric physical devices (e.g. pumps, diodes, sawteeth) suggest digital analogues?
 
 .programming mindset
 
@@ -177,6 +235,114 @@ then reify that to `Maybe` and run it. it's impossible to define `unfold` withou
 
 programs should be calculated, preferably by a computer, but at least by hand. efficient calculation requires *symmetry*: for everything to obey the same axioms without (*ad-hoc*) exception. ad-hoc (asymmetry) means arbitrary association, and must be accounted for by `cond`—a generalization of `case` or `if`. (see §branchless for examples.) aside from the syntactic cruft of branching blocks, ad-hoc means more rules—more cases for us to account for, which means more varieties of behaviors to reason about, which means more thinking, more code, and greater chance that we'll fail to account for edge cases. precisely the trouble with asymmetry is lack of closure. operations that aren't closed over a set are much more of a hassle to reason about.
 
+every program's only complexity should be exactly its asymmetry, and a language/notation should make very obvious which parts of it are symmetrical or not.
+
+.symmetry example
+
+consider the following definiton of exponential moving average:
+
+[source,scm]
+----
+(define (ema p ys)
+  (let-values ([(α) (/ 2 (add1 p))]
+               [(init rst) (split-at ys p)])
+    ;; ema is a function not over the past p values, but over the past 1 value.
+    (let loop
+      ;; ema uses its period only for its first value (which is the mean of same period);
+      ;; all successive ema values are functions of only their predecessor.
+      ([v (mean init)] [rst rst])
+      (if (null? rst)
+          null
+          (let ([new-v (+ (* α (car rst)) (* (- 1 α) v))])
+            (cons new-v (loop new-v (cdr rst))))))))
+----
+
+it takes an n-list and returns an (n-p)-list. suppose we'd like to refactor it into a cons-sequence (a form of non-strict list:)
+
+[source,scm]
+----
+(define (ema p)
+  (let ([α (/ 2 (add1 p))])
+     (let next ([k 0] [x 0])
+       (if (< k p)
+           ;; x accumulates a mean
+           (cons "NaN" (λ (y) (next (add1 k) (+ x (/ y p)))))
+           ;; x is the most recent ema value
+           (let ([x (+ (* α y) (* (- 1 α) x))])
+             (cons x (next k x)))))))
+----
+
+this program is incomplete: it references unbound identifier `y`. in fact, refactoring `if`'s "false" clause into a form such that
+
+. it has the same shape as the "true" clause, namely `(cons value unary-procedure)`
+. it returns the updated value of x in car
+
+is impossible!
+
+the problem is when k == p: x is the mean of the first p values, but for k > p x is the most recent ema value. the variation of behavior (program structure/shape) being dependent on or partitioned by sgn(p - k) is asymmetry; rather than being symmetric about (p - k), or even asymmetric about (p - k) on (> 0), but instead (p - k) on sgn(p - k).
+
+NOTE: asymmetry is here described by the syntax "asymmetric about _value_ on _equivalence relation_" where the number of partitions resulting from the equivalence relation is called the _degree_ of asymmetry. if "symmetric about" is used, then the "on" clause must be omitted; this case means that there does not exist any equivalance relation of program structure/shape; exactly one shape describes the program (in reduced/simplified form.)
+
+therefore we must use `cond` (or `case`) instead of merely `if`, since `cond` supports an arbitrary number of degrees of asymmetry, whereas `if` supports only 2. any attempts to represent the desired program:
+
+[source,scm]
+----
+(define (ema p)
+  (let ([α (/ 2 (add1 p))])
+     (let next ([k 0] [x 0])
+       (cond [(= k (sub1 p)) ;; the last NaN value
+              (cons "NaN"
+                    (λ (y) (let ([P (next (add1 k) (+ x (/ y p)))]) ;; next returns a pair
+                             ;; return P with its first element modified
+                             (cons (+ (* α y) (* (- 1 α) (car P))) (cdr P)))))]
+             [(< k p) ;; x accumulates a mean
+              (cons "NaN" (λ (y) (next (add1 k) (+ x (/ y p)))))]
+             [else ;; x is the current ema value
+              (cons x (λ (y) (next k (+ (* α y) (* (- 1 α) x)))))]))))
+(car (for/fold ([p (ema 3)]) ([x '(0 0 0 1 0 2 5)]) (printf "~a " (car p)) ((cdr p) x)))
+----
+
+prints NaN NaN NaN 0 1/2 1/4 9/8 49/16. note that the final value is the one returned by the loop, whereas the others were displayed by the `display` statement inside `for/fold`.
+
+however, if we refactor the whole function instead of just `if`'s "flase" clause, then we can transform the program into a symmetric form. the general technique to do this is to identify the shape of the most complex expression, then express the other forms by that same shape.
+
+[source,scm]
+----
+(define (ema p)
+  (let ([α (/ 2 (add1 p))])
+     (let next ([k 0] [x 0])
+       (λ (y)
+         (if (< k p)
+             ;; x accumulates a mean
+             (cons "NaN" (next (add1 k) (+ x (/ y p))))
+             ;; x is the most recent ema value
+             (let ([x (+ (* α y) (* (- 1 α) x))])
+               (cons x (next k x))))))))
+
+(void (for/fold ([p (ema1 3)]) ([x '(0 0 0 1 0 2 5)])
+        (let ([P (p x)])
+          (printf "~a " (car P))
+          (cdr P))))
+----
+
+which we can refactor into
+
+[source,scm]
+----
+(letrec ([α (/ 2 (add1 p))]
+           [next (λ (x y) (+ (* α y) (* (- 1 α) x)))]
+           ;; produce ema values
+           [f (λ (x) (λ (y) (let ([x (next x y)]) (cons x (f x)))))])
+    ;; accumulate mean into x for first p elements
+    (let loop ([k 0] [x 0]) (λ (y) (if (< k p)
+                                       (cons "NaN" (loop (add1 k) (+ x (/ y p))))
+                                       (let ([x (next x y)]) (cons x (f x)))))))
+----
+
+you may wonder why we need to transform this program but not the original one which returned a list. the answer is that the original's asymmetry was encoded in the `split-at` statement, which increments the degree of asymmetry, but we also discard the list of NaN's, which decrements the degree.
+
+TODO: cons-sequences vs link:https://srfi.schemers.org/srfi-41/srfi-41.html[scheme streams], and consider backtracking (see the queens problem)
+
 .suggestivity
 
 a good algebra has few operations and few ways to express any program. this means that if a programmer doesn't know how to code a program, or they're unfocused, then glancing the algebra itself, or a list of common patterns/idioms, suggests to the programmer a definition, so that programming happens more automatically.
@@ -217,13 +383,17 @@ void upper(char* d, int n) {
 }
 ----
 
-general branchless is a × cond~a~ + ... + z × cond~z~.
+general branchless is a × cond~a~ + ... + z × cond~z~, which can be obviously expressed by a matrix.
 
 NOTE: be careful that whatever method you choose is efficient as *output* by your compiler!
 
 * branchless handcoded assembly is always faster than branching handcoded assembly
 * array-based programming on some architectures (e.g. intel) avoids branching but still loops, by using `esi` & `edi` special looping-designated registers. instructions like `cmp ...; cmovg ...` are branchless but still obviously use conditionals.
   ** SIMD/AVX branchless is the fastest variety of cpu (cf gpu) programs. many apl programs should be easily translatable to SIMD branchless.
+
+==== eventually branchless
+
+link:https://en.wikipedia.org/wiki/Self-modifying_code#Optimizing_a_state-dependent_loop[self-modifying code] can replace branching code by branchless code once a condition has been met. such conditions may be specified in code, e.g. using a compare statement, or they can arise naturally as the code self-modifies, e.g. if statements from a set of loop instructions are removed upon each loop, eventually leading the loop to collapse into a nop, or otherwise tend toward a state that, upon reaching, guarantees that the loop shall never be evaluated again during the program's runtime.
 
 === kakoune philosophy
 
@@ -812,7 +982,95 @@ traversal is partitioned into 3 classes because reasoning about each can be quit
 
 .always encode traversals as link:https://docs.factorcode.org/content/article-sequences.html[sequences]
 
-NOTE: for efficiency, all structures should be built & consumed non-strictly; then `consume ∘ produce` allocates no memory. to implement non-strict in an otherwise strict runtime, use _sequences_: functions from index to element. notable index types are `0`, `Int`, `(Array Int)`. examples of sequence superiority: 1) `range 10` doesn't allocate memory; 2) traversing [2 3 4], then traversing [6 4 7] is faster than traversing [2 3 4] ++ [6 4 7] since it elides O(n) concatenation.
+for efficiency, all structures should be built & consumed non-strictly; then `consume ∘ produce` allocates no memory, and one can map over the structure multiple times, and have those automatically combined into a single traversal. to implement non-strict in an otherwise strict runtime, use _sequences_: functions from index to element. notable index types are `0`, `Int`, `(Array Int)`. examples of sequence superiority: 1) `range 10` doesn't allocate memory; 2) traversing [2 3 4], then traversing [6 4 7] is faster than traversing [2 3 4] ++ [6 4 7] since it elides O(n) concatenation.
+
+generators are easily represented by closures:
+
+[source,scm]
+----
+(define (nats [n 0]) (cons n (λ () (nats (add1 n)))))
+(nats)         ; '(0 . #<procedure>)
+((cdr (nats))) ; '(1 . #<procedure>)
+
+;; print 1 through 10
+(let loop ([p (nats)])
+  (let ([n (car p)])
+    (when (< n 10)
+      (displayln n)
+      (loop ((cdr p))))))
+
+;; fusion
+
+(define (cs-map f s) (cs-fold cons '() s))
+----
+
+i call generators of this style _cons sequences_. i just realized that's an unintentional pun...maybe i'll rename it later. anyway, it's just non-strict looping, just returning the current value and a thunk to loop again (or not loop again.)
+
+* it's like a fold, but
+  ** always a left fold
+  ** can short circuit
+  ** supports infinite sequences
+  ** evaluates elements only as needed
+  ** using multiple states is just as easy as one. e.g. `foldl (\(s,t,u) a -> (s',t',u')) (s0,t0,u0)` vs `(let loop ([s s0] [t t0] [u u0]) (loop s' t' u'))`. the former is easy because of pattern matching. however, in languages without pattern matching, it'd be a hassle.
+  ** semi-stateful: each closure has its own state, but closure states are independent, so closures can be freely duplicated and passed to various other closures
+    *** states can be saved and resumed later
+  ** terminating generators can simply return any non-pair when they're done. the empty list is a good choice.
+* converting a closure to a list does not really make sense; we're using closures _instead_ of lists.
+* in a language whose recursion is inefficient and/or a non-functional language, we'd instead return the address of a function to invoke, rather than the function itself
+* using non-strict thunks like this is just waste if a strict version would be as well. a good language must default to strict eval, using non-strict only when the code implicitly requires it
+
+.returning only certain elements
+[source,scm]
+----
+(define (even-nats [n 0])
+  (if (even? n)
+      (cons n (λ () (nats (add1 n))))
+      ;; strict eval if we'ren't returning
+      ;; a value on this iteration
+      (nats (add1 n))))
+----
+
+.`apply`, `unquote`, and `cons` in formals
+
+for a language to feature both `apply` and `.` in formals (e.g. `(define (f x . xs)))`) is redundant. 
+
+[source,scm]
+----
+;; unary f
+(define (mmap f xs)
+  (if (null? xs)
+      '()
+      (cons (f (car xs))
+            (mmap f (cdr xs)))))
+
+;; variadic f
+(define (mmapm f . xss)
+  (if (ormap null? xss)
+      '()
+      (cons (apply f (map car xss))
+            (apply mmapm f (map cdr xss)))))
+
+;; same, but latter is less efficient b/c it maps twice.
+;; ideally we'd not have variadic functions; instead we'd
+;; use 1. a function that transforms ((1 2 3) (a b c))
+;; into ((1 a) (2 b) (3 c)) with 2. apply (or unquote).
+(mmapm cons '(0 1 2) '(a b c))
+(mmap (curry apply cons) (mmapm list '(0 1 2) '(a b c)))
+----
+
+also `apply` (at least as it's defined in racket) is just a less-capable form of `unquote-splicing`:
+
+[source,scm]
+----
+(apply + '(1 2) '(3 4))         ; fails b/c apply expects only its last argument to be a list
+(apply + (append '(1 2) (3 4))) ; works
+(+ ,@'(1 2) ,@'(3 4))           ; obviously works
+(+ ,@'(1 2) 3 4)                ; we can unquote only where necessary
+----
+
+this form of unquote splicing is available only in lisps that allow it outside of a `quasiquotation`.
+
+TODO: see ~/codenotes/plurality-in-lisp.rkt about fusion. the above cons sequences do not support fusion.
 
 .graphs
 
@@ -916,16 +1174,20 @@ suppose ads := [a...z] ↦ [b - a, ..., y - x]. the following are various implem
 
 [source,scm]
 ----
-(define (ads s) (map - (cdr s) (drop-right s 1))) ; (drop-right _ 1) is O(n), which makes this impl O(2n)
-(define (ads s) (map - (cdr s) s)) ; O(n). if map were to return at end of shortest list rather than requiring all same length
-(define (ads s) (let r ([p (car s)] [s (cdr s)]) (or-null s (let ([e (car s)]) (cons (- e p) (r e (cdr s))))))) ; O(n)
+(define (ads s) (map - (cdr s) (drop-right s 1))) ; if (drop-right _ 1) is O(n), then this impl is O(2n)
+(define (ads s) (map - (cdr s) s))                ; O(n). assumes that map returns at end of shortest list rather than requiring all same length
+(define (ads s) (let r ([p (car s)] [s (cdr s)]) (and s (let ([e (car s)]) (cons (- e p) (r e (cdr s))))))) ; O(n)
+(define (ads s) (reverse (cdr (foldl (λ (e t) `(,e . (,(- e (car t)) . ,(cdr t)))) `(,(car s) . ()) (cdr s))))) ; O(2n)
+(define (ads s) (and s (cdr s) (cons (- (cadr s) (car s)) (ads (cdr s))))) ; O(n)
 _TODO ; stack paradigm, implemented by a zipper
 
 (define-syntax-rule (sp/ a is ...) (array-slice-ref a (list is ...)))
 (define (ads a) (array- (sp/ a (:: 1 #f 1)) (sp/ a (:: 0 (sub1 (array-size A)) 1))))
 ----
 
-i couldn't find a way to do it with fold.
+NOTE: versions 3 & 5 assumes that the empty list is the false value. in scheme we'd say `(if (or (null? s) (null? (cdr s))) s ...)` instead of `(and s (cdr s) ...)`.
+
+version 5 is the best (fastest & simplest) list implementation.
 
 both:
 
@@ -1014,7 +1276,7 @@ advantages:
   ** relieves burden of designing collections of functions modularly, which usually entails careful forethought about polymorphism, default values, and when functions should be split into multiple smaller functions.
   ** an example is apl's grade operators: they break a sort operation into multiple parts, so that one may easily choose only part of a sorting operation, or the whole thing, without any appreciable difference in effort.
 
-=== abtl algebra
+=== abtl algebra (WIP)
 
 * reshaping uses modular arithmetic
 * (in apl at least) _rank_ differs from _depth_: a matrix (array of arrays) has depth 1 but rank 2. "The length of the shape of an array is equal to its rank. Therefore, we can find the rank of an array with ⍴⍴—the shape of the shape. Since a scalar is rank 0 (i.e it has no dimensions) the shape of a scalar has length 0 and is an empty vector: ⍬"
@@ -1049,3 +1311,76 @@ the iterative definition is a linear combination, in the recursive case, even in
     *** as with all vector spaces, matrices encode linear combination. linalg is neat & useful, but how do matrices compare with other algebraic structures for their description and computability of programs? btw _macros_ don't count; they are programs that produce others, but they don't compute programs algebraically; they just follow arbitrary instructions. it's impossible to write a macro to optimize some source code. syntax trees are not algebraic.
 
 thus the iterative form is reformulated into F~n~ := (matref (T^n^ * [[F~0~] [F~1~]]) [0 0]). we can compute matrix exponentiation, but as is common with any recursion, e.g. factorial, we can preferably omit redundant intermediate operations. in fact, one can study any system's evolution to see common patterns (e.g. self-similarity or other forms of modulus) and then factor-out those patterns and apply any reductions. perhaps rather than "recursion" you may think of 
+
+=== datacode
+
+if a program is described entirely by mutable data structures, such as lists or matrices, then the structure of the code is simple and lends itself to smc, which makes programs adaptable during runtime, and makes their definitions simple if the program is mostly created by bootstrapping, like programming a diploid cell rather than a whole person. obviously like the cell, such programs would take time to "grow;" that growth should be saved at various stages, or should be at least done at "complile time" rather than when the program is run by a user. saving programs is trivial when they're just simple data structures.
+
+.eval, not macros
+
+TODO: see file:///nix/store/90c33f811d9vhlhs9qkr2xycrcv3xgqw-racket-8.0/share/doc/racket/guide/eval.html about making the below code work in racket.
+
+macros are considered different from functions, which is asymmetrical. for example, we infamously can't `apply or`. that's stupid; if we just define `or` as a function (i.e. a manipulation of relations) then obviously there's no problem (since all code must be defined as such):
+
+[source,scm]
+----
+(define (my-or . xs)
+  (if (null? xs)
+      #f
+      (let ([x (eval (car xs))])
+        (if x x (apply my-or (cdr xs))))))
+(my-or #f 3 '(error "error"))
+(apply my-or '(#f 3 4 (error "error")))
+----
+
+should work. however, at least in racket, the bind to `x` fails: "?: literal data is not allowed; no #%datum syntax transformer is bound in: <1st arg here>". i'm unclear on when `eval` works in racket.
+
+TODO: use racket link:file:///nix/store/90c33f811d9vhlhs9qkr2xycrcv3xgqw-racket-8.0/share/doc/racket/guide/eval.html#%28part._namespaces%29[namespaces] properly, then try again
+
+* apply works nicely with the fact that quoting produces a list; it allows me to effectively do `(my-or 'a 'b 'c ...)` without needing to quote each argument: `(apply my-or '(a b c ...))`
+* a proper lisp would allow me to say `(if xs)` because `()` would be falsy and `#f` wouldn't exist
+
+=== misc & studies
+
+consider the following function. it operates on sequences and lists. that's one degree of asymmetry, as clearly marked by `case-lambda`. why have both? how can we express this one simple idea (take no more than) by one simple function rather than two?
+
+[source,scm]
+----
+;; 1st form: take m elements if available; else take whole list, whose length must be less than m.
+;; 2nd form: e.g. (let-values ([(more? next)] (sequence-generate (in-naturals))) (take-no-more-than/gen 3 more? next))
+;; the 2nd form was chosen because, at least currently in typed racket, (-> Natural (Sequenceof a) (Values (Listof a) (Sequenceof a)))
+;; isn't neat to implement.
+(: take-no-more-than (∀ (a) (case-> (-> Real (Listof a)          (Listof a))
+                                    (-> Real (-> Boolean) (-> a) (Listof a)))))
+(define take-no-more-than
+  (case-lambda
+    [(m xs0)        (let loop ([count 0] [xs xs0])
+                         (if (or (>= count m) (null? xs))
+                             null
+                             (cons (car xs)
+                                   (loop (add1 count) (cdr xs)))))]
+    [(m more? next) (let loop ([count 0])
+                         (if (or (>= count m) (not (more?)))
+                             null
+                             (cons (next)
+                                   (loop (add1 count)))))]))
+----
+
+we begin by comparing the two. to compare, they should be normalized, which means expressed in common terms & forms, then simplified, namely by factoring and reducing redundancies. the obvious, yet particular solution is to accept only sequences, and convert the list to a sequence before passing it to `take-no-more-than`. this works because an inexpensive morphism from list to sequence exists. generally, though, one case is not a subcase of another, and such lucky, simple refactors aren't possible. anyway, let's compare. their difference:
+
+. in the list case, the state is as a loop var, whereas in the sequence case it's hidden in a closure
+. instead of `null?` the sequence version uses `(not (more?))`
+. 
+
+but that's not an enlightened description; it's a plain one—one that sees only what the code is, not what the program is. we aren't reversing some hacky code, here; this is code whose purpose we already know. we can reason about its intent rather than its machinery. it's a function that we can reimplement any way we want so long as it fulfills its purpose. a description of it in cs terms:
+
+terminating loop, i.e. there're a variant and an invariant. considering the whole program as a triple of code, data, (each corresponding to `.code` & `.data` sections of assembly code) and presently-allocated memory (the stack, registers, heap), the variant must be represented by data, memory, or code, any of which can be called _state_—that which can be saved & loaded from in order to suspend & resume the program, just like save states in video game emulators, or suspending & resuming an os. iff the state is saved in code, then the code is polymorphic [self-modifying]; else it's state stored in some memory structure.
+  .. it's obvious to think of it as being stored in a single memory block whose value is overwritten 
+  .. but in fp, state is stored in the parameters to the loop (a lambda/continuation). the loop address is a constant value in memory, which means that, unless there's optimization by the compiler/interpreter, then memory is dynamically allocated during the loop body, then its value is set to the updated state, then that memory address is passed to the subsequent invocation of the loop, and, assuming that the old state is not referenced elsewhere, its memory cell is deallocated. not a memory leak, but inefficient needless (de)allocation.
+  .. finally, in polymorphic code the memory state is not significantly different from the code state
+
+the variant is the tuple (count, xs or (next,more?)) the invariant is at least the loop address and the code.
+
+but those're the variant and invariant of the _implementation_. what are the mathematical variant & invariant?
+
+TODO: identify

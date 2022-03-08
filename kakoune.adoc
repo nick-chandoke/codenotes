@@ -1,0 +1,251 @@
+== kakoune
+
+* link:https://github.com/mawww/kakoune/blob/master/doc/pages/scopes.asciidoc[docs]
+* it's pronounced "ka'koon"
+
+.spacemacs' functionality to implement
+
+* pretty print (display certain strings as other strings)
+  ** accomplish via `add-highlighter` w/ `replace-ranges`. see :help highlighters
+
+.design
+
+* most distinctive feature: selection on movement, and multiple selections
+* design follows UNIX philosophy
+* views are separated from model. you can have multiple windows viewing the same buffer, but each window's selection is separate. this allows modifying parts of a buffer without losing some selection(s) of the same buffer, which can be very useful.
+
+.syntax
+
+semicolon (or newline) delimits kakoune commands. useful in macro-like keybinds.
+
+.link:https://github.com/mawww/kakoune/blob/master/doc/pages/scopes.asciidoc[scopes]
+
+precedence: widow, buffer, global
+
+global:: relative to an instance (session) of kakoune
+buffer:: superset of _: doesn't require being associated with a file. e.g. scratch and `*debug*`
+window:: view. displays a buffer. many windows may view a single buffer. selection set & scroll position are properties of windows.
+current:: valid in `[un]set-option`. refers to the narrowest scope in which the option is set.
+
+.nb
+
+* *disable hooks* by prefixing a command with backslash, e.g. `\p` to paste w/o hooks (or \i ctrl+shift+v, depending on your terminal), e.g. autoindention or parens nesting
+* to set "major mode," `:set buffer filetype <type>` where `<type>` is e.g. `janet`
+* to see the value of a variable, e.g. `%val{runtime}`, use the builtin `echo` command, e.g. `:echo %val{runtime}`
+  ** to see the filetype, `echo %opt{filetype}`
+* once you create `$KAKOUNE_CONFIG_DIR/autoload`, the system default autoload directory will not be loaded! this means that all the default syntax highlighting will not be in effect. so in $KAKOUNE_CONFIG_DIR/autoload`, create a symlink (of any name) to `%val{runtime}/autoload`
+  * for me, this was `ln -sT /nix/store/ndf1hkigrbd820bk1s373p2g8l7g4dgc-kakoune-2020.09.01/share/kak/autoload/ kak-stdlib`
+* new buffer: :e -scratch
+* view *debug* buffer (most useful to view config file errors, if any)
+* to effectively split windows, use a terminal multiplexer to create a new view, then run `kak -c <session>` where session is in the bottom right corner of the open kakoune window (assuming default powerline)
+  * try starting a new kak session with `kak -s <name> <some file>` (yes, you need the space between -s and the name) then open a new terminal and run `kak -c <name> <another file>`. now both terminals are connected to the same session, and thus share the list of open buffers, and registers, including marks and clipboard 
+    * the name can be any string, though it defaults to a unique identifier number
+    * if sharing sessions, get into the habit of using `:db` instead of `:q`!
+  * `:q` detatches the client from the session; the other window & session are unaffected
+
+.differences from vi
+
+* instead of asterisk to search term, select text, press asterisk to save to the `/` register, then press `n`, `<alt-n>`, etc to search
+* `[p` and `]p` instead of { and }
+* <count>g instead of <count>G
+* `<a-.>` instead of ,
+* `;` reduces selections to their cursor (what would be exiting visual mode in vim) instead of doing last t/f in opposite direction
+* `<a-;>` toggle cursor to other side of selection
+* `<a-:>` set cursor to be at end
+* `.` repeats only last *insert* mode change (`i`, `a` or `c`)
+* `%` selects whole buffer rather than matching enclosing character
+* `<a-l>` and `<a-h>` equal G l and G h
+* `J` is `<a-j>` (join lines)
+* `~` is to upper case
+* ` is to lower case
+  * <a-`> toggles case
+* `&` aligns selections
+* `Q` starts macro recording. `<esc>` stops recording. `q` replays.
+  * `Q` and `q` may be prefixed by `"<n>` where <n> is a register so that you can save a macro per register.
+* common idiom v% is now <a-a><x> where <x> is whatever the cursor is on (parens, brackets, quote, &c)
+  * alt, not ctrl. may be a bit awkward depending on keyboard.
+  * this kicks serious ass compared to spacemacs/vim!
+
+.useful to memorize
+
+selection (see `:doc registers` and §_multiple selections_ in `keys.asciidoc`):
+
+* <a-p> to paste all. `y` yanks all selections. <a-p> should be your default, and `p` should likely be mapped to <a-p>
+* <a-d> and <a-c>: delete [and enter insert mode] w/o yank
+* R: replace selections w/yanked text
+    * <a-R>: replace selections w/_every_ yanked text (what?)
+* <a-_>: merge contiguous selections
+* <+>: duplicate each selection (generating overlapping selections.)
+* <a-+>: merge overlapping selections
+* <a-(> and <a-)>: rotate selection back or forward, e.g. 2WS <a-)> swaps words
+* C and <a-C>: extend selection down or up
+* _: trim all selections' whitespace
+* <space>: remove all but one selection
+* <a-space>: if multiple selections, remove the currently focued one
+* m: with cursor on one of a delimiting pair of characters, select everything between and including the delimiting pair
+  * if not on a delim pair char, then the next delimined section in the buffer is selected
+  * `[` and `]` select from cursor to left or right end of delimitation
+* <a-i>: select object surrounding cursor, e.g. <a-i>w to select the word
+* <a-s>: split selection(s) into multiple selections by line
+* S: split selection(s) by a regex (much like Java's String.split function)
+* <a-k> and <a-K>: filter selection to those matching or not matching (respectively) a regex
+
+.managing & creating multiple lines by `C` or `<a-C>`
+
+although `C` and `<a-C>` can be useful, you must press them the right number of times, which means that you need to count the number of lines, which is generally slow. if you try to do it quickly, you'll likely select too many times. the number of selections is shown in the status line in the bottom right corner of kakoune. the number in parenthesis is the number of the currently focused selection (which is adjusted by `(` & `)`.) when you do `<a-C>` the focus is set to `1`; when you do `C` it's incremented by `1`. therefore, if you use only one of `C` or `<a-C`, then, if you select too many lines, `<a-space>` will effectively undo the last line selection. if you mix `<a-C>` and `C`, and want to remove the first or last lines, then idk you can probably bind a key to a command that sets the selection focus to 1 or the number of selections.
+
+anyway, it's generally easier and more appropriate to place the cursor at some position, `Z`, then place at an end position, then `<a-Z>u<a-s><a-k>..<ret>gi`. this is almost equivalent to `C`/`<a-C>`: the difference is that this method selects lines whose length is less than the column of the selection's start when `C` or `<a-C>` was pressed. this is pretty specific behavior, so i don't see a quick workaround to making this method emulate a-/C. this being said, such specific behavior seems rarely needed.
+
+.selection note: `x` & `X`
+
+in many mentions of selecting lines in kakoune, `x`/`X` is used. however, it usually makes more sense to either use register unions as described above, or to use `<s-K>` & `<s-J>`, or hell, even use j & k on caps lock.
+
+.selection example: replace
+
+let's replace all occurences of "string" by "bobo" within a paragraph, delete until the whitespace that follows, then return selections to a single cursor: `<a-a> p s string <ret> c bobo <a-w> d <esc>`. spaces in this command are for readibality only; the actual command would have no spaces.
+
+to run a regex on lines, select a region, do `<a-s>` to split single selection into a group of selected lines, then pipe (see below) to `sed` or some other regex engine.
+
+.selection example: swap
+
+select an sexpr by placing cursor on either delimiting parenthesis then pressing `m`. save this to the `^` register by pressing `Z` (though any register works; we could've done `a"Z` to save to register `a`.) then select another sexpr and press `<a-z>a`. now both sexprs are selected. press `<a-(>` to swap them.
+
+note that this works regardless of where in the buffer the sexprs are, or their relative location to each other, and this rotation generalizes to _n_ selections.
+
+.selection example: omit blank lines
+
+with selected lines, `<a-s`, then `<a-k>` with arg string `..` to keep lines with at least two characters (the blank lines consist of exactly the newline character, assuming LF encoding.)
+
+''''
+
+* |: pass selection to a program as stdin, then replace selection by that program's stdout
+    * <a-|>: same but discard stdout
+* $: | but if program exits non-0 then text under selection is removed from the buffer
+* ! and <a-!>: insert a progam's output before or after each selection
+
+* <a->>: indent even blank lines
+* <a-u> and <a-U>: move back or forward in undo history
+* @ and <a-@>: respectively, convert tabs to spaces or vice versa
+
+.registers
+
+prefix supporting commands by "<x> where <x> is a single character register name, e.g. `<a-i><a-w>"cy` to copy the word under the cursor into the `c` register. later in insert mode, `<c-r>c` will paste from that register. in normal mode `"cP` inserts `c`'s value at the cursor.
+
+when using regex capture groups with `/`, the captured strings are saved into the registers 0 to 9.
+
+.marks
+
+like how search uses the `/` register, marks use the `^` register. 
+
+* "Z" saves the current position to register `^`
+  * prefix with "<x> to save position to that register
+* ["<x>]z sets selection to whatever selection was saved (via `Z`) into `<x>`
+
+example:
+
+. select lines containing the word "foo", then save it to register a: `%<a-s><a-k>foo"aZ`
+. then you can restore it later: `"<a-z>`
+
+.the <a-z> (combine selections) menu
+
+[options="header"]
+|===
+| key | action
+| z | set selection to the selection stored in the buffer
+| a | set selection to buffer plus the current selection. try for example `<a-i>wZ4<a-w><a-z>a`
+| u | set selection to the buffer's earliest point to its last point
+| i | set selection to the intersection of the buffer's selection and the current selection
+| < | idk
+| > | idk
+| + | idk
+| - | idk
+|===
+
+NOTE: these operations affect the current selection, but not the selection in any buffer; to update the selection buffer
+
+.last buffer
+
+ga selects last buffer, like alt-tab.
+
+=== non-interactive use
+
+.example
+
+----
+echo 'i am {user} on {term}' | kak -f 's\{[^}]+\}<ret>~;dbhde|envar<ret>'
+----
+
+where `envar` is the racket program
+
+[source,scm]
+----
+(display (getenv (string-trim (port->string))))
+----
+
+`kak -f` populates the buffer from stdin if provided; in this case, it outputs to stdout. if a filename is given, then kak populates the buffer with it then *overwrites the file* with the result of the kakoune command string.
+
+=== tricks
+
+.swapping/rotating on non-`"` registers
+
+as you'd likely guess but be not confident about, the usual swapping (select a thing -> `Z` -> select another thing -> `<a-z>a<a-(>`) can be done with `"rZ` and `"r<a-z>a<a-(>`, where `r` is any register, too, thus preserving the contents of `Z`.
+
+.count lines
+select lines by whatever means, then `<a-s>` to break the lines. the number of selections is the number of lines.
+
+.eval
+select whatever you want kakoune to eval (e.g. a statement in kakrc) then `:eval %val{selection}`. `eval` is a short alias for `evaluate-commands`. idk what `evaluate-selections` does.
+
+there appears to be no command to reload kakrc file.
+
+=== scripting
+
+see `:help expansions` for passing kakoune state variables to shell. shell should be used for control flow.
+
+=== plugins/add-ons
+
+.sidetree
+
+currently isn't compiling due to failed dependencies viz package `clap`.
+
+.swiper
+
+TODO: look at swiper's code to see exactly what it's doing
+
+swiper does not use kakoune search syntax:
+
+* grep is done per line
+* single-quoting regex pattern is advised
+* no swiper history is kept
+
+.plug
+
+* putting a `plug` statement in kakrc isn't enough to enable it; it must be installed. thus, rather than putting into kakrc, just install from any buffer via `:plug-install`; or alternatively put them all in kakrc, then `:plug-install`.
+
+.kak program language
+
+define commands [functions] for brevity, e.g.
+
+    define-command filetype-hook -params 2 %{
+        hook global WinSetOption 'filetype=(%arg{1})' %arg{2}
+    }
+
+    filetype-hook ruby|python %{
+        set-option window indentwidth 4
+        set-option window tabstop 4
+        set-option window matching_pairs ( ) [ ] { }
+    }
+
+executing normal mode commands: `execute-keys "<a-:> <a-;>"` notice the quotes and that that string is the argument to `execute-keys`.
+
+* many commands will end with `<ret>`, and many will incorporate `<esc>` to return from insert mode to normal mode.
+* `map` does not bind keys to commands; it binds keys to sequences of keys. thus you'll never use `execute-keys` in a `map` command.
+  ** to map to executing a command, use `': <cmd_here>` in the rhs string, e.g. `map global insert <a-s> "<esc>': adoc-insert-source-block<ret>"`
+  ** the space between the colon and command makes the command not saved to the command history
+
+idk how to use expansions properly yet. here's an example solution for replacing selected text with the column of the selection's start:
+
+    define-command curcol %{ execute-keys "<a-:> <a-;> |echo %val{cursor_display_column}<ret>" }
+    map window user f "':curcol<ret>"
+
+i'd incorrectly supposed that `map window user f "<a-:> <a-;> |echo %val{cursor_display_column}<ret>"` would work, but the text was always replaced with `1`.
