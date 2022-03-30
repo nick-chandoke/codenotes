@@ -1,6 +1,13 @@
+.to add
+
+* have separate shells for interactive & non-interactive use. prefer dash (fast implementation of posix _sh_) for non-interactive and nushell for interactive.
+* simple computing (a/lists only) and a collection of tiny programs communicating with each other as necessary; but this contrasts one system with many dependencies. we want to reduce the liklihood of needing to change one program simply to satisfy another program just because they depend on some common resource. suppose we want to version control only one resource but not another; there's no reason to force a common constraint on both! put the constraint only where necessary!
+
+''''
+
 TODO: consider multiple programs connecting to a common sql db for ipc; atomicity means that we can use sql to wait for events (though hopefully not inefficiently; surely we can use even a simple server to simply communicate between programs when one program has committed to the db so that the other program can read therefrom) and that our parsing is as simple as using vectors (table rows.) there also won't be any dealing with pipes; there'll only be a fault-tolerant connection to the db!
 
-NEXT: incorporate the following two points into the notes in their proper places, and revise this whole document into one that's useful in addendum to best-paradigms, which discusses some of the same topics that this document does but with better description; what this document provides that best-paradigms does not: the sway or kakoune style IPC design. this is separate because it discusses how to use multiple wares together to implement a given design, whereas best-paradigms discusses the designs only.
+NEXT: incorporate the following two points into the notes in their proper places, and revise this whole document into one that's useful in addendum to best-paradigms, which discusses some of the same topics that this document does but with better description; what this document provides that best-paradigms does not: the sway or kakoune style IPC design (subprocesses/piping & envars.) this is separate because it discusses how to use multiple wares together to implement a given design, whereas best-paradigms discusses the designs only.
 
 * use haskell for developing typed combinators (e.g. lenses,) then use those in untyped langs. the trick is finding combinators that always combine sensibly, so that you're free to combine them in untyped languages without worry. identifying such types/combinators can be tricky, and thus is the ideal problem for which strongly typed systems (e.g. ghc's type calculator) is an ideal solution.
 * seek elegance rather than minimalism. elegance will always be minimalist, but never too much.
@@ -9,7 +16,13 @@ NEXT: incorporate the following two points into the notes in their proper places
 
 * any discussion of a language or other tool that isn't exclusively about elegance is a worthless discussion. terseness/minimalism, nor prettiness, is no worth without regard to elegance. just in case it needs mention, any mention of people is worthless in a discussion about a tool. how some people sometime use a tool has nothing to do with the tool itself.
 * it's better to hack together currently existing code (regardless of language!) than to write your own
-  * programs can achive IPC via cmdline invocation
+  * programs can achive ipc via:
+    * cmdline invocation
+    * direct communication via:
+      * tcp/http, websockets, udp, etc (this is generally rpc)
+      * unix socket (fastest, and thus preferred)
+    * proxy, e.g. via databases or files (a program writes/puts (in)to a common resource, then another gets therefrom)
+      * a good database should allow unix socket connections
   * startup times are negligible for programs running as servers
     * smaller languages with smaller runtimes are better than larger languages with larger VM requirements anyway
   * cmdline IPC means:

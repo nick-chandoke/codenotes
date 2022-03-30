@@ -3,22 +3,22 @@
 * link:https://github.com/mawww/kakoune/blob/master/doc/pages/scopes.asciidoc[docs]
 * it's pronounced "ka'koon"
 
-.spacemacs' functionality to implement
+=== spacemacs' functionality to implement
 
 * pretty print (display certain strings as other strings)
   ** accomplish via `add-highlighter` w/ `replace-ranges`. see :help highlighters
 
-.design
+=== design
 
 * most distinctive feature: selection on movement, and multiple selections
 * design follows UNIX philosophy
 * views are separated from model. you can have multiple windows viewing the same buffer, but each window's selection is separate. this allows modifying parts of a buffer without losing some selection(s) of the same buffer, which can be very useful.
 
-.syntax
+=== syntax
 
 semicolon (or newline) delimits kakoune commands. useful in macro-like keybinds.
 
-.link:https://github.com/mawww/kakoune/blob/master/doc/pages/scopes.asciidoc[scopes]
+=== link:https://github.com/mawww/kakoune/blob/master/doc/pages/scopes.asciidoc[scopes]
 
 precedence: widow, buffer, global
 
@@ -27,7 +27,7 @@ buffer:: superset of _: doesn't require being associated with a file. e.g. scrat
 window:: view. displays a buffer. many windows may view a single buffer. selection set & scroll position are properties of windows.
 current:: valid in `[un]set-option`. refers to the narrowest scope in which the option is set.
 
-.nb
+=== nb
 
 * *disable hooks* by prefixing a command with backslash, e.g. `\p` to paste w/o hooks (or \i ctrl+shift+v, depending on your terminal), e.g. autoindention or parens nesting
 * to set "major mode," `:set buffer filetype <type>` where `<type>` is e.g. `janet`
@@ -43,9 +43,11 @@ current:: valid in `[un]set-option`. refers to the narrowest scope in which the 
     * if sharing sessions, get into the habit of using `:db` instead of `:q`!
   * `:q` detatches the client from the session; the other window & session are unaffected
 
-.differences from vi
+=== differences from vi
 
-* instead of asterisk to search term, select text, press asterisk to save to the `/` register, then press `n`, `<alt-n>`, etc to search
+see `:doc keys` for notation.
+
+* instead of asterisk to search term, select text, press asterisk to save to the `/` register, then press `n`, `<a-n>`, etc to search
 * `[p` and `]p` instead of { and }
 * <count>g instead of <count>G
 * `<a-.>` instead of ,
@@ -66,7 +68,7 @@ current:: valid in `[un]set-option`. refers to the narrowest scope in which the 
   * alt, not ctrl. may be a bit awkward depending on keyboard.
   * this kicks serious ass compared to spacemacs/vim!
 
-.useful to memorize
+=== useful to memorize
 
 selection (see `:doc registers` and §_multiple selections_ in `keys.asciidoc`):
 
@@ -90,29 +92,29 @@ selection (see `:doc registers` and §_multiple selections_ in `keys.asciidoc`):
 * S: split selection(s) by a regex (much like Java's String.split function)
 * <a-k> and <a-K>: filter selection to those matching or not matching (respectively) a regex
 
-.managing & creating multiple lines by `C` or `<a-C>`
+=== managing & creating multiple lines by `C` or `<a-C>`
 
 although `C` and `<a-C>` can be useful, you must press them the right number of times, which means that you need to count the number of lines, which is generally slow. if you try to do it quickly, you'll likely select too many times. the number of selections is shown in the status line in the bottom right corner of kakoune. the number in parenthesis is the number of the currently focused selection (which is adjusted by `(` & `)`.) when you do `<a-C>` the focus is set to `1`; when you do `C` it's incremented by `1`. therefore, if you use only one of `C` or `<a-C`, then, if you select too many lines, `<a-space>` will effectively undo the last line selection. if you mix `<a-C>` and `C`, and want to remove the first or last lines, then idk you can probably bind a key to a command that sets the selection focus to 1 or the number of selections.
 
 anyway, it's generally easier and more appropriate to place the cursor at some position, `Z`, then place at an end position, then `<a-Z>u<a-s><a-k>..<ret>gi`. this is almost equivalent to `C`/`<a-C>`: the difference is that this method selects lines whose length is less than the column of the selection's start when `C` or `<a-C>` was pressed. this is pretty specific behavior, so i don't see a quick workaround to making this method emulate a-/C. this being said, such specific behavior seems rarely needed.
 
-.selection note: `x` & `X`
+=== selection note: `x` & `X`
 
 in many mentions of selecting lines in kakoune, `x`/`X` is used. however, it usually makes more sense to either use register unions as described above, or to use `<s-K>` & `<s-J>`, or hell, even use j & k on caps lock.
 
-.selection example: replace
+=== selection example: replace
 
 let's replace all occurences of "string" by "bobo" within a paragraph, delete until the whitespace that follows, then return selections to a single cursor: `<a-a> p s string <ret> c bobo <a-w> d <esc>`. spaces in this command are for readibality only; the actual command would have no spaces.
 
 to run a regex on lines, select a region, do `<a-s>` to split single selection into a group of selected lines, then pipe (see below) to `sed` or some other regex engine.
 
-.selection example: swap
+=== selection example: swap
 
 select an sexpr by placing cursor on either delimiting parenthesis then pressing `m`. save this to the `^` register by pressing `Z` (though any register works; we could've done `a"Z` to save to register `a`.) then select another sexpr and press `<a-z>a`. now both sexprs are selected. press `<a-(>` to swap them.
 
 note that this works regardless of where in the buffer the sexprs are, or their relative location to each other, and this rotation generalizes to _n_ selections.
 
-.selection example: omit blank lines
+=== selection example: omit blank lines
 
 with selected lines, `<a-s`, then `<a-k>` with arg string `..` to keep lines with at least two characters (the blank lines consist of exactly the newline character, assuming LF encoding.)
 
@@ -127,13 +129,13 @@ with selected lines, `<a-s`, then `<a-k>` with arg string `..` to keep lines wit
 * <a-u> and <a-U>: move back or forward in undo history
 * @ and <a-@>: respectively, convert tabs to spaces or vice versa
 
-.registers
+=== registers
 
 prefix supporting commands by "<x> where <x> is a single character register name, e.g. `<a-i><a-w>"cy` to copy the word under the cursor into the `c` register. later in insert mode, `<c-r>c` will paste from that register. in normal mode `"cP` inserts `c`'s value at the cursor.
 
 when using regex capture groups with `/`, the captured strings are saved into the registers 0 to 9.
 
-.marks
+=== marks
 
 like how search uses the `/` register, marks use the `^` register. 
 
@@ -146,7 +148,7 @@ example:
 . select lines containing the word "foo", then save it to register a: `%<a-s><a-k>foo"aZ`
 . then you can restore it later: `"<a-z>`
 
-.the <a-z> (combine selections) menu
+=== the <a-z> (combine selections) menu
 
 [options="header"]
 |===
@@ -163,13 +165,13 @@ example:
 
 NOTE: these operations affect the current selection, but not the selection in any buffer; to update the selection buffer
 
-.last buffer
+=== last buffer
 
 ga selects last buffer, like alt-tab.
 
 === non-interactive use
 
-.example
+==== example
 
 ----
 echo 'i am {user} on {term}' | kak -f 's\{[^}]+\}<ret>~;dbhde|envar<ret>'

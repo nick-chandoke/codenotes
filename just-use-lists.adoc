@@ -1,0 +1,464 @@
+== types? structs? enums? just use lists!
+
+this article criticizes typing as it's currently used in programming. this does not pertain to using computational type-algebraic systems or formal type theory for exploration & study of mathematical structures which i wholeheartedly condone.
+
+.preface
+
+i used haskell from 2017 through oct 2019, and it was the first real programming language that i'd learned since java, and it totally blew my mind. i still say that it (haskell2010) is an excellent language, yet lisp obviates it. i began learning scheme in feb 2020, and started using typed racket shortly thereafter, until feb 2022, when i decided that types were hardly beneficial overly-restrictive cruft. i'd always wondered how anyone ever got _anything_ done in untyped languages—and i still do! here i discuss types, when they're good, why they usually aren't, what's better, and how this better untyped system is different from common untyped systems like javascript or python. for almost all of my life i've been using typed programming and relying on the typechecker heavily, and using it (in the case of haskell) for considering the mathematical structure of my code, and using type calculus to redesign my code and correct design logical inconsistencies. i say all this so that you understand that i have valued formal math even before discovering haskell (and in fact i found haskell because it was the closest extant language to a theoretical purely-declarative language that i'd drafted over a few years)—that i'm not just someone who though that it was "easier to get started" with untyped languages such as python just because they make it easier/faster to get code to run correctly in common use cases. to put it lightly, i'm *not* a fan of non-reproducability, unmanaged/emergent state, oop, or not being told the shape/type of the data with which i'm working.
+
+''''
+
+consider the following typed racket code that simply describes placing orders to trade stocks. pretend that `struct` accepts default values per field like `let` does; writing such a macro is easy anyway.
+
+[source,scm]
+----
+;; sum types
+
+(define-type LinkType (U 'value 'percent 'tick))
+(define-type LinkBasis (U 'last 'bid 'ask 'mark))
+
+;; product types
+
+(struct ([price : Positive-Float]
+         [link-type : (Option LinkType) #f] [link-basis : (Option LinkBasis) #f])
+  #:type-name Limit)
+
+(struct ([value : Positive-Float] [trailing? : Boolean]
+         [link-type : (Option LinkType) #f] [link-basis : (Option LinkBasis) #f])
+  #:type-name Stop)
+
+;; equivalent to the type These Limit Stop where These a b := This a | That b | These a b
+;; typed racket does not support ADTs
+(struct order-cond ([stop : (Option Stop)] [limit : (Option Limit)])
+  #:guard (λ (s l n) (cond [(and s l (stop-trailing? s)) (raise-arguments-error 'order "trailing stop limits are unsupported" "stop" s "limit" l)]
+                           [(or s l) (values s l)]
+                           [else (raise-arguments-error 'order
+                                                        "every price condition must have a stop, limit, or both."
+                                                        "stop" s
+                                                        "limit" l)]))
+  #:type-name OrderCond)
+
+;; structs -> hash tables -> json objects, which will be
+;; later passed in an http request body to an online trading api.
+(define (order-cond->hash pc)
+  (let ([s (order-cond-stop pc)]
+        [l (order-cond-limit pc)])
+    (hash-set (hash-union
+                (if s
+                    (let ([v (stop-value s)])
+                      (hash (if (stop-trailing? s)
+                                'stopPriceOffset   ;; 4 decimal digits allowed if price is below $1; else 2.
+                                'stopPrice)        (round/num-digits (if (>= v 1) 2 4) v)
+                            'stopPriceLinkBasis    (kabob-case->UPPER_SNAKE_CASE (stop-link-basis s))
+                            'stopPriceLinkType     (kabob-case->UPPER_SNAKE_CASE (stop-link-type s))))
+                    (hash))
+                (if l
+                    (let ([v (limit-price l)])
+                      (hash 'price          (round/num-digits (if (>= v 1) 2 4) v)
+                            'priceLinkBasis (kabob-case->UPPER_SNAKE_CASE (limit-link-basis l))))
+                    (hash)))
+      'orderType (cond [(and s l) "STOP_LIMIT"]
+                       [s (if (stop-trailing? s) "TRAILING_STOP" "STOP")]
+                       [l "LIMIT"]))))
+----
+
+we'll pretend that type inference in typed racket is as good as haskell. this article is criticizing typing, not how languages implement typing.
+
+.good
+
+* type checker can optimize `+` to `fl+`, which is specialized to floats.
+* safe: checked automatically, so less burden on the programmer to check for typos or mistaking one symbol or type for another (e.g. arg is `LinkBasis` but `LinkType` was provided)
+
+.bad
+
+* type checker does not recognize the similarity of the `Limit` & `Stop` types; thus i need to write similar code for each despite their similarity. i also need to use `stop-link-type` & `limit-link-type` instead of just `link-type`, &c. a solution is to make a type class `HasLinkType` and have both `Stop` & `Limit` instance it,...but not really, since that quickly becomes cumbersome, requiring code in amounts proportional to the number of attributes shared by various structures. at least in lisp we can hide that extra code by writing a macro that expands to it,...but inelegance is inelegance even if hidden, and it tells us that we can do better.
+
+now consider this alternative which uses lists of particular shape instead of a variety of types each having particular accessor methods:
+
+[source,scm]
+----
+;; example order conditions:
+;; '((limit 42.04) (trailing 1%) mark) ; mark is applied to both trailing stop & limit
+;; '((limit 42.04 mark) (stop 40 bid)) ; mark is applied to limit, and bid to stop
+;; '(limit -2%)                        ; duh.
+
+;; use if you feel like trading speed for safety
+;; e.g. call before passing to order-cond->hash.
+;; returns the original order or raises an argument error
+(define (check-order o)
+  (cond [(and (assoc 'trailing o) (assoc 'limit o)) (raise-argument-error 'order-cond->hash "trailing stop limits are unsupported" o)]
+        [else o]))
+
+;; there are no structures to define. just define order-cond->hash:
+(require (for-syntax racket/base syntax/parse) (only-in racket/hash hash-union))
+(define-syntax (uncons-let stx)
+  (syntax-parse stx
+    [(_ ([h t xs] binds ...) pos neg)
+     #'(let ([lstg xs]) (if (null? lstg) neg (let* ([h (car lstg)] [t (cdr lstg)] binds ...) pos)))]))
+
+(define-syntax (cond-let stx)
+  (syntax-parse stx
+    [(_) #'(void)]
+    [(_ [(~literal else) e ...+] . _) #'(begin e ...)]
+    [(_ [g (~literal =>) (x ...) p e ...+] . rst) #'(let-values ([(x ...) g]) (if p (begin e ...) (cond-let . rst)))]
+    [(_ [g (~literal =>) x e ...+] . rst) #'(let ([x g]) (if x (begin e ...) (cond-let . rst)))]
+    [(_ [p e ...+] . rst) #'(if p (begin e ...) (cond-let . rst))]));; combo of assoc & member. also doesn't enforce racket's needlessly restrictive contract on assoc.
+
+;; this works on a mix of alist & list, which is a more useful structure than strict lists or alists.
+;; as this is a mix of alists & lists, i'll call them "a/lists."
+(define (massoc k s [p equal?])
+  (let lp ([s s])
+    (if (null? s)
+        #f
+        (let ([c (car s)])
+          (if (or (and (pair? c) (p k (car c))) (p k c))
+              c
+              (lp (cdr s)))))))
+
+(define order-cond->hash
+  (let ([B (λ (ts lb lt p) (λ (ovr) (let ([m (foldl (λ (v m) (cond [(member v '(last bid ask mark)) (hash-set m lb (kabob-case->UPPER_SNAKE_CASE v))]
+                                                                   [(symbol? v) (hash-set* m lt "PERCENT" p (string->number (cadr (regexp-match #px"([0-9-]+)%" (symbol->string v)))))]
+                                                                   [(number? v) (hash-set* m lt "VALUE" p (round/num-digits (if (>= v 1) 2 4) v))]
+                                                                   [else (raise-argument-error 'order-cond->hash "link basis, number, or percent symobl" v)]))
+                                                    (hash)
+                                                    ts)])
+                                      (if ovr (hash-set m lb (kabob-case->UPPER_SNAKE_CASE ovr)) m))))])
+    ;; the loop here seems very monadic: Loop (a -> b a) where b ~ (->). this is just a catamorphism. loops, like in graph theory, must be ultimately [after function composition] endomorphic, e.g. (a -> b -> c -> a) is loopable.
+    ;; loops are a study in self-similarity; loops, like recursion, is fractal.
+    (λ (o) (hash-set ((λ (y) (if (procedure? y) (y #f) y)) ; y is a procedure if o like '(limit 42). this `if` (asymmetry) is due to supporting the asymmetry of allowing both e.g. '((limit 42)) and '(limit 42)
+                            (let loop ([fns '()] [all #f] [o o]) ;; need fns: as we go through the loop, we compose functions; the last item is what we're composing with. then afterward we apply the fn to all.
+                                ;; i took awhile to notice to accept multiple fns instead of just one. that's because i needed (loop fns h ts) to not modify anything except h, yet also effectively return (hash),
+                                ;; so that we can hash-union all accumulated functions after applying them to all.
+                                (uncons-let ([h ts o])
+                                  (cond-let [(assoc h '((trailing . (stopPriceLinkBasis stopPriceLinkType stopPriceOffset)) (stop . (stopPriceLinkBasis stopPriceLinkType stopPrice)) (limit . (priceLinkBasis priceLinkType price)))) => x (apply B ts (cdr x))]   ; base cases. fns from all to hash tables.
+                                            [(symbol? h) (loop fns h ts)]                    ; set all
+                                            [else (loop (cons (loop '() #f h) fns) all ts)]) ; recurse
+                                  (apply hash-union (map (λ (f) (f all)) fns)))))
+                     ;; can't use cond-let here since we need the bound vars in multiple cases
+                     'orderType (let ([stop (massoc 'stop o)]
+                                      [limit (massoc 'limit o)]
+                                      [trailing (massoc 'trailing o)])
+                                  (cond [(and stop limit) "STOP_LIMIT"]
+                                        [(and trailing limit) (raise-argument-error 'order-cond->hash "stop, limit, or stop-limit; trailing stop limits are unsupported" o)]
+                                        [stop "STOP"] [limit "LIMIT"] [trailing "TRAILING_STOP"]
+                                        [else (raise-argument-error 'order-cond->hash "stop, limit, or stop-limit" o)]))))))
+
+(order-cond->hash '(limit 42.04))
+(order-cond->hash '(mark (limit 42.04) (stop 1%)))
+----
+
+ok, that's 22 lines, compared to the first solution, which was 24 lines. i'm counting lines when comments and blank lines are removed, and not having line breaks in sexps unless really needed. also i'm counting only the lines of `order-cond->hash`; `cond-let`, `massoc`, &c are considered primitives of this style of coding. `check-order` is not necessary, and so not included in the line count. so why, if this method is better, is it only 2 lines shorter?
+
+* this one has more code to handle more flexible order description; order literals are much cleaner.
+* not only is the order description more flexible, but the order structure is more flexible, too; this code generalizes much more elegantly than the struct-based method.
+* *[EDIT]* in retrospect, it was stupid to allow any order for value and link basis; it's always going to be price then basis. this reminds me of a truth i'd forgotten: parsers (with backtracking) are an elegant basis for all programs. they should be used to accept function args; function args should be either evaluated before or not a la picolisp; and the parser should be applied to the list of args a la `syntax-parse`. while a parser would not have made this code shorter nor easier to read, it would stay about the same size while ensuring that, e.g. neither price nor basis is specified more than once. the parser here would be `((U 'limit 'stop 'trailing) (-> (? price) parse-price) (-> (? 'last 'bid 'ask 'mark) kabob-case->UPPER_SNAKE_CASE))`. i should explore this more, especially comparing them with a/lists.
+  ** parsers would make base cases vs recursive cases easier, too: we can try matching against either case (or the more specific of either case). of course, once part of the match fails the next parser is tried.
+
+but hey, we can do better. let's trade that last `let` block for state kept in a variable called `types`:
+
+[source,scm]
+----
+(define order-cond->hash
+  (let ([type-map '((trailing "TRAILING_STOP" stopPriceLinkBasis stopPriceLinkType stopPriceOffset)
+                    (stop     "STOP"          stopPriceLinkBasis stopPriceLinkType stopPrice)
+                    (limit    "LIMIT"         priceLinkBasis     priceLinkType     price))]
+        [B (λ (ts lb lt p) (λ (ovr) (let ([m (foldl (λ (v m) (cond [(member v '(last bid ask mark)) (hash-set m lb (kabob-case->UPPER_SNAKE_CASE v))]
+                                                                   [(symbol? v) (hash-set* m lt "PERCENT" p (string->number (cadr (regexp-match #px"([0-9-]+)%" (symbol->string v)))))]
+                                                                   [(number? v) (hash-set* m lt "VALUE" p (round/num-digits (if (>= v 1) 2 4) v))]
+                                                                   [else (raise-argument-error 'order-cond->hash "link basis, number, or percent symobl" v)]))
+                                                    (hash)
+                                                    ts)])
+                                      (if ovr (hash-set m lb (kabob-case->UPPER_SNAKE_CASE ovr)) m))))])
+    ;; the loop here seems very monadic: Loop (a -> b a) where b ~ (->). loops, like in graph theory, must be ultimately [after function composition] endomorphic, e.g. (a -> b -> c -> a) is loopable.
+    ;; loops are a study in self-similarity; loops, like recursion, is fractal.
+    (λ (o) (let ([types '()])
+             (hash-set ((λ (y) (if (procedure? y) (y #f) y)) ; y is a procedure if o like '(limit 42). this `if` (asymmetry) is due to supporting the asymmetry of allowing both e.g. '((limit 42)) and '(limit 42)
+                        (let loop ([fns '()] [all #f] [o o]) ;; need fns: as we go through the loop, we compose functions; the last item is what we're composing with. then afterward we apply the fn to all.
+                          ;; i took awhile to notice to accept multiple fns instead of just one. that's because i needed (loop fns h ts) to not modify anything except h, yet also effectively return (hash),
+                          ;; so that we can hash-union all accumulated functions after applying them to all.
+                          (uncons-let ([h ts o])
+                            (cond-let [(assoc h type-map) => x (set! types (cons h types))
+                                                               (apply B ts (cddr x))]  ; base cases. fns from all to hash tables.
+                                      [(symbol? h) (loop fns h ts)]                    ; set all
+                                      [else (loop (cons (loop '() #f h) fns) all ts)]) ; recurse
+                            (apply hash-union (map (λ (f) (f all)) fns)))))
+                       ;; can't use cond-let here since we need the bound vars in multiple cases
+                       'orderType (begin (set! types (sort types symbol<?))
+                                         (cond-let [(equal? types '(limit stop)) "STOP_LIMIT"]
+                                                   [(equal? types '(limit trailing)) (raise-argument-error 'order-cond->hash "stop, limit, or stop-limit; trailing stop limits are unsupported" o)]
+                                                   [(assoc (car types) type-map) => x (cadr x)]
+                                                   [else (raise-argument-error 'order-cond->hash "stop, limit, or stop-limit" o)])))))))
+----
+
+great: got it down to 21 lines. despite shortening the last `let` block, 1 line was added to declare `types` and 2 to setting it. the code is arguably cleaner, but at this point i think it'd be inappropriate to try to improve it in scheme; to make it really shorter and extremely terse like i desire, i'll probably use a different paradigm, even if i don't _need_ to. i think this is the best i can do for now. granted, this work is novel, at least to me, so i'll certainly discover better primitives and patterns than just `cond-let` and a/lists. i've yet to consider using state more, but that's really much better done in picolisp than racket (or even other schemes) anyway. it's obviously pretty hacky code; i could've done the scoping better. it's been a good exercise, and is not a failure; though it didn't lose length, it's much easier to refactor and makes obvious places of (a)symmetry. on that note, this is probably an excellent style for symmetric constructs, but not as good as typed structs for asymmetric constructs such as these. degree of asymmetry is the number of conditional branches in a construct's *definition.* degree of (a)symmetry is not a property of implementation/expression.
+
+the code was made by following a few design rules:
+
+* use lists for everything
+  ** factor-out common list shapes
+* if a list's value changes dependent on some later data, then parameterize the list by wrapping it into a lambda that accepts that later data
+  ** this associates the conditionality with the data that is affects, making for easier refactoring than using branching forms, all of which are special syntax
+
+.good
+
+* more flexible
+  ** order of arguments is irrelevant. by contrast, `These a b` is not equal to `These b a`. (though `(U Stop Limit)`)
+  ** `These a b` does not automatically generalize; we'd need to create a new type for each arity, even though the real structure that we want to encode is, given a set `A`, we want some B ⊆ A : p(B) for some predicate p. however, the above logic generalizes easily and is commutative.
+  ** the types are data, so we can use `map`, `member`, &c to transform the "types," and interned symbols can easily be converted to strings, which makes conversion to json much easier.
+  ** sexps are inherently as extensible as xml
+  ** auto-optimizing: does not require us to be specific e.g. we may start with `A := B C | D E F`, then find that it should be refactored into `X := B C, Y := D E F, A := X | Y`. with lists, because the checking is done only when necessary, we're free to change structures' shapes without needing to refactor.
+* rather than using constructors, we use symbols. we can use `limit`, `stop`, and `trailing` without worrying about scope or shadowing. in other words, it's like a lisp-standard simpler alternative to prefacb structs in racket.
+* much simpler
+  ** easier to refactor
+  ** faster to read
+  ** exploits mutual exclusivity of link & basis types, allowing them to be expressed in any order.
+  ** both link & basis are simply sum types, so they can be expressed simply as lisp symbols. same with stop's or limit's ability ta accept percents or numbers.
+  ** at least for me, cruft feels uncomfortable. using one data type for everything feels nice: clean & predictable.
+    *** the expectation that everything is lists encourages developers to describe the shapes of their data, like how is done for macro syntaxes. if the syntax needs tl;dr description, authors are likely to use math terms or reference similar shapes. this is much nicer than giving a name, forcing me to jump around documentation from name to name (since types are often composed of other types) just to see what kind of data i'm dealing with!
+  ** uses list to simultaneously express optionality and plurality; `[Either a b]` therefore replaces and generalizes `Maybe (These a b)`. in this case, though, we're even more general: a list of a sum of an arbitrary number of types (cf `Either` which is a sum of only exactly 2 types.) this is why this model works better than product types.
+* permits factoring common properties. e.g. `[(String, [Order], [Order])]` can correspond to shape `((name (open) (filled)))`. this shape is, among its isomorphisms, particularly nice because we can `assoc` to get all orders which are naturally partitioned into open and filled. if we want to perform an operation on all orders, then we simply recurse on the value returned by `assoc` (assuming non-falsy.)
+
+.bad
+
+* as `check-order`'s documentation says, we need to choose between speed & safety.
+  ** this is a bit unfair since the check can be as detailed as dependent types, which are supported by few languages
+* unsafe
+  ** writing checks is done by hand to some degree, rather than automatically being totally done by a type checker
+    *** though a type checker automates checks, it isn't _all_ we need; haskell developers still write test suites for a reason
+
+.techniques that i want to later take time to explore
+
+* devise a whole list algebra: a formalization of the modeling & transformation techniques that i used here, such as parameterizing lists or identifying the need to have a list of functions rather than a function that composes with itself-on-other-iterations. see <https://doisinkidney.com/posts/2019-05-08-list-manipulation-tricks.html>.
+  ** lists & list [function] application provide a common notation for expressing all code.
+* compare list building and function composition, and list iteration and function evaluation. also consider `(or (assoc k s) _)`/`(case k s [else _])` isomorphism
+  ** `cond` is merely `case` but whereas `case` takes parameters key and alist from key to value, generalize the key comparison function `equal?` to a given predicate, then rather than distributing that predicate over the key and the alist's keys, just have the alists' keys be nullary predicates which are then evaluated.
+* picolisp level of exploiting state
+
+.things to consider
+
+in §bad, "a/lists are slower" is not present. while technically their lookup is slower than vectors', the difference is inconsiderable for a/lists of struct size; you'd never use a struct with enough fields for this difference to be appreciable. still, it suggests a good consideration: better rather than alists are splay trees; these are usually preferable over lists that represent sets, i.e. lists whose ordering is irrelevant. like in arc lisp, such lists' (a tree is just a list of a particular shape) elements should be mutable with O(1) update.
+
+structs, alists, splay trees, and hash maps are mostly equivalent: all support lookup and default values, and are isomorphic. the only general difference is that alist lookup (via the `assoc` function) returns different values depending on whether the value was missing or whether it was found, but the found value was falsy i.e. `assoc : Alist a b -> Maybe b` where b may contain a falsy value e.g. `(assoc '((1 . hi)) 0)` returns `()` (not in the list) whereas `(assoc 0 '((0 . ())))` returns `(0)` (in the list, and associated value is `()`.) also, as that example shows, `assoc` returns the key, and the associated value may be a single value or a list of values; to assoc it's all the same since `'((0 . ()))` equals `((0))`; a more appropriate name for `assoc` is `find-car`.
+
+racket is one of few languages that includes _contracts_: basically type checking that occurs at runtime, acts on runtime values, and uses general predicates to effectively do dependent type checking. contracts are nice, but writing contracts that represent the shapes of such organically-shaped lists is anything from a hassle to infeasable.
+
+=== when types are appropriate
+
+types are appropriate when data's shape has little variability and satisfies specific (and usually simple, depending on the capability of the type system) predicates. type systems are typically cumbersome; except typed racket and roc, which support capable *anonymous* types. more to the point, beyond type systems, structs & enumerations, which may be not typed, but still obviously correspond to product & sum types, follow the same rules as when to use types.
+
+the alternative is lists. lists are universal because they're the simplest structure defined of [binary] relation & recursion. by the magic of math/order, such a fundamental structure must natural describe all other types. therefore we should ask ourselves, for any type, how that type is described by lists. every type can be described by a set list of particular shape(s). when dealing with structure as simple as lists, we can ask the usual properties—associativity, commutativity, invertability, &c—which we cannot so freely do with types, because types (or enums or structs) cannot be computed, unlike lists. of course, this is not the fault of type systems; it's the fault of how type systems are used/implemented in programming languages. if we're talking about type theory in as a subdiscipline of pure mathematics, then we're afforded all the wonderous algebraic freedom that we're used to in math. type theory and its notation creates a very different experience in math vs cs. still, type theory is no more beautiful than anything else in math; we can simply describe it programmatically by lists instead of "types" [cs], and we can either use formal methods or tests (or check via preprocessors such as macros) as a more capable (and much simpler) alternative to today's type systems.
+
+=== with all things now considered, what exactly i'm proposing
+
+==== naturality, shapes
+
+lists are considered simply as data and can describe any type/structure. we as coders have complete freedom with them. while type enthusiasts 
+
+==== computable programs
+
+ideally we'd have super-fast, small code, that would be ungodly unsafe if written by hand, but the beauty of it is that it's generated automatically by a system assumed to be correct. suppose that a type checker refines code into C union types, combines multiple numbers into a single 64-bit register by using bitwise operations, and allocates a chunk of memory some of which contains numbers, strings, floats, &c; performs bitwise ops on floats, and the code rewrites itself during execution—all the most dangerous optimizations—then it's all welcome as long as there's no chance that it'll case the program to crash or otherwise behave outside of spec.
+
+basically: type checkers guard programs against programmer flaws. there can be two solutions to this: check what the programmer's produced; or have a program produce code instead of a programmer. humans, like a.i., are better suited for complex yet approximate thinking rather than exact reasoning. of course, ideally we'd just provide the computer with a spec, and the computer would check our design for logical consistency and would question us to resolve any ambiguity in our expression of our design, then it'd produce an optimized implementation of our design. but that's not yet possible. still, in the meantime, we should reduce the amount of code written by humans! it's better for code to be "unsafe" but flexible and readable, then have that code checked as appropriate at or before runtime.
+
+this could be solved by using a macro. however, that's potentially inconvenient or impossible, and we can do better anyway. let's say that we're using picolisp, which has not macros, and does not compile; it's interpreted only. this is fine, but we want to be able to check the code for correct structure & sensible definition before running it, and we want that check to be provable. fortunately it's a lisp, which is easy to parse, so we can make a preprocessor that parses certain metadata sexps, uses them to check the program, then removes them so that the program can be executed. adding a preprocessor is much better (orthogonality, for starters) than introducing a language extension that supports this ever-evolving correctness-checking system.
+
+even better is the program being written in terms of simple structures with strong/capable algebraic properties such as matrices.
+
+''''
+
+
+NOTE: _apply_ means _evaluate on some args_; _evaluate_ by itself is shorthand for _evaluate on no args_.
+
+TODO: consider all functions being unary and accepting quasiquoted lists. you may suggest that we just use arguments like normal and use `apply` as necessary, but that assumes that the arguments are in a list as opposed to an a/list or more complex shape. compare to factor and link to any relevant articles.
+
+==== good for description, too
+
+EDN has used sexps (though that spec is too complex if you ask me.) the beauty of a/lists is that they encode everything, so you don't need to think about which format to use; you can always just use a/lists! easily parsed, as simple as possible, and same format as executable code. this avoids issues like e.g. nushell has, which uses a toml file for its static config, but also allows sourcing source code files to execute sateful programmatic operations, this:
+
+. creates confusion for newcomers
+. requires multiple files for the single idea of configuration
+. makes one need to learn the toml format (though at least in this case toml is short)
+
+compare this with nxyt's config, which is a lisp source file. lisp code is easy to read, extensible, and executable. sexp heads are descriptive. and as always, sexps are easier to refactor than any other general-purpose syntax. not only that, but it has macros, so that particular complex patterns can be expressed simply.
+
+let's rag on the toml file, too. sexps are simple and don't try anything clever. they're simple & stupid. in this particular example, i'd like to focus on how their delimitation is obvious, whereas toml's sections are not (yes, despite the name "tom's _obvious_ minimal language.")
+
+[source,toml]
+----
+[env]
+EDITOR = "kak"
+VISUAL = "kitty kak"
+KAKOUNE_CONFIG_DIR = "$HOME/.config/kak/"
+
+# [textview]
+# bools: grid header line_numbers true_color
+# theme : String
+
+# TOP LEVEL OPTIONS
+# disable_table_indexes = true
+# path = [ ...]
+prompt = "echo (pwd) ' ║ '" # command whose output is used for the prompt
+table_mode = "rounded" # "light" "none"
+
+startup = [ "source ~/.config/nu/aliases.nu" # why does this do nothing but running in terminal works?
+          # , 'env | each { |it| echo $"let-env ($it.name) = '($it.raw)'" } | str collect (char nl)' # TODO: how to properly quote this?
+          ]
+----
+
+the `source` command in `startup` seemed to have no effect. i didn't understand; what could be going wrong when it's so simple? of course, i did all the things that any decent hacker would do before asking about it on discord:
+
+. re-read the manual
+. search the discord
+. check that the commands' equivalents work correctly when executed in the shell repl rather than specifying them in the config file
+
+and i got to that point where i wonder, "...could it be...no, surely they wouldn't..." and then try it, and of course it is. as the link:https://toml.io/en/v1.0.0#table[toml documentation] says, sections continue entil the next section or end of file.
+
+thus the solution was to move before any sections:
+
+[source,toml]
+----
+# TOP LEVEL OPTIONS. PUT BEFORE ANY TABLES (SECTIONS).
+# disable_table_indexes = true
+# path = [ ...]
+prompt = "echo (pwd) ' ║ '" # command whose output is used for the prompt
+table_mode = "rounded" # "light" "none"
+
+startup = [ "source ~/.config/nu/aliases.nu" # why does this do nothing but running in terminal works?
+          # , 'env | each { |it| echo $"let-env ($it.name) = '($it.raw)'" } | str collect (char nl)' # TODO: how to properly quote this?
+          ]
+
+[env]
+EDITOR = "kak"
+VISUAL = "kitty kak"
+KAKOUNE_CONFIG_DIR = "$HOME/.config/kak/"
+
+# [textview]
+# bools: grid header line_numbers true_color
+# theme : String
+----
+
+and then i reflexively thought to myself yet again, as so commonly developers do, "...r u fucking serious with this shit." devs should understand why the ending punctuation is a period. gee, for the whole point of a config file to be static, stateless specification of options, order sure shouldn't matter, should it? and there's no mechanism to end a section? really?
+
+i got no warnings, no errors. why? because unsupported options are allowed and ignored. if they were arguments passed to a function, it's far less likely that invalid options would be silently ignored. another reason to eval sexps as simultaneous data & code.
+
+and if you're thinking, rtfm, then i'll say "ok, but you need to remove 'obvious' from the spec name. also why are you using a format that requires a manual when you could simply use one simple enough to not require one?"
+
+.lisp
+
+what i want to be understood about lisp is that it is not a "special" thing; it is not "advanced," nor "esoteric," or anything other than "simple." i wholeheartedly reject describing lisp as anything even remotely similar to "alien technology" (as it's surprisingly often called;) it's a lie and a grand dis-service to lisp; to the contrary, the very thing that makes lisp good is that it is nothing more than fundamental! homoiconicity is not some quirky, useless gimick! here's what homoiconicity is: "what if...we just wrote what the fuck is going on, instead of putting it in code?" whoh, what a concept! i mean, homoiconicity also allows (again, most simply so) self-modifying programs and/or programs that generate other programs. what about sexps? some gimmick? *no!* it's like, "we have nouns & verbs: data & functions. functions have an ordered list of arguments and a name. so that's expressed by the duple (name, args). well what's a list? it's recursion on relation. relation is expressed as a duple, called in lisp a _cons cell_. add recursion, and we get lisp lists. given that duple/relation (a,b) is expressed as `'(a . b)` in lisp (by definition,) and adding recursion we get lists which are then `(list a b c)` = `'(a . (b . (c . ())))`; therefore (name, args) = `(name . args)` = `(list name arg1 ... argN)`—an sexp. again, mere simplicity—again, commonly increasingly desired due to growing intolerance for needless complexity: a natural consequence of exposute to needless complexity, since humans (along with everything else in the natural world) are averse to _inefficiency_—a term meaning _needless complexity_.
+
+lisp demonstrates a _lack_ of syntax, a lack of design patterns, lack of constraints. it appears to be used by programmers who can't be bothered to follow any linguistic particularities. it is the final refuge for those who've seen (in languages & tools) syntax after syntax, model after model, each specializing in their own featured features while handling poorly anything outside the intended use case. lisp is the language for programmers who just want to write programs as they want, completely free to do as they please by both being unconstrained and empowered by lisp's perfect flexibliity. after some point we just want to work with data and code—very much like C except more elegant, terser, simpler, and without syntax.
+
+what's more, lisp has demonstrated that it's an excellent language! so stop trying to do extra shit! just use lisp! just use lists. keep computing as simple as it needs to be; there's no sacrifice in doing so; in fact, it's the nicest experience. in a discipline as complex as computer programming, we can use all the elegance (simplicity & regularity) that we can get!
+
+let's look again at nushell. currently in their discord they're discussing which syntaxes to use. they want something shell like for familiarity (mostly for users new to nushell who already know posix shells,) yet with more capability than posix shells. aaahhh, which syntax to use?! such a conundrum. they have the same issue for features; which features to include? should they allow enabling or disabling them in a config file?
+
+you know what comes next: "of course, these aren't problems in lisp." we already know the answer to the syntax problem. what about features? the commonality of features & syntax is that they're both builtin—_special_, particular. want a feature in lisp? write a function. want to toggle whether that feature's enabled? either import the function or don't. what about toggling parameters of already defined functions? that's an actually good question. many schemes used fluid-let, or what in racket is basically _parameters_. i don't know what common lisp's solution is (though they almost certainl have one.) picolisp's dynamic binding (still with lexical scoping) is a solution, too. this method is like fluid-let except a bit more convenient (and potentially dangerous.) the programmer hardly has to do anything to parameterize their code.
+
+i want lisp to be used for everything—to be the standard for describing data & so programs. lisp should not be called "lisp" though; if i say that "i want lisp to be standard" then it sounds no different from "i want <my favorite language> to be standard" but that's wrong; lisp is plain, not special. it's the natural notation for expressing data, as must be true considering that it's just primitive literals and or delimited sequences/sets thereof. in other words, lisp is to computers what set notation is for math, and it's no mistake that sets are a foundation of math. similarly, it's no mistake that plaintext files are used in *nix systems to configure everything. lisp is what plaintext is trying to be; in the abscence of lisp, we have many plaintext formats (ini,toml,json,yaml,xml,...) each of which is either inflexible enough to need extensions, or too stylized so that people can't agree on which style they want, or the syntax is regular and completely flexible yet too verbose (talkin' 'bout xml, here.) edn is just what xml should've been. if you don't know, edn is a particular format of sexp. now, for the record, edn is too specific; rather than being a mere sexp, it's a format specifically made for use in clojure, and so it includes keywords, nil, maps (which uses _commas_—the poster child for needless syntax) and at this point suffice it to say that it's too specific to be used for general computing. it remains, fine as any imperfect format is, for clojure.
+
+json is practically equivalent to edn, but for js instead of clojure. considered as a general data notation, its imperfections are, again:
+
+* language-specific
+* needless use of delimiters
+  ** json doesn't have symbols, so we need to use strings, which are delimited by single- or double-quotes to express what would be unquoted in sexps e.g. `{"k1":4,"k2":0}` vs `(k1 4 k2 0)`. note that some lispers would use use alists e.g. `((k1 . 4) (k2 . 0))`. this is hardly better than json, and no better han the plainer sexp. another arbitrarily-delimited form is `((k1 4) (k2 0))`
+    *** readability is a reasonabe argument. you can obviously juse tabs and newlines to improve readability, but i can see how sometimes some people would want a sexp parser to ignore a character without syntactic value, used only for delimitation as seen by humans
+  ** colons when none is needed (see prior bullet's example)
+
+if you complain about the parenthesis, think again: they're necessary. as the above examples show, though, only few parentheses are needed. consider scheme's vs other lisps' `let` forms' binding clauses: `(let ([k1 4] [k2 0]) (print (+ k1 k2)) (exit 0))` vs `(let (k1 4 k2 0) (print (+ k1 k2)) (exit 0))`. the latter is shorter, and in fact is almost the shortest that this idea can be expressed in code in general, given that each the number of binds and the number of forms inside the let block's body are arbitrary.
+
+[NOTE]
+this optimization is possible only because the arity of each bind clause is fixed at 2 elements; in `(let A ... | B ...)` if each a in A were of arbitrary arity, then we'd need to do `(let (a ...) ... | B ...)`. recall that `(a (b c))` is isomorphic to `(a . (b c))` which is equal to `(a b c)`; i.e. each key or function paired with values or arguments is more plainly expressed as a list whose head is the key/function.
+
+.can we beat lisp?
+
+i said that it's _almost_ the shortest; it's not much of an optimization, but we can optimize `(a . (b ...) . c)` to `a b ... | c` where the pipe represents any character arbitrarily chosen to delimit: `let k1 4 k2 0 | (print | + k1 k2) | exit 0`. such a syntax may be proven to be unambiguous, but even then it forces upon the programmer the mental overhead to check that they're delimiting properly; by contrast, lisp's delimitation model is totally stupid. for all languages (e.g. both applicative and concatenative and/or stack-based,) delimiters are needed once a dataflow becomes significantly complex. each kind of language has its own unique form of expression complex enough to necessitate delimiters. for fun, let's further optimize by imposing a stack model similar to but a bit different from the factor language: `| k1 4 k2 0 set | k1 k2 + print 0 exit reset`.
+
+. a delimiter, k1, 4, k2, and 0 are pushed to the stack. the delimiter is needed for `set` to know over which elements it's supposed to act (as opposed to acting on the whole stack which is generally unknown whenever `set` is called.)
+. like `set`, `print` is variadic; we must tell it when to stop taking arguments from the stack.
+. `exit` is unary, so it knows to accept only the head of the stack, `0`
+. `reset` is nullary. it sets `k1` & `k2` to whatever values they'd had before being bound by the prior `set` statement.
+
+NOTE: complex sexps directly relate to complex dataflows (i.e. nestings of function calls)
+
+* `let` can be thought of as syntactic sugar for binding then returning binding to any previously held value. therefore i use `set` instead. there's generally no _need_ to `reset`, though obviously it's good practice so that we don't just build state throughout our program's execution without tracking it.
+* `reset` could be defined to accept a list of symbols to reset, e.g. `| k2 reset`. if passed an empty list (`| reset`) then it'd reset all symbols bound at last `set`.
+* unless our evalutation model is non-strict, our syntax must be able to represent both functions-as-data and substituting a function (with optional args) for its return value. remember that this can be simplified by saying that each function with args is a list.
+* removing delimiters makes selecting less easy. for example, in the kakoune text editor the `m` and `<alt-p>)` command(s)/key(s) selects code within parenthesis, which makes refactoring quick. in some cases it's also is easier to work with programmatically, though technically slightly less efficient.
+
+shortest possible vs sexp:
+
+----
+| k1 4 k2 0 set | k1 k2 + print 0 exit reset
+(let (k1 4 k2 0) (print (+ k1 k2)) (exit 0))
+----
+
+...literally the same length, huh? interesting. honestly i didn't expect that; i thought the "shortest" version would be at least _a character_ shorter! ok, ok, to be _totally_ fair, they don't use the same symbols! `reset` is many characters long. with them having the same symbols:
+
+----
+| k1 4 k2 0 set | k1 k2 + print 0 exit R
+(let (k1 4 k2 0) (print (+ k1 k2)) (exit 0))
+----
+
+4 characters shorter. unless you're in a fierce code golf competition, just use lisp!
+
+if you _do_ (for whatever reason) still want the terser notation, know that this terse list notation might not generalize well. i suppose expressing `(a ((b c) . d) e ((f) . (g)))` by it would be less readable, but then again, are such complex forms necessary in general? given the semantics & syntax of this stack language, can they be elegantly expressed differently? for starters, it seems like we wouldn't need `null` to terminate lists. under this new lang, it seems equivalent to `a | (b c) d | e | (f) (g)`. if this data is applied to functions, then we might be able to rearrange the data/functions to make it work nicely. however, if the data is in a config file, or is otherwise not bound to one particular purpose, then this is not an option.
+
+we should still use `(+ a b c d)` instead of `a + b + c + d`, since the latter obviously is more syntax, and so more annoying to refactor, is less symmetric, and, in case it's found to still be useful, does not support `apply`...but this suggests that we factor-out the pipe delimiter into `(| a (b c) d e (f) (g))`! but if were going that far, then the pipe delimiter at the beginning is redundant! so we remove it, arriving at a sexp again!
+
+i conclude that this deserves more research, but that isn't pertinent; if we can beat lisp, it's likely that we can hardly do better. personally, i'm thankful for having done this exercise, but i estimate that further study of it won't be worth my time, or at least i'll consider it when i'm learning picolisp atnd factor. still, it'd be nice to have a proof of what the tersest general *useful* syntax is. again, we don't need to support complex syntax if an equivalent set of simpler syntaxes can be used.
+
+*you can measure a syntax's elegance by the number of conditional statements needed by a parser of the syntax.* a syntax's usability for computers (parsing) does not conflict with usability for humans (reading, writing, refactoring.) elegance is a property of information theory; it's intrinsic to the syntax itself, unrelated to anything relative to / using the syntax. stop debating, start calculating. use facts, not opinions. do not delude yourself into thinking that lisp/sexps this is a question of style. it is factually & plainly optimal & symmetric—the exact definition of elegance.
+
+and again, if you _do_ use particular patterns, and find sexps too verbose, then just write a macro.
+
+=== how this differs from python, js, &c
+
+as i said in the preface, i can't even with such langs. why not? they're untyped. so how did i go from poorly, statically typed java for 8 years, to strongly, statically typed haskell for 3 years, to typed racket for 2 years, absolutely hating using untyped languages all this time, to preferring picolisp within a month? ya know, picolisp: a language with dynamic bindings, that prefers stateful updates and not recursion? picolisp: a language that segfaults as easily as c, and gives no error message, no stack trace—just "Segmentation fault (core dumped)."
+
+well, in jan 2022 i realized some great things, detailed in link:codenotes.adoc[codenotes]. basically, of a system, extreme hackability is an asset if the system is simple enough. i see simplicity in the form of a language using only one structure that has strong algebraic properties:
+
+[options="header"]
+|================================
+| lang       | model   | alg prop
+| factor     | stack   | monoidal
+| apl or j   | tensors | many
+| picolisp   | lists   | any
+|================================
+
+this strongly contrasts with oop, where each class is its own particular structure, usually entirely defined ad-hoc without _any_ algebraic properties; for example, these systems can't test whether any two arbitrary structures are isomorphic. to make matters worse, these classes are complected by inheritance. still, even without oop, such things as featuring all of lists, generators, and tuples is horrible; just use one type! of course, what makes these effectively different is that each has its own set of methods (or where they share generic methods, they may differ in how they implement these methods,) and often we need to convert among these types; it's not done implicitly for us. so what's the point of being untyped if we still have types and need to respect their differences?! ah, yes, here transpires that _untyped_ is a lie, and that _latently typed_ is the truth!
+
+the solution is to have as few types as necessary. note that picolisp, c, and j do not have boolean types; mere numbers are used. in picolisp, "number" specifically means "integer;" picolisp does not support floating point numbers. even better. the above langs each have only one structure. contrast this with most languages, which have not only both vectors and [linked] lists, but a whole mess of other structures, inelegantly wired together through a jungle of abstract classes, inheritance, polymorphism, conversion and instantiation functions, available at varying levels of abstraction or implementation. this design is supposedly good: it allows us to express various levels of abstraction, thus achieving polymorphism and composability, keeping things ordered.
+
+did you see that last part? _keeping things ordered._ that's the problem. it's _all_ defined ad-hoc. it's all arbitrary, specified manually. none of that structure is found by natural consequence of the mathematical properties of some primitive structure(s) that form the canonical basis for the space of classes. it needs to be managed, properties specified and enforced. not only that, but it produces a ridiculous glut of method names, many of which have overlapping behavior, but many of which are particular. what effort and complexity! by contrast, in e.g. j, we do not need to specify _behaviors_ of tensors; merely defining them is enough to implicitly benefit from all linear algebra operations, and automatically guarantee the axioms of a vector space, etc. the reason that such structures necessarily are enough to elegantly express all programs is that they're exactly the most basic structure properties: relation and recursion i.e. a catamorphism from `(a, a)` (where `a` is typeless) to a collection of relations of arbitrary size, which guarantees symmetry, and therefore elegance: beauty, or more practically, simplicity of expression and ease of maintainability.
+
+so long story short: extreme hackability is excellent for the simplest languages modeled on single structures that by their mere definition exhibit strong algebraic properties. ad-hoc relation of structures is inherently doomed to be an unmanageable mess.
+
+also btw, important note: structures are defined as sets that obey predicates or shapes; therefore structures' equality is equality of their obeyed axioms and number of degrees of freedom.
+
+=== how simplicity benefits
+
+==== no need to think
+
+whenever i wonder how to start implementing some idea, my mind can be blank. it's nice to know that i have few options, and they're all orthogonal; it makes identifying the right choice easy; i just need to look through them for the first suitable one, and i'll know that it's the only option because, by the orthogonality, the other options cannot satisfy the need satisfied by the found option. my options are:
+
+* control flow: `cond`
+* process input: loop (named `let` [scheme] or `do` or `for` [lisps without continuations])
+  ** `car` for current element, `cdr` for the rest
+* what data do i use? my only choices are lists/pairs, primitives, and lambdas.
+* produce output: i can either compose functions via `lambda`, or i can compose relations via `cons`
+
+and that covers all of the builtin lisp functions (except `quote`, `def`, and `setq`) that aren't macros i.e. syntactic sugar. who needs a standard library?
+
+===== analagous to ADTs
+
+as we've already considered that lists are just recursive relation, it may seem a paradox that `List` is a product type. well, actually it's a general ADT `List a = CAR a | CDR (List a)`. 
+
+* coproducts are like `cond` (ad-hoc, mutually-exclusive). in fp we use `case` to branch on these. like in lisp's `case`, `case` is a specific version of `cond`.
+* products...correspond to `assoc`? naw; assoc corresponds to selecting one of many ADT constructors....
+
+==== no refactoring
+
+type classes have an inherent flaw: people use them. this means that code depends on them. thus to change the type class, dependent code needs to be refactored. what if someone uses it in a way that you don't like? then you can use `newtype` [haskell], which isn't terrible, though it seems like a retrospective hack. and there will _always_ be another type class. perfect example: first haskell had `Monad`. then they added `Functor`, then `Applicative`, and then `Selective` (which is between a monad and applicative.) lists are naturally continuous.
+
+instead, lists are a necessity; they'll always be used, and each occasion wherein a list is used, it must be of a particular shape. the shape restriction is relative only to where it's needed. this is perfect, natural modularity.

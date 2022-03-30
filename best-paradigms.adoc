@@ -1,4 +1,92 @@
-= best paradigms
+== best paradigms
+
+=== minimum
+
+TODO: replace "e.g."'s by total consideration.
+
+what are the necessary components of the minimal practical programming language? turing machines are the simplest, but impractical. here's what we'll do:
+
+. look at languages' models only. e.g. lisp uses lists, factor uses stacks, and link:http://www.om-language.org/[om] uses function composition.
+. consider these models as mathematical structures, then we'll describe them by graphs with unlabeled edges and valueless nodes
+. compare these graphs. e.g. _list_ is synonymous with _stack_ (and arrays are equivalent but with different efficiency for random access and reshaping,) functions are representable by lambdas, which can be described by lists, so functions are isomorphic to lists (composing lists is (via `cons`) is equivalent to composing lambdas.) actual "computation" is called `eval` or β-reduction.
+
+what do we have so far, then?
+
+. things can be stored in stacks / lists / lambda formals or registers / alists / maps / defines (as lua shows us, `x = 4` is the same as setting key `x` to value `4` in the global map (`_G` in lua)). *these are generally seen as lists whose elements may be a pair of key & value.*
+. data inevitably have scope, even if global. they can be accessed only by procedures that have access to their scope. lacking global scope, scope endowment is accomplished via scoped binds, naturally accomplished by parameter passing (`let` is just alternative syntax to lambda composition.)
+
+==== notation
+
+. to help us remember that we're just using the lambda calculus, let's call "eval" `β`
+. lambdas are pairs of an input list and output list a la picolisp
+. quotation will always be quasiquotation (henceforth _qq_), because it's only more capable than quotation without substitution. there's no need to terminate a list with `()`; if you want to recurse, just use `atom`.
+. with such qq & λ, `cons` is redundant and thus omitted 
+. `car`, `cdr`, `if`/`cond`, `atom`, `eq`, and lambdas will be altogether replaced by a common generalization of them: parsers. they're like `cond` on steroids: maps from predicates to values, but with syntax for extracting data and expressing predicates neatly, not obviously distinguishing between equality vs predicate matches, nor predicate satisfacton of form vs value. every lambda's formals supports parser syntax.
+. though `apply` might not be strictly necessary (and can be considered a convenience macro,) we don't need to consider it; we're already using qq, and unquote is a part of that. we can use unquote instead of `apply` a la janet.
+
+thus our language's grammar is: qq, β, λ [parser]; and its vocabulary is interned symbols, words/bytes, and pairs. this is purely functional; adding `set` would change that.
+
+btw macros (as a lang feature) aren't needed; for metaprogramming (mp) just use qq & β. also, mp is nice like racket instead of messy like `defmacro` because lambdas are parsers.
+
+.how to handle state/binds?
+
+yes, they go hand-in-hand.
+
+TODO: shadowing & scoping.
+
+with stack based langs, we've only positional parameters, not named ones, and we access them by `pop` [factor, elisp], so we don't even need identifiers (including ordinals) to reference them. however, this is just a less convenient version of parsers.
+
+''''
+
+the crux of this document: many languages demand constraints for the sake of safety. i say that it's better to demand such simplicity that safety is hardly needed; that the liklihood of someone doing something improper is small because they have few options, and what options exist are always encoded obviously rather than following some special [complex] syntax, convention, or model. simple syntax, conventions, and models are good. for example, stack-based langs or lisp are simple; they each have few rules that define them. this means fewer things for programmers (or compilers or interpreters) to consider. fewer possibilities means higher predictability, and so the programmer's expectation of what's happening is more likely to accurately describe what's actually happening!
+
+* btw fortran is faster than hand-written asm b/c fortran has a very good optimizer
+
+interesting langs not yet considered, (but not necessarily to be considered:)
+
+* roc (potentially better than haskell for programming (cf type algebra.) terser syntax, maybe faster, non-curried though, type checking always succeeds if types are correct, and type annocations are never needed, MUCH improved notation for ADTs, and ADTs are closer to row-polymorphic types)
+* rust
+* pony
+* mercury (based on charity, if memory serves)
+
+and link:https://illumos.org/[illumos]
+
+things like go, zig, and other langs that're basically fast python/ruby/js/v will never be considered unless one is found with particular algebraic language properties or a particularly interesting runtime model.
+
+.introducing erlang & joe armstrong
+
+picolisp: completely hackable (including modifiable during runtime,) uses multiple processes instead of multithreading (thus actor-based concurrency)*
+factor: concatenative, monoidal, optimized
+j: concatenative, parallel
+
+*as joe armstrong said, "[system] threads are evil anyway because they share resources. you have nice things in operating systems which are actually isolated, so one process can't fuck up another process' internal data structures, but threads are evil, 'cause what's the difference between threads and processes? it's that threads _can_ fuck up each others' internal data structures, so they're absolutely the things you don't want to program with."
+
+all three: simple, based on one data structure (list, stack, tensor), efficient (both cpu & mem; enabled due to language symmetry,) algebraic (particular patterns of lisp, monoids & stack updates, tensors,) data-based (both picolisp & factor see programs as data to which functions can be applied. i'm unsure how this is with j.)
+
+erlang (to learn:) distributed (built on π-calculus,) fault-tolerant (b/c of agent independence,) 
+
+all of them altogether:
+
+* systems that update others or themselves incrementally such that each increment does not _destabalize_ the system (i.e. the system can recover; yes, it may error, but it can _recover_)
+* systems that work together and grow together. yes, some may die, and others may spawn new ones
+
+principles:
+
+* fault-tolerant
+  ** isolation (how are things related or unrelated; if unrelated, then one breaking causes the other to break. the surest way to maintain stability is to reduce dependence)
+    *** concurrency
+      **** implicitly parallel (like haskell's evaluation of applicative do blocks)
+* 0 downtime (updates during execution)
+* processes repair other processes that are to broken to repair themselves (i.e. processes stabalize destabalized processes. this is an alternative to killing and spawning a new, replacement process)
+* upon death, its occurence & reason are sent to a living node, which passes that info to wherever it should go
+
+these principles should be applied to data storage, too.
+
+"each module being a unit of service and a unit of failure. a failure does not propogate beyond the module."
+
+joe armstrong's talk, link:https://www.youtube.com/watch?v=cNICGEwmXLU[systems that run forever self-heal and scale] demonstrates that sequential programming is inherently flawed and is therefore a bad practice (excepting small programs like `cat` that serve one simple function that's merely evaluated once per invocation.) also all erlang processes being concurrent explains the adage, "let it crash." in such systems "crashing" refers to a cell rather than an animal.
+
+of course erlang satisfies all these things, since it's built specifically to model physical and organic systems.
 
 .keep in mind while reading
 
@@ -15,8 +103,13 @@ structure:: generally means _form_, i.e. arrangement (of data), i.e. particular 
 
 .TODO's
 
+* consider lisp basis: `cons`, `car`, `cdr`, `quote`, `lambda`, `def` (which binds to data (incl lambdas) or macros a la pil,) `if`, `set`, `eq`, `atom` (opposite of `pair?`,) `eval`. in additon to pil's lambda shape, car & cdr can be done exclusively via deconstruction: `((a b) (cons 1 2) (+ a b))`. this is the applicative form; the pointfree version is `2`. `map` [haskell, scheme] should be called `2:` and should be an overloaded form of fold (same function, different (default) params.)
+  ** to avoid `apply` (which should be done) all functions will take a list of arguments that will be parsed-out; much work will be in optimizing parsing fn args.
+  ** problems: encourages recursion, requiring optimizations/translations to stateful version. using continuations (viz named let) should be easily translatable to assembly jump statements.
+  ** describes intermediate data. this should be replaced or optimized into pipelines that maximize allocated memory reuse.
+  ** how can i merge sexps perfection with photon basis e.g. `a == b => _`? do i so need? no; `cond` covers this perfectly.
+* compare link:https://fortran-lang.org/[FORTRAN] against j and picolisp
 * revise notes. reserve _function_ for the mathematical concept, and use _continuation_ (or some other possibly more-appropriate term) to refer to memory addresses that the instruction pointer can validly have, i.e. those that can be `goto`'d.
-* i think i understand "better 100 fns on 1 data structure than 10 on 10." true, but even better is 30 fns on 1 structure. consider using lists for everything. now the empty element is `()`, like `false` in python or `0` in C. that's an element instead of a function, but it's the same principle. an example with functions is using `assoc` (lookup in alist) which returns `()` or the list where the first found element is. this is better than `find`, which returns `Maybe a`, since it also allows zero-cost traversal of the rest of the list. this makes parsers easy without lack of efficiency. again we test the object for truthiness instead of asking whether it's `Nothing` or `Just _`. also using lists for everything means that we need only some few functions, and we can use them for all kinds of traversals or constructions. of course, better than lists are zippers or trees, but still, these are implemented in terms of lists, so lists are inevitable, if even only as a low-level implementation. this being said, a good language would determine whether to use lists or trees depending on the constraints on each structure given by the programmer.
 * ensure that i mention the importence of anonymous ADTs: for them to express a program elegantly they must be anonymous, just like functional programming without lambdas (i.e. with only named functions) would be horrible.
 * see https://en.wikipedia.org/wiki/Satisfiability_modulo_theories
 * reconsider type classes in terms of factor's oop system
@@ -155,9 +248,28 @@ TODO: complete this section
 . state is unsafe
 . safety should be a concern
 . that _programming language_ is [should be] a countable noun
-. 
 
 .state
+
+tl;dr: the "problem with state" is really multiple agent accessing a common state, where the state change is supposed to affect only a proper subset of those argents, but instead affects a superset of that subset. solutions are:
+
+* scope with parameter passing (including threads with mailboxes; see racket's synchronization model)
+* purity: only mathematical functions—no effectful subroutines. all binds are immutable function parameters. note that concatenative and applicative languages are not different models; they're different styles. concatenative programming simply prefers higher-order combinators.
+* mutex
+* meticulous management of simple state (namely implemented by a stack and/or register machine)
+* π-calculus or other multi-agent models, producer/consumer, blocking queues, barriers, semaphores, &c
+
+or conbinations thereof, e.g. rust's ownership model, which is basically a combination of semaphores and scope with parameter passing.
+
+''''
+
+in discussions of pure fp, stateful updates are commonly said to be impossible. however, state is used rather obviously: rather than updating a variable in place, instead we call a closure which returns updated state. so funcall instead of `set` and programs are compositions of functions instead of updating a state then reading from that state. again, stack-based langs are the degenerate case of state: they're simultaneously purely functional and purely stateful. they illustrate that `(g . f) a` where `f : a -> b, g : b -> c` (pure fp) is equivalent to `a f g` (stack) or `x = a; f a; g a` (purely stateful; `f` & `g` do not _return_ anything; they merely update `x`'s state.) the ability to shadow variables also demonstrates how state is practically used: (let ([x 4]) (let ([x 5]) (print x)))` is no better than `x = 4 x = 5 print x`.
+
+so...what's the problem with state, again? the problem is _shared, emergent_ state: when the execution of a function affects execution of other functions without our anticipating it. we want to be able to track state, to track emergent behaviors, to know that our system isn't doing anything that we hadn't anticipated. while we're on the subject, type checkers are supposed to guarantee that our program cannot behave outside some specified logical-behavioral constraints. indeed constraining behaviors, and enforcing logical/mathematical structure is good. however, choosing a good canonical basis for programs is a superior alternative to adjoining type systems (or any other systems) onto the actual program—the code that actually produces some effect or result from an initial condition.
+
+whatever you do, but stupidly simple. use registers or a stack, state or function composition. multi-paradigm langs are bad unless the paradigms "work well together" (some reflection of models satisfying common patterns and/or having simple transforms between/among them.) like don't write a pure function in a non-pure lang, 'cause then people will wonder about its purity. don't make people wonder; don't give authors options, because then readers will need to check through all options to see which were used. and don't rely on the author documenting, since it's unnecessary and often authors don't document. even if they do, due to the complexity of natural language, they may explain it in a way that only some people can understand. simple means predictable, meaning that devs don't need as much awareness when coding; coding is then more automatic, easier to learnless likely to have mistakes, and easier to write parsers/tools for.
+
+see my `just-use-lists.adoc` article for use of `set` & `reset` as a stateful alternative to `let`. another example is if `sum a b; inc` [asm] isn't really different from `(add1 (+ a b))` [lisp]. you can make macro or preprocessor that maps procedures to registers that they modify, and thus effectively compose functions. hell, you can just use the stack in assembly, much (or "just?") like you would in factor.
 
 .safety
 
@@ -1019,6 +1131,22 @@ i call generators of this style _cons sequences_. i just realized that's an unin
 * in a language whose recursion is inefficient and/or a non-functional language, we'd instead return the address of a function to invoke, rather than the function itself
 * using non-strict thunks like this is just waste if a strict version would be as well. a good language must default to strict eval, using non-strict only when the code implicitly requires it
 
+another benefit of cons-sequences: on particular iterations of their execution, they can perform stateful actions, which other cons-sequences can use. consider the following code:
+
+[source,scm]
+----
+(for/fold ([i 1]) ([x X] [y (Y X)]) where X & Y are sequences
+  (+ (* i x) y))
+----
+
+ideally `X` would be traversed only once. this would be a necessity if `X` performed stateful actions during its execution. (why state instead of returning usual values & rolling state in a list? dunno; maybe this functional approach is always better.) but this would require `Y` to be a cons-sequence, since it'd need to take each x ∈ X as an arg. at least, if not needed nor cleaner, it saves redundant computation.
+
+.the zipping problem
+
+i have multiple loops that generate sequences of differing lengths. the way that i want to use these lists together is particular—not simply shortening lists to the smallest's length, nor padding shorter lists with default values to make them all the length of the longest list.
+
+solution: with sequences or cons-sequences, instead of, on any given iteration, omitting a return value, we can return a zero value; thus padding would be natural; this supports complex padding patterns. it would be interesting to consider how cons-sequences could be redefined to support dependency on other cons-sequences. this immediately seems to relate to frp, non-strict eval langs like haskell, and agent-based models like erlang; such a model may be better for coding in general. of course, the second that you mix functional/applicative and stateful programming, the question "why not use only one" arises, and it's such a valid question that we immediately see that there cannot be a good reason to combine them; they're each orthogonal bases. non-functional applicable programming is just functional programming before people understood how to do it properly. purely stateful programming is what actually physically occurs, and so must always be used. therefore fp is the λ-calculus (plus some extra needless complexity in many languages): a dsl for composing functions, whose final product supports a transform to stateful machine code.
+
 .returning only certain elements
 [source,scm]
 ----
@@ -1234,6 +1362,8 @@ zippers:
 * are dual to queues. both are pairs of lists that transform into one list by reversing one list and appending to the other, but queues do so in a slightly different manner, and thus achieve different functionality.
   ** queues and zippers are alternaties to doubly-linked lists.
 
+as lists are to graphs, matrices (or vectors, depending on processor architecture) are to tensors: graphs or tensors are the most general mathematical structure, but are programmatically implemented in terms of lists or matrices.
+
 zippers are not a particularly fundamental structure; they're given as an example of a possible improvement on a list—namely when one would want to take or split a list. this segways into another point: each graph structure must be designed for particular traversals. however, this is not true of arrays! arrays support all possible traversals over arrays equally well, since arrays are O(1) get & set. therefore arrays are the default solution if you don't know how you'll traverse your data, but you know that it won't change size.
 
 it's impossible to make _strict_ purely functional doubly-linked lists. however, link:https://wiki.haskell.org/Tying_the_Knot[lazy ones] link:https://hackage.haskell.org/package/liboleg-2009.9.1/docs/Data-FDList.html[are possible]. being that even strict languages support non-strict functions by wrapping the original function in a lambda [thunk], construction &al traversals can be non-strict, thus making purely functional doubly-linked lists possible when implemented purely by functions rather than data structures i.e. the "data" of the structure is stored entirely as lambda arguments.
@@ -1384,3 +1514,16 @@ the variant is the tuple (count, xs or (next,more?)) the invariant is at least t
 but those're the variant and invariant of the _implementation_. what are the mathematical variant & invariant?
 
 TODO: identify
+
+==== haskell & lisp
+
+[options="header"]
+|==========================================================================
+| haskell          | lisp
+| Π                | `cons`
+| ⨿                | `car` & `cdr`
+| pat match        | `cond`
+| types            | `lists`
+| constructors     | alist of interned symbols to lists
+| non-strict lists | `(de nats ((i 0)) (cons i (lambda () (nats (+1 i)))))`
+|==========================================================================
