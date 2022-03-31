@@ -277,7 +277,7 @@ see my `just-use-lists.adoc` article for use of `set` & `reset` as a stateful al
 
 .state's utility
 
-state enables communication among threads (locking mechanism required.) this is nice, but, for systems that support it, a functional alternative is mailboxes or other message passing mechanisms that erlang surely has. state also makes control flow easier to express when multiple branches of a complex dataflow update a common state; this saves us the trouble of refactoring the lambdas within the control flow (which are already altogether complex) to accept or return extra parameters. for an example of this, see `just-use-lists.adoc`.
+state enables communication among threads (locking mechanism required.) this is fine design. it may require defining a function with a local bind whose access & mutation is regulated by the function, which may use a sync mechanism in addition to more application-specific logic. for systems that support it, a functional alternative is mailboxes or other message passing mechanisms that erlang surely has. state also makes control flow easier to express when multiple branches of a complex dataflow update a common state; this saves us the trouble of refactoring the lambdas within the control flow (which are already altogether complex) to accept or return extra parameters. for an example of this, see `just-use-lists.adoc`.
 
 ironically the very things that people say are bad about state are the very things that make it good, if done properly! just use locking mechanisms and, for state accessed & updated in various branches in a single thread, just scope the state properly, e.g. using `let`!
 
@@ -314,7 +314,21 @@ g :: Person -> Person -> Person
 
 which is convenient, but requires us to define a type [haskell] or struct [racket]. not bad. in untyped racket's case the only refactoring we'd need is to change the struct's definition. all continuations that use the struct remain as they were. however, what if we want more types? we'd need to add upon the struct or add another struct as a function parameter. such concerns are resolved by using a/lists instead of structs. in this case functions would take the a/list as their one parameter. (this is similar to taking a single row-type parameter in purescript or a map in clojure or an object in js.)
 
-things must be in scope in order to be referenced! the only way to be more convenient than passing parameters is to use globally-scoped binds. immutable globals (as for all immutable bidns) is universally accepted as fine. global mutable binds are usually considered the most dangerous thing ever, but again, depending on the program's needs, adding a locking/sync mechanism or restricting its scope makes it fine, e.g. global static binds, or in scheme, using `define-values` to define multiple functions that use a common state that's been bound within the `define-values` form, acting as a sort of closure. it's not really a closure because because `define-values` is a special form separate from a lambda, but whatever: lexical scoping solves any unsafe non-concurrent mutability problem(s).
+things must be in scope to be referenced! the only way to be more convenient than passing parameters is to use globally-scoped binds. immutable globals (as for all immutable binds) is universally accepted as fine. global mutable binds are usually considered the most dangerous thing ever, but again, depending on the program's needs, adding a locking/sync mechanism or restricting its scope makes it fine, e.g. global static binds, or in scheme, using `define-values` to define multiple functions that use a common state that's been bound within the `define-values` form, acting as a sort of closure. it's not really a closure because because `define-values` is a special form separate from a lambda, but whatever. another solution is using _parameters_ in racket (`fluid-let`) in other lisps.
+
+ultimately lexical scoping solves any unsafe non-concurrent mutability problem(s). TODO: after understanding picolisp's dynamic binding & lexical scoping model, add to this section. the fact that "things must be in scope to be referenced" is always true, but most programmers are so familiar with lexical scoping that suggesting the ability to define a form in terms of variables that may be declared and bound at runtime is as unintuitive as a logic without modus ponens. this is the only thing more dangerous/flexible than mutable globals in static scoping. its advantage is complete orthogonality & flexibility: we don't need to include any modules in order to reference variables undeclared. this is dangerous only if we don't account for the possibility of a variable being unbound, assuming that we can check whether unbound variables are a falsy value; if even trying to reference unbound variables insofar as checking their boundedness (using `if` or some other, more particular special form e.g. `boundp` in elisp) raises an error, then dynamic binding is quite dangerous.
+
+in picolisp
+
+[source,lisp]
+----
+(de x () (+ y 4))
+(x) ; NIL
+(de y . 65)
+(x) ; 69
+----
+
+TIP: this shows another of picolisp's good features: NIL propogation instead of crashing on free identifier.
 
 ==== safety
 

@@ -462,3 +462,72 @@ as we've already considered that lists are just recursive relation, it may seem 
 type classes have an inherent flaw: people use them. this means that code depends on them. thus to change the type class, dependent code needs to be refactored. what if someone uses it in a way that you don't like? then you can use `newtype` [haskell], which isn't terrible, though it seems like a retrospective hack. and there will _always_ be another type class. perfect example: first haskell had `Monad`. then they added `Functor`, then `Applicative`, and then `Selective` (which is between a monad and applicative.) lists are naturally continuous.
 
 instead, lists are a necessity; they'll always be used, and each occasion wherein a list is used, it must be of a particular shape. the shape restriction is relative only to where it's needed. this is perfect, natural modularity.
+
+type classes are obviously encoded via lists: they're just alists from symbol (or other datum that supports a predicate) to alist of type class implemenations, e.g. some `Monad` instances:
+
+[source,scm]
+----
+#| alist of abstract definitions (type class methods,) called "G" for "generic."
+
+   there's no need to have separate type classes: no two type classes
+   can have methods of the same name anyway, so the map from method to
+   type class is unambiguous. to resolve the map from method to instance,
+   we use predicates instead of nominal types. (if you want nominal lookup,
+   you can tag data with symbols; then the predicate is just
+   matching the implemenation name with the tag.
+
+   G is an alist from predicate to an alist of method implemenations.
+   to lookup implementations, we use a variant of assoc that generalizes eq? to
+   predicates. predicate overlap is not a concern if you assume that, like haskell,
+   no types overlap. if we choose to support type specificity, we can match against
+   the most specific matching type, or raise an error if no predicate matched.
+   a strict definition of specificity would use a set of predicates rather than a
+   single predicate; then specificity is the size of that set and lookup would be
+   in a max heap on specificity. 
+
+   however, to keep this example simple, we'll just cons onto G, and lookup will
+   match the first matched predicate. this is a heuristic for specificity: it
+   assumes that more general types (and their implemenations) will be defined
+   before more specific types (since more-specific types are usually defined in
+   terms of their generalizations.)
+
+   G in initialized to default definitions—here just return = pure. (const #t) is
+   analagous to "any type."
+|#
+(define G `((,(const #t) (return . pure))))
+
+(define-syntax-rule (instance x) (set! G (cons x G)))
+
+;; pair implemenation
+;; if mempty isn't found in G then that's effectively the same as trying to
+;; instance a non-Monoid, still giving an error at lookup time.
+(instance `(,pair? (fmap . ,(λ (f p) `(,(car p) . ,(f (cdr p)))))
+                   (pure . ,(λ (x) `(,(tc mempty x) . ,x)))))
+
+;; list implemenation. note that list is a subtype of pair, so we instance
+;; it after instancing pair.
+(instance '(,list? (>>=  . ,(λ (xs k) (apply append (map k xs))))
+                   (pure . ,(λ (x) `(,x)))))
+
+;; in lisp everything's implicitly maybe; lists are used as an n-ary generalization of maybe,
+;; just like list->maybe & maybe->list are used in haskell.
+;; in scheme everything can be #f or anything else—again, effectively maybe.
+;; and again we see (const #t) being "any/every type."
+(instance `(,(const #t) (>>=  . ,(λ (m k) (and m (k m))))
+                        (pure . ,identity)))
+
+;; TODO: define when i've the time.
+(define-syntax (tc stx)
+  (syntax-parse ()
+    ((_ f e) #'(assoc c f))))
+
+(tc >>= '(1 2 3) range)
+----
+
+regarding `list?` & `pair?`, i know that you probably want to make `instance` append onto instances already given rather than just consing onto `G`. noted, though like making G an alist instead of a heap, i'm keeping this example simple. and yes, `(eq? list? list?)` is `#t`, so we would be able to lookup by predicate then merge associated instances.
+
+as `pair?`'s instance demonstrates, the use of type class functions in method definitions implicitly defines type class hierarchy & constraints.
+
+`tc` is a simple implemenation. a more-advanced macro would not require one to specify tc; type class methods would be defined as macros.
+
+also, the way that `tc` expands, lookup in `G` is done at runtime rather than before runtime. this is a design choice to make this example simpler; i'm using racket scheme, which uses different namespaces for macros vs ordinary code, so ideally i'd define `G` in the macro namespace; this would support type class lookup before runtime#, thus supporting "typecheck-time" errors. however, that would complicate this example, and is a consequence of racket, not lisp in general.
