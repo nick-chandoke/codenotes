@@ -241,7 +241,7 @@ we want a notation that makes the asymmetry (there exists) obviously distinct fr
 
 if you can't describe a structure by only numbers and the set to which it belongs, then you don't have a good concept. lambdas cannot be, though certain classes of them can, e.g. recursive combinators.
 
-=== programming fallacies
+=== commonly misunderstood concepts
 
 TODO: complete this section
 
@@ -249,9 +249,13 @@ TODO: complete this section
 . safety should be a concern
 . that _programming language_ is [should be] a countable noun
 
-.state
+==== state
 
-tl;dr: the "problem with state" is really multiple agent accessing a common state, where the state change is supposed to affect only a proper subset of those argents, but instead affects a superset of that subset. solutions are:
+_state_ is program data whose values aren't defined at runtime. for polymorphic programs this can include the program structure.
+
+.state's problem: state shared among continuations
+
+the commonly-mentioned "problem with state" is really multiple continuations (as defined in racket reference §1) accessing a *common state*, where the state change is supposed to affect only a proper subset of those continuations, but instead affects a superset of that subset. solutions are:
 
 * scope with parameter passing (including threads with mailboxes; see racket's synchronization model)
 * purity: only mathematical functions—no effectful subroutines. all binds are immutable function parameters. note that concatenative and applicative languages are not different models; they're different styles. concatenative programming simply prefers higher-order combinators.
@@ -259,9 +263,9 @@ tl;dr: the "problem with state" is really multiple agent accessing a common stat
 * meticulous management of simple state (namely implemented by a stack and/or register machine)
 * π-calculus or other multi-agent models, producer/consumer, blocking queues, barriers, semaphores, &c
 
-or conbinations thereof, e.g. rust's ownership model, which is basically a combination of semaphores and scope with parameter passing.
+or combinations thereof, e.g. rust's ownership model, which is basically a combination of semaphores and scope with parameter passing.
 
-''''
+obviously stacks[concat]/lists[app] (factor or lisp) are more fp and registers (asm) more state. functions implicitly act on the stack or each function uses particular registers. asm is purely stateful (no functions,) though again a sequence of updates is equivalent to applying a sequence of unary functions over a loop, which is equivalent to a single composed function.
 
 in discussions of pure fp, stateful updates are commonly said to be impossible. however, state is used rather obviously: rather than updating a variable in place, instead we call a closure which returns updated state. so funcall instead of `set` and programs are compositions of functions instead of updating a state then reading from that state. again, stack-based langs are the degenerate case of state: they're simultaneously purely functional and purely stateful. they illustrate that `(g . f) a` where `f : a -> b, g : b -> c` (pure fp) is equivalent to `a f g` (stack) or `x = a; f a; g a` (purely stateful; `f` & `g` do not _return_ anything; they merely update `x`'s state.) the ability to shadow variables also demonstrates how state is practically used: (let ([x 4]) (let ([x 5]) (print x)))` is no better than `x = 4 x = 5 print x`.
 
@@ -271,15 +275,56 @@ whatever you do, but stupidly simple. use registers or a stack, state or functio
 
 see my `just-use-lists.adoc` article for use of `set` & `reset` as a stateful alternative to `let`. another example is if `sum a b; inc` [asm] isn't really different from `(add1 (+ a b))` [lisp]. you can make macro or preprocessor that maps procedures to registers that they modify, and thus effectively compose functions. hell, you can just use the stack in assembly, much (or "just?") like you would in factor.
 
-.safety
+.state's utility
 
-.language cardinality
+state enables communication among threads (locking mechanism required.) this is nice, but, for systems that support it, a functional alternative is mailboxes or other message passing mechanisms that erlang surely has. state also makes control flow easier to express when multiple branches of a complex dataflow update a common state; this saves us the trouble of refactoring the lambdas within the control flow (which are already altogether complex) to accept or return extra parameters. for an example of this, see `just-use-lists.adoc`.
 
-a language is a tuple of (semantics,syntax). there's no particular reason to couple these things. useful uncoupling is the variety of syntaxes that translate to instruction sets such as jvm, clr, asm. clojure and java both go to jvm. c and abcl. in fact, abcl is an example of how one syntax (common lisp) may compile to multiple semantic/runtime systems, e.g. CL->asm, CL->C.
+ironically the very things that people say are bad about state are the very things that make it good, if done properly! just use locking mechanisms and, for state accessed & updated in various branches in a single thread, just scope the state properly, e.g. using `let`!
+
+.scope & state
+
+using the λ-calculus, we don't even need `let`. without `set` the λ-calc is implicitly pure. it's simple but requires λ composition; everything is scoped. commonly it's lexical scoping, but that's not necessary. (see wikipedia's consideration of ɑ-renaming.) however, this problem is solved by all languages: they allow top-level definitions (i.e. those outside any lambdas.)
+
+consider:
+
+[source,haskell]
+----
+f :: Int -> String -> String -> IO ()
+g :: Int -> String -> String -> Int -> String -> String -> (Int, String, String)
+----
+
+quick aside: fun fact! `curry` in haskell is like `apply` in lisp! consider how currying is implicit in haskell, as `eval` is implicit in lisp, and haskell tuples are lisp lists/pairs. `curry` is binary and `apply` n-ary, though.
+
+[source,scm]
+----
+;; typed racket
+(: f (-> (-> Int String String) Void))
+(: g (-> Int String String Int String String (List Int String String)))
+(f 0 "tom" "cook") or (apply f '(0 "tom" "cook"))
+----
+
+aside over. now then, this is obviously horrible, especially to refactor. clearly the triple describes a person and should be grouped:
+
+[source,haskell]
+----
+data Person = CommonInputs { n :: Int, name :: String, job :: String }
+f :: Person -> IO () 
+g :: Person -> Person -> Person
+----
+
+which is convenient, but requires us to define a type [haskell] or struct [racket]. not bad. in untyped racket's case the only refactoring we'd need is to change the struct's definition. all continuations that use the struct remain as they were. however, what if we want more types? we'd need to add upon the struct or add another struct as a function parameter. such concerns are resolved by using a/lists instead of structs. in this case functions would take the a/list as their one parameter. (this is similar to taking a single row-type parameter in purescript or a map in clojure or an object in js.)
+
+things must be in scope in order to be referenced! the only way to be more convenient than passing parameters is to use globally-scoped binds. immutable globals (as for all immutable bidns) is universally accepted as fine. global mutable binds are usually considered the most dangerous thing ever, but again, depending on the program's needs, adding a locking/sync mechanism or restricting its scope makes it fine, e.g. global static binds, or in scheme, using `define-values` to define multiple functions that use a common state that's been bound within the `define-values` form, acting as a sort of closure. it's not really a closure because because `define-values` is a special form separate from a lambda, but whatever: lexical scoping solves any unsafe non-concurrent mutability problem(s).
+
+==== safety
+
+==== language cardinality
+
+a language is a tuple of (semantics,syntax). there's no particular reason to couple these things. useful uncoupling is the variety of syntaxes that translate to instruction sets such as jvm, clr, asm. clojure and java both go to jvm. c and abcl to asm. in fact, abcl is an example of how one syntax (common lisp) may compile to multiple semantic/runtime systems, e.g. CL->asm, CL->C.
 
 while we're at it, lisps (most notably picolisp) do not have syntax beyond a literal encoding of data relations, which is the bare minimum needed to express a program, or _any_ structure for that matter! so why have syntax? it clearly isn't needed or even commonly useful. but let's assume that sometimes it may be nice; then we use macros (or, again most notably in the case of picolisp, `eval`.)
 
-so now we've reduced language _out of existence_ (or _beyond a degenerate form_) to the truth of
+so now we've reduced language _out of existence_ (or _beyond a degenerate form_) to the truth of:
 
 . some bare-necessity syntax (viz one that describes relations)
 . optional "on-demand" syntax for convenience i.e. the "syntax" is merely a small & particular system of relation. usually the relation is a function or constraint on composition of functions of particular forms. it's important to note that _functions_ aren't special; they're just relations. instead, evaluation is special; it enables reasoning about ideas / enacting instructions. notice i didn't say `eval`! `eval` is only one variety of evaluation. another example variety is type checking, which, rather than executing instructions, parses relations of logical elements, checking for logical consistency or net implication.
