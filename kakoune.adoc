@@ -1,5 +1,9 @@
 == kakoune
 
+TODO's:
+
+* learn about dead processes (e.g. `kak -l` lists a process followed by `(dead)`). closing that socket likely has to do with allowing tcp rebinding
+
 * link:https://github.com/mawww/kakoune/blob/master/doc/pages/scopes.asciidoc[docs]
 * it's pronounced "ka'koon"
 

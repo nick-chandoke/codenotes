@@ -26,15 +26,42 @@ what do we have so far, then?
 
 thus our language's grammar is: qq, β, λ [parser]; and its vocabulary is interned symbols, words/bytes, and pairs. this is purely functional; adding `set` would change that.
 
-btw macros (as a lang feature) aren't needed; for metaprogramming (mp) just use qq & β. also, mp is nice like racket instead of messy like `defmacro` because lambdas are parsers.
-
-.how to handle state/binds?
-
-yes, they go hand-in-hand.
-
-TODO: shadowing & scoping.
+* macros (as a lang feature) aren't needed; for metaprogramming (mp) just use qq & β. also, mp is nice like racket instead of messy like `defmacro` because lambdas are parsers.
+* lambdas will accept an optional label, for easy recursion/goto/continuation. there will not be a "define" form. all binds will be accomplished by parsers.
 
 with stack based langs, we've only positional parameters, not named ones, and we access them by `pop` [factor, elisp], so we don't even need identifiers (including ordinals) to reference them. however, this is just a less convenient version of parsers.
+
+=== the few necessary aspects of every language
+
+==== scope & binds
+
+how identifiers & context map to values. basically static vs dynamic and flat vs hierarchical: lexical (innermost context with identifier) or dynamic (one identifier stored in a global, stateful map). scope is an alternative to passing parameters (since passing parameters merely binds within the called function's scope.) wikipedia's article said that dynamic scoping globally binds within function bodies, then unbinds when the function returns. anyway scoping relates to: (de)allocation, context delimitation, semantics of free variables (usually illegal, but in lua and picolisp free vars are null. theorem provers (e.g. agda,) type checkers (e.g. haskell,) or logical deduction systems (e.g. datalog) could use them as part of a reïfication engine.)
+
+generally every binding syntax has its own associated scoping rule, even if many use the same rules. for example, the `for` (&al loop) syntaxes in algol languages bind where the scope is the loop body.
+
+lexical scoping is more natural to function composition (applicative style;) dynamic scoping is more natural to mutation.
+
+of course, scope & binds are concerns only if they're used, which they aren't in concatenative paradigms, aside from possibly defining functions, which always (i think, at least in apl & factor) have scopes exactly their parameters (ɑ [& ω] or the stack.)
+
+for a statement in one context to be able to modify another context is a grave mistake, completely confused and senseless. one should have either [pure] functions or subroutines (which do not return a value; they're pure mutation.) within either a function or subroute (collectively _subprograms_) definition one may bind; these binds are valid only within the body (and *not* in subprograms called within the subprogram) and are freed upon the subprogram terminating. subprograms are then merely delimited sections of the whole program.
+
+what makes programming difficult is when expectations about program behavior aren't clear. the ability to merge multiple different rules is a primary cause of such difficulty & danger. thus multiparadigm is good if there's also separation of paradigms, such as purely functional or purely mutative. a clear violation of this design principle is languages featuring a `local` keyword, implying that there's no single consistent scoping rule, which means that we as programmers generally need to read through every single subprogram just to know its behavior. haskell uses the `IO` monad as a clever yet overly restrictive solution to clearly *delimiting/marking* pure vs impure functions.
+
+to consider a "single program" as such is foolish; we should be able to add or remove any subprograms and still be left with a valid (though possibly nonsense) program.
+
+===== dynamic scoping vs dynamic binding
+
+dynamic binding is when expressions of free vars are valid; their value is determined at evaluation time. dynamic scoping is each identifier having a stack, and binding means pushing to that stack. wait...this definiton can implement lexical scoping; it's really just shadowing.
+
+yeah, i'm giving up on trying to understand how binding and scope are different. for example, picolisp uses dynamic binding (ok) but supports lexical scoping via transient or private symbols. to me, that seems like lexical binding. it seems that the difference has something to do with whether a language is compiled vs interpreted. either way, it appears to be at least an unhelpful (if not invalid) distinction.
+
+==== mutation
+
+in place (_mutation_) or with separate destination (_function_).
+
+==== looping
+
+iteration or recursion. generally goto where dataflow is a cycle [graph theory]. given that goto is just funcall, goto is a useful generalization, suggesting that it should be used for all program _sequencing_ (deriving execution paths from a graph of statements [graph theory]).
 
 ''''
 

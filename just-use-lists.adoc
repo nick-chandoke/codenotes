@@ -4,7 +4,7 @@ this article criticizes typing as it's currently used in programming. this does 
 
 .preface
 
-i used haskell from 2017 through oct 2019, and it was the first real programming language that i'd learned since java, and it totally blew my mind. i still say that it (haskell2010) is an excellent language, yet lisp obviates it. i began learning scheme in feb 2020, and started using typed racket shortly thereafter, until feb 2022, when i decided that types were hardly beneficial overly-restrictive cruft. i'd always wondered how anyone ever got _anything_ done in untyped languages—and i still do! here i discuss types, when they're good, why they usually aren't, what's better, and how this better untyped system is different from common untyped systems like javascript or python. for almost all of my life i've been using typed programming and relying on the typechecker heavily, and using it (in the case of haskell) for considering the mathematical structure of my code, and using type calculus to redesign my code and correct design logical inconsistencies. i say all this so that you understand that i have valued formal math even before discovering haskell (and in fact i found haskell because it was the closest extant language to a theoretical purely-declarative language that i'd drafted over a few years)—that i'm not just someone who though that it was "easier to get started" with untyped languages such as python just because they make it easier/faster to get code to run correctly in common use cases. to put it lightly, i'm *not* a fan of non-reproducability, unmanaged/emergent state, oop, or not being told the shape/type of the data with which i'm working.
+i used haskell from 2017 through oct 2019, and it was the first real programming language that i'd learned since java, and it totally blew my mind. i still say that it (haskell2010) is an excellent language, yet lisp obviates it. i began learning scheme in feb 2020, and started using typed racket shortly thereafter, until feb 2022, when i decided that types were hardly beneficial overly-restrictive cruft. i'd always wondered how anyone ever got _anything_ done in untyped languages—and i still do! here i discuss types, when they're good, why they usually aren't, what's better, and how this better untyped system is different from common untyped systems like javascript or python. for almost all of my life i've been using typed programming and relying on the typechecker heavily, and using it (in the case of haskell) for considering the mathematical structure of my code, and using type calculus to redesign my code and correct design logical inconsistencies. i say all this so that you understand that i have valued formal math even before discovering haskell (and in fact i found haskell because it was the closest extant language to a theoretical purely-declarative language that i'd drafted over a few years)—that i'm not just someone who thought that it was "easier to get started" with untyped languages such as python just because they make it easier/faster to get code to run correctly in common use cases. to put it lightly, i'm *not* a fan of non-reproducability, unmanaged/emergent state, oop, or not being told the shape/type of the data with which i'm working.
 
 ''''
 
@@ -104,7 +104,7 @@ now consider this alternative which uses lists of particular shape instead of a 
     [(_ [g (~literal =>) x e ...+] . rst) #'(let ([x g]) (if x (begin e ...) (cond-let . rst)))]
     [(_ [p e ...+] . rst) #'(if p (begin e ...) (cond-let . rst))]));; combo of assoc & member. also doesn't enforce racket's needlessly restrictive contract on assoc.
 
-;; this works on a mix of alist & list, which is a more useful structure than strict lists or alists.
+;; this works on a mix of alist & list, which is a more useful structure than "plain" lists (i.e. that don't support assoc) or alists.
 ;; as this is a mix of alists & lists, i'll call them "a/lists."
 (define (massoc k s [p equal?])
   (let lp ([s s])
@@ -210,13 +210,15 @@ the code was made by following a few design rules:
 * rather than using constructors, we use symbols. we can use `limit`, `stop`, and `trailing` without worrying about scope or shadowing. in other words, it's like a lisp-standard simpler alternative to prefacb structs in racket.
 * much simpler
   ** easier to refactor
-  ** faster to read
+  ** faster to read (namely `type-map`, which nicely separates code from data)
   ** exploits mutual exclusivity of link & basis types, allowing them to be expressed in any order.
   ** both link & basis are simply sum types, so they can be expressed simply as lisp symbols. same with stop's or limit's ability ta accept percents or numbers.
   ** at least for me, cruft feels uncomfortable. using one data type for everything feels nice: clean & predictable.
     *** the expectation that everything is lists encourages developers to describe the shapes of their data, like how is done for macro syntaxes. if the syntax needs tl;dr description, authors are likely to use math terms or reference similar shapes. this is much nicer than giving a name, forcing me to jump around documentation from name to name (since types are often composed of other types) just to see what kind of data i'm dealing with!
   ** uses list to simultaneously express optionality and plurality; `[Either a b]` therefore replaces and generalizes `Maybe (These a b)`. in this case, though, we're even more general: a list of a sum of an arbitrary number of types (cf `Either` which is a sum of only exactly 2 types.) this is why this model works better than product types.
 * permits factoring common properties. e.g. `[(String, [Order], [Order])]` can correspond to shape `((name (open) (filled)))`. this shape is, among its isomorphisms, particularly nice because we can `assoc` to get all orders which are naturally partitioned into open and filled. if we want to perform an operation on all orders, then we simply recurse on the value returned by `assoc` (assuming non-falsy.)
+
+NOTE: a/lists can be expressed better without extra delimitation, e.g. `'(a 1 b 2)` instead of `'((a . 1) (b . 2))` or `'((a 1) (b 2))`; or `'(a 1 b (2 3) c 4)`, which is alternative to `'(a 1 (b 2 3) (c 4))`. the only difference among all these is whether we use `cdr` or `cadr`, and which varieties a given lisp's `assoc` supports.
 
 .bad
 
@@ -252,7 +254,7 @@ the alternative is lists. lists are universal because they're the simplest struc
 
 ==== naturality, shapes
 
-lists are considered simply as data and can describe any type/structure. we as coders have complete freedom with them. while type enthusiasts 
+lists are considered simply as data and can describe any type/structure, including programs. we as coders have complete freedom with them, whereas type systems currently lack such flexibility; e.g. type systems don't support an analogue of `assoc`.
 
 ==== computable programs
 
@@ -265,7 +267,6 @@ this could be solved by using a macro. however, that's potentially inconvenient 
 even better is the program being written in terms of simple structures with strong/capable algebraic properties such as matrices.
 
 ''''
-
 
 NOTE: _apply_ means _evaluate on some args_; _evaluate_ by itself is shorthand for _evaluate on no args_.
 
@@ -300,8 +301,7 @@ KAKOUNE_CONFIG_DIR = "$HOME/.config/kak/"
 prompt = "echo (pwd) ' ║ '" # command whose output is used for the prompt
 table_mode = "rounded" # "light" "none"
 
-startup = [ "source ~/.config/nu/aliases.nu" # why does this do nothing but running in terminal works?
-          # , 'env | each { |it| echo $"let-env ($it.name) = '($it.raw)'" } | str collect (char nl)' # TODO: how to properly quote this?
+startup = [ "source ~/.config/nu/aliases.nu"
           ]
 ----
 
@@ -323,8 +323,7 @@ thus the solution was to move before any sections:
 prompt = "echo (pwd) ' ║ '" # command whose output is used for the prompt
 table_mode = "rounded" # "light" "none"
 
-startup = [ "source ~/.config/nu/aliases.nu" # why does this do nothing but running in terminal works?
-          # , 'env | each { |it| echo $"let-env ($it.name) = '($it.raw)'" } | str collect (char nl)' # TODO: how to properly quote this?
+startup = [ "source ~/.config/nu/aliases.nu"
           ]
 
 [env]
@@ -438,7 +437,22 @@ also btw, important note: structures are defined as sets that obey predicates or
 
 === how simplicity benefits
 
+==== no need for syntax [wip]
+
+the best way to avoid syntaxes limitations is to use lists instead of syntax. for example, i defined `cond-let` to handle what `cond` could not. writing macros is dumb. `let` for scoped binds? how about an alist: that's `let-values` whose scope is the alist itself; `assoc` can't refer to something outside the list, just as an identifier cannot refer to a bind that's not in scope as determined by `let`. btw, remember that `let` is just syntax for `lambda`, so the same argument is made for lambdas, too.
+
+granted, you obviously don't _need_ syntax, as evidenced by lisp having only a dozen or so builtin functions/forms. i mean to emphasize that new syntaxes should not be defined; instead just use lists, and iterate over them. use combinators and folds over lists, and use lambdas for the only occasionally-needed (as demonstrated by factor [lang]) binds. use whichever of stateful iteration / goto or recursion / callable continuations is optimizied by the runtime that you're using. if you're using an array language, then use multiple arrays each with non-array elements, if that's faster. like, you don't need _lists_, exactly; you just need anything isomorphic to lists, interned symbols, and lambdas.
+
+what can or can't we do by a/lists?
+
+* a/list elements cannot reference each other, except via a common bind in the same scope as the a/list. this is directly related to circular buffers being impossible to define using lisp style lists (though possible with linked lists in C).
+* TODO: what do a/lists enable us beyond the basics of a turing-complete language: bind (add to current a/list of binds,) goto/funcall/eval, _?
+  ** not a suitable alternative to binds in lexically scoped langs b/c each list's element has none of the other elements in scope. still, alists are a fine representation of binds, and can be passed around, and are naturally scoped (as connoted by the delimiting parens)
+  ** a/lists describe all complex structures, including implemenations of the basic features like binds
+
 ==== no need to think
+
+.code
 
 whenever i wonder how to start implementing some idea, my mind can be blank. it's nice to know that i have few options, and they're all orthogonal; it makes identifying the right choice easy; i just need to look through them for the first suitable one, and i'll know that it's the only option because, by the orthogonality, the other options cannot satisfy the need satisfied by the found option. my options are:
 
@@ -450,14 +464,69 @@ whenever i wonder how to start implementing some idea, my mind can be blank. it'
 
 and that covers all of the builtin lisp functions (except `quote`, `def`, and `setq`) that aren't macros i.e. syntactic sugar. who needs a standard library?
 
-===== analagous to ADTs
+.data
 
-as we've already considered that lists are just recursive relation, it may seem a paradox that `List` is a product type. well, actually it's a general ADT `List a = CAR a | CDR (List a)`. 
+what about data structures? lists. that's it. want to group things? put 'em in a list. any time that you need to identify what a thing is:
+
+. dentify its attributes, throwing them into a list without regard to order
+. after you think that you've identified all its attributes, factor-out commonalities. generally, reduce redundancies. examples:
+  .. if coding a stock trader, you might start with an order as `(quantity type)` where `type` is `'short`, `'buy`, or `'exit` and `quantity` is a positive float. this reduces to `(quantity)` where a negative quantity means `short`, positive means `buy`, and 0 means `exit`
+  .. `()` factors into `()`
+. identify relations/constraints among attributes; these will suggest ordering & grouping (consing) attributes so that traversals over the lists are natural. examples:
+  .. a circle can be described by `(x y r)`, but `(r x y)` allows us to `car` to get `r` and `cdr` returns `(x y)`, which we can pass as a point to functions that take points, rather than needing to extract `x` & `y` individually then combine them.
+    ... values that may be used multiple times can be defined then put in multiple positions, e.g. `(let (x (make-big-struct)) `(,x 0 1 (2 . ,x) 3))` which practically adds nothing to computation since we're merely putting a pointer to `x` in the list.
+
+feel free to work with lists as organically as you please; lists impose no constraints. you can group as many things in as many ways as you want, e.g. pass ``(,f ,g)` somewhere where they're both used, and pass `'(,f ,g ,h)` somewhere where those three are used. no need to worry about types like `(struct _mandatory-name ([f : f]) ([g : g]) ([h : (Option h)]))`. it's amazing that there was a time when i wasn't vehemently opposed to such things.
+
+using lists instead of structs is like using lambdas instead of needing to define functions; lists are the anonymous complex (cf primitive) data type.
+
+==== oopy/groupy
+
+_grouping_ is the constraint or suggestion that some things should be used together, that they should not be mixed with other lists. as i explore in §_no refactoring_ below, alists can encode type classes; but more simply, alists whose cdrs are functions makes a good & simple way to bundle functionality together into a sort of on-the-fly class. this with closures makes simple oop style classes. arguably we can improve this by defining a meta-function that's `let` except accepts an identifier whose value is an alist, rather than an alist literal. in languages (like racket) where this isn't possible, we have a decent alternative: returning a function:
+
+[source,scm]
+----
+;; convert an alist of functions into a function that selects & applies therefrom
+(define (alist/fn->fn m) (λ (f . args) (apply (cdr (assoc f m)) args)))
+(define fns (alist/fn->fn `((f . ,(λ (a) (+ 4 a)))
+                      (g . ,(λ (a b) (/ (+ a b) 2))))))
+`(,(fns 'f 1) ,(fns 'g 4 6)) ; (5 5)
+----
+
+you may recognize that this is prototype-style oop: functions that return maps from symbols to functions or data. this is what javascript used before it was given builtin oop classes in ECMAScript 2015. in such old js this would've been:
+
+[source,js]
+----
+fns = { "f" : function(a)   {return 4 + a;}
+      , "g" : function(a,b) {return (a + b) / 2;}
+      };
+[fns.f(4), fns.g(4)] //[8, 16]
+----
+
+we cannot do `(define (fns f . args) (case f [(f) (apply + args)] ...))` because, in languages with strict/eager evaluation, that would evaluate all cases each time you call any one function, which, aside from being wasteful, could be harmful if any of the functions were impure.
+
+this oop has a significant limitation under lexical scoping: each of the a/lists's values' definitions have a common scope, but that scope does not include other of the a/list's elements! thus `f` cannot reference `g` nor vice versa. this is not a practical concern of lisps (see below for workaround) but rather highlights *a noteworthy limitation of the functional singly-linked list construct: they cannot express cyclic graphs, thus cannot support loops, and are thus insufficient for encoding general programs.*
+
+again, in languages with dynamic binding/scoping this isn't a problem. oopy langs solve this by having the `this` keyword or other builtin oop primitives. in lisp we can simply define functions in terms of each other inside a closure that returns them in a map:
+
+[source,scm]
+----
+(define fns
+  ;; co-recursive f & g. terminating dummy definitions.
+  (letrec ([f (λ (a) (if (> a 0) a (g a 16)))]
+           [g (λ (a b) (- (/ (+ a b) 2) (f b)))])
+    (alist/fn->fn `((f . ,f) (g . ,g)))))
+`(,(fns 'f 1) ,(fns 'g 4 6)) ; (1 -1)
+----
+
+===== analagous to ADTs [wip]
+
+as we've already considered that lists are just recursive relation, it may seem a paradox that `List` is a product type. well, actually it's a general ADT `List a = CAR a | CDR (List a)`. all recursive ADTs in a strict-eval lang must entail coproducts to code base case(s). non-strict eval langs like haskell support unbounded ADTs like link:https://hackage.haskell.org/package/hinze-streams-1.0/docs/Data-Stream-Hinze-Stream.html[corecursive/coinductive types].
 
 * coproducts are like `cond` (ad-hoc, mutually-exclusive). in fp we use `case` to branch on these. like in lisp's `case`, `case` is a specific version of `cond`.
 * products...correspond to `assoc`? naw; assoc corresponds to selecting one of many ADT constructors....
 
-==== no refactoring
+==== no refactoring [wip]
 
 type classes have an inherent flaw: people use them. this means that code depends on them. thus to change the type class, dependent code needs to be refactored. what if someone uses it in a way that you don't like? then you can use `newtype` [haskell], which isn't terrible, though it seems like a retrospective hack. and there will _always_ be another type class. perfect example: first haskell had `Monad`. then they added `Functor`, then `Applicative`, and then `Selective` (which is between a monad and applicative.) lists are naturally continuous.
 
@@ -531,3 +600,7 @@ as `pair?`'s instance demonstrates, the use of type class functions in method de
 `tc` is a simple implemenation. a more-advanced macro would not require one to specify tc; type class methods would be defined as macros.
 
 also, the way that `tc` expands, lookup in `G` is done at runtime rather than before runtime. this is a design choice to make this example simpler; i'm using racket scheme, which uses different namespaces for macros vs ordinary code, so ideally i'd define `G` in the macro namespace; this would support type class lookup before runtime#, thus supporting "typecheck-time" errors. however, that would complicate this example, and is a consequence of racket, not lisp in general.
+
+=== runtime efficiency [wip]
+
+i promote a/lists as a universal structure for _describing_ things, among which are programs. how & when does this differ from literally using linked lists? an implementation would prefer SIMD (for supported architectures) or else continuous, static memory (arrays/vectors) if they allocate faster than linked lists, else uncontiguous, dynamic memory (linked lists, trees, skip lists, &c.)
