@@ -1,6 +1,29 @@
 == best paradigms
 
-=== minimum
+NEXT: learn then incorporate erlang and prolog. consider prolog as the ideal between of contracts and type systems.
+
+it's important for developers to learn
+
+* C (procedural)
+* prolog (declarative, horn clause-based)
+* apl (concatenative, tensor-based)
+* assembly (procedural, purely stateful, register machine)
+* haskell (purely functional, λ-calculus)
+* factor (stack machine)
+* erlang (agent & message-based, π-calculus)
+
+these are different from common langs like python, ruby, go, java, &c. C fits in this category, except that C is the simplest version of all these, and so is best. common langs are all complex, interchangable, and mixed-paradigm—all of which are bad qualities.
+
+learning all these languages is important because each language is very different from all the rest. each is a simple language with one underlying structure, one paradigm. one can look at these languages altogether and infer the fundamentals of computing, and see how paradigms completely at odds with each other nonetheless are turing-complete, convenient, and elegant.
+
+considering such things makes one realize how bloated & confused most other langs are, so choosing simple langs is obvious and liberating. the simple langs demenstrate that hardly are "languages" needed, but instead simple notations for describing equivalent formal systems. such study reveals that common assumptions are false. truths:
+
+* variables aren't needed
+* can remove arbitrary chunks of programs and a valid program remains
+* making self-modifying programs is plain & simple
+* we can run programs backwards
+
+=== minimum [wip]
 
 TODO: replace "e.g."'s by total consideration.
 
@@ -14,6 +37,10 @@ what do we have so far, then?
 
 . things can be stored in stacks / lists / lambda formals or registers / alists / maps / defines (as lua shows us, `x = 4` is the same as setting key `x` to value `4` in the global map (`_G` in lua)). *these are generally seen as lists whose elements may be a pair of key & value.*
 . data inevitably have scope, even if global. they can be accessed only by procedures that have access to their scope. lacking global scope, scope endowment is accomplished via scoped binds, naturally accomplished by parameter passing (`let` is just alternative syntax to lambda composition.)
+
+it should be enough to simply define data as relations of other data; this is merely lists, generally graphs, which specify constraints/relations of data, including access and mutation, thereby coding synchronization or other relations of puts & gets. then it should be enough to define programs as mutations (regardless of whether in-place mutation or function) thereof. this is pretty easy currently in any lisp for which mutation is faster than recursion: make some few global vars in a module. allow access to it wherever necessary. you can use such simple, few globals as stack(s) or registers. now we _could_ make this work for recursion-preferring langs, but that's a little more difficult for reasons described in the example in `just-use-lists.adoc`.
+
+what all good models have in common is minimizing every variable's scope. however, the language must make doing so elegant. many langs fail here; it's often preferable to use larger-than-necessary scopes for convenience.
 
 ==== notation
 
@@ -31,15 +58,76 @@ thus our language's grammar is: qq, β, λ [parser]; and its vocabulary is inter
 
 with stack based langs, we've only positional parameters, not named ones, and we access them by `pop` [factor, elisp], so we don't even need identifiers (including ordinals) to reference them. however, this is just a less convenient version of parsers.
 
+TODO: what about coparsers to help ppl write valid programs?
+
 === the few necessary aspects of every language
+
+_static_ (or _early_) means "determinable before runtime;" _dynamic_ (or _late_) means "determined only during runtime." think of static vs dynamic arrays in c: static ones' addresses can be known without running the program; dynamic ones aren't knowable, and even the size isn't knowable before running the program, and even then, it changes throughout the program!
+
+dynamic indicates polymorphism (or variation, instead of being constant): one of many values will be chosen, and we don't know which without tracing program state, whereas static means that only one value is possible. for example, if `run` is an ad-hoc polymorphic identifier (e.g. a method of an abstract class in c++ or java) then its value is determined by an object, e.g. `obj:run()`. this lua syntax is akin to oopy `obj.run()` in java, but is actually syntactic sugar for `run(obj)`—an equivalent haskell-style functional approach. this example of _dynamic_ connoting polymorphism is specifically one of dynamic binding. static or dynamic of a binding refers to the bind's value.
+
+* static is concrete enough that we can use non-algebraic rewrite rules.
+* static is always potentially faster than dynamic.
 
 ==== scope & binds
 
-how identifiers & context map to values. basically static vs dynamic and flat vs hierarchical: lexical (innermost context with identifier) or dynamic (one identifier stored in a global, stateful map). scope is an alternative to passing parameters (since passing parameters merely binds within the called function's scope.) wikipedia's article said that dynamic scoping globally binds within function bodies, then unbinds when the function returns. anyway scoping relates to: (de)allocation, context delimitation, semantics of free variables (usually illegal, but in lua and picolisp free vars are null. theorem provers (e.g. agda,) type checkers (e.g. haskell,) or logical deduction systems (e.g. datalog) could use them as part of a reïfication engine.)
+firstly, neither scope nor binds is necessary, as assembly language demonstrates. however, it's arguable that the names of registers are identifiers bound to given values, and that the scope is totally global—a "zero" scope, so to speak. there's no avoiding the facts that:
 
-generally every binding syntax has its own associated scoping rule, even if many use the same rules. for example, the `for` (&al loop) syntaxes in algol languages bind where the scope is the loop body.
+. values are addressed somehow, whether by address in a heap, or position on a stack, &c
+. in all expressions, subexpressions are either bound or free, and there must be a rule for determining which
 
-lexical scoping is more natural to function composition (applicative style;) dynamic scoping is more natural to mutation.
+===== definitions
+
+[cite wikipedia, cite late binding]
+----
+_dynamic binding_ is sometimes used [to refer to late binding], but is more commonly used to refer to dynamic scope.
+----
+
+consider the following picolisp code:
+
+[source,lisp]
+----
+(de f () (+ x 4)) ; (1)
+(f) ; NIL         ; (2)
+(de x . 65)       ; (3)
+(f) ; 69          ; (4)
+----
+
+TIP: this shows another of picolisp's good features: NIL propogation instead of crashing on free identifier.
+
+the combination of dynamic binding and dynamic scope allows this code to be valid: in line 1, the dynamic binding allows `x` to accept whatever value it's bound to when `f` is invoked. dynamic scope allows `x` in `f` to inherit the top-level value of `x`.
+
+NOTE: being top-level isn't praticularly relevant; all that matters is that the `x` in f is an inner-more scope than `x` outside of `f`.
+
+though dynamic binding makes parameter passing unnecessary, parametrs are still nice, since they allow unbound (anonymous) expressions to be given to functions for use; it frees us of the need to bind everything to names.
+
+if we'd used dynamic binding and lexical scope, then `f`'s definition would be invalid; `x` isn't in its scope. lexical scope is known for closures; let's look at a practical dyn.bind/lex.scope example:
+
+[source,lisp]
+----
+(de f () ; closure of x
+  (de x . 4)
+  (+ x y))
+(f) ; NIL; y isn't bound
+(de y . 6)
+(f) ; 10. dynamic binding: f can use y, and as per lexical scoping rules, y is in f's scope.
+x ; NIL. x is bound only within f
+----
+
+except that that doesn't actually happen in picolisp since link;https://software-lab.de/doc/faq.html#closures[picolisp doesn't use lexical scoping]. i've yet to learn (let alone understand) picolisp's bind & scope mechanisms.
+
+* it seems that dynamic scope implies dynamic binding, since scope determines binds' values.
+* scoping relates to:
+  ** deallocation in gc langs
+  ** context delimitation
+  ** semantics of free variables. usually illegal, but
+    *** in lua and picolisp free vars are null
+    *** theorem provers (e.g. agda,) type checkers (e.g. haskell,) or logical deduction systems (e.g. datalog) could use them as part of a reïfication engine.
+* generally every binding syntax has its own associated scoping rule, even if many use the same rules. for example, the `for` (&al loop) syntaxes in algol languages bind where the scope is the loop body.
+* lexical scoping is more natural to function composition (applicative style;) dynamic scoping is more natural to mutation.
+* racket's _parameters_ are dynamically scoped
+
+===== wise use
 
 of course, scope & binds are concerns only if they're used, which they aren't in concatenative paradigms, aside from possibly defining functions, which always (i think, at least in apl & factor) have scopes exactly their parameters (ɑ [& ω] or the stack.)
 
@@ -48,12 +136,6 @@ for a statement in one context to be able to modify another context is a grave m
 what makes programming difficult is when expectations about program behavior aren't clear. the ability to merge multiple different rules is a primary cause of such difficulty & danger. thus multiparadigm is good if there's also separation of paradigms, such as purely functional or purely mutative. a clear violation of this design principle is languages featuring a `local` keyword, implying that there's no single consistent scoping rule, which means that we as programmers generally need to read through every single subprogram just to know its behavior. haskell uses the `IO` monad as a clever yet overly restrictive solution to clearly *delimiting/marking* pure vs impure functions.
 
 to consider a "single program" as such is foolish; we should be able to add or remove any subprograms and still be left with a valid (though possibly nonsense) program.
-
-===== dynamic scoping vs dynamic binding
-
-dynamic binding is when expressions of free vars are valid; their value is determined at evaluation time. dynamic scoping is each identifier having a stack, and binding means pushing to that stack. wait...this definiton can implement lexical scoping; it's really just shadowing.
-
-yeah, i'm giving up on trying to understand how binding and scope are different. for example, picolisp uses dynamic binding (ok) but supports lexical scoping via transient or private symbols. to me, that seems like lexical binding. it seems that the difference has something to do with whether a language is compiled vs interpreted. either way, it appears to be at least an unhelpful (if not invalid) distinction.
 
 ==== mutation
 
@@ -310,7 +392,7 @@ ironically the very things that people say are bad about state are the very thin
 
 .scope & state
 
-using the λ-calculus, we don't even need `let`. without `set` the λ-calc is implicitly pure. it's simple but requires λ composition; everything is scoped. commonly it's lexical scoping, but that's not necessary. (see wikipedia's consideration of ɑ-renaming.) however, this problem is solved by all languages: they allow top-level definitions (i.e. those outside any lambdas.)
+using the λ-calculus, we don't even need `let`. without `set` the λ-calc is implicitly pure. it's simple but requires λ composition; everything is scoped. commonly it's lexical scoping, but other scoping rules work, too. (see wikipedia's consideration of ɑ-renaming.) however, this problem is solved by all languages: they allow top-level definitions (i.e. those outside any lambdas.)
 
 consider:
 
@@ -344,18 +426,6 @@ which is convenient, but requires us to define a type [haskell] or struct [racke
 things must be in scope to be referenced! the only way to be more convenient than passing parameters is to use globally-scoped binds. immutable globals (as for all immutable binds) is universally accepted as fine. global mutable binds are usually considered the most dangerous thing ever, but again, depending on the program's needs, adding a locking/sync mechanism or restricting its scope makes it fine, e.g. global static binds, or in scheme, using `define-values` to define multiple functions that use a common state that's been bound within the `define-values` form, acting as a sort of closure. it's not really a closure because because `define-values` is a special form separate from a lambda, but whatever. another solution is using _parameters_ in racket (`fluid-let`) in other lisps.
 
 ultimately lexical scoping solves any unsafe non-concurrent mutability problem(s). TODO: after understanding picolisp's dynamic binding & lexical scoping model, add to this section. the fact that "things must be in scope to be referenced" is always true, but most programmers are so familiar with lexical scoping that suggesting the ability to define a form in terms of variables that may be declared and bound at runtime is as unintuitive as a logic without modus ponens. this is the only thing more dangerous/flexible than mutable globals in static scoping. its advantage is complete orthogonality & flexibility: we don't need to include any modules in order to reference variables undeclared. this is dangerous only if we don't account for the possibility of a variable being unbound, assuming that we can check whether unbound variables are a falsy value; if even trying to reference unbound variables insofar as checking their boundedness (using `if` or some other, more particular special form e.g. `boundp` in elisp) raises an error, then dynamic binding is quite dangerous.
-
-in picolisp
-
-[source,lisp]
-----
-(de x () (+ y 4))
-(x) ; NIL
-(de y . 65)
-(x) ; 69
-----
-
-TIP: this shows another of picolisp's good features: NIL propogation instead of crashing on free identifier.
 
 ==== safety
 
