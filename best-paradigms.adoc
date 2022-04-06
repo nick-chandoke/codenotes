@@ -114,7 +114,7 @@ if we'd used dynamic binding and lexical scope, then `f`'s definition would be i
 x ; NIL. x is bound only within f
 ----
 
-except that that doesn't actually happen in picolisp since link;https://software-lab.de/doc/faq.html#closures[picolisp doesn't use lexical scoping]. i've yet to learn (let alone understand) picolisp's bind & scope mechanisms.
+except that that doesn't actually happen in picolisp since link;https://software-lab.de/doc/faq.html#closures[picolisp doesn't use lexical scoping]. i've yet to learn (let alone understand) picolisp's bind & scope mechanisms and patterns of their elegant usage.
 
 * it seems that dynamic scope implies dynamic binding, since scope determines binds' values.
 * scoping relates to:
@@ -125,7 +125,10 @@ except that that doesn't actually happen in picolisp since link;https://software
     *** theorem provers (e.g. agda,) type checkers (e.g. haskell,) or logical deduction systems (e.g. datalog) could use them as part of a reïfication engine.
 * generally every binding syntax has its own associated scoping rule, even if many use the same rules. for example, the `for` (&al loop) syntaxes in algol languages bind where the scope is the loop body.
 * lexical scoping is more natural to function composition (applicative style;) dynamic scoping is more natural to mutation.
-* racket's _parameters_ are dynamically scoped
+* racket's _parameters_ are dynamically bound but lexically scoped. they're better than state for a few technical reasons:
+  ** regardless of how control flow exits `parameterize` form, parameters return to their values before the `parameterize` form (like `bracket` in haskell)
+  ** tco
+  ** parameterization is only for the current thread
 
 ===== wise use
 

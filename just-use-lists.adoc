@@ -205,7 +205,7 @@ the code was made by following a few design rules:
   ** order of arguments is irrelevant. by contrast, `These a b` is not equal to `These b a`. (though `(U Stop Limit)`)
   ** `These a b` does not automatically generalize; we'd need to create a new type for each arity, even though the real structure that we want to encode is, given a set `A`, we want some B ⊆ A : p(B) for some predicate p. however, the above logic generalizes easily and is commutative.
   ** the types are data, so we can use `map`, `member`, &c to transform the "types," and interned symbols can easily be converted to strings, which makes conversion to json much easier.
-  ** sexps are inherently as extensible as xml
+  ** sexps are inherently as extensible as xml; we can add, remove, or modify the lists. we can't do that with structs.
   ** auto-optimizing: does not require us to be specific e.g. we may start with `A := B C | D E F`, then find that it should be refactored into `X := B C, Y := D E F, A := X | Y`. with lists, because the checking is done only when necessary, we're free to change structures' shapes without needing to refactor.
 * rather than using constructors, we use symbols. we can use `limit`, `stop`, and `trailing` without worrying about scope or shadowing. in other words, it's like a lisp-standard simpler alternative to prefacb structs in racket.
 * much simpler
@@ -213,20 +213,18 @@ the code was made by following a few design rules:
   ** faster to read (namely `type-map`, which nicely separates code from data)
   ** exploits mutual exclusivity of link & basis types, allowing them to be expressed in any order.
   ** both link & basis are simply sum types, so they can be expressed simply as lisp symbols. same with stop's or limit's ability ta accept percents or numbers.
-  ** at least for me, cruft feels uncomfortable. using one data type for everything feels nice: clean & predictable.
-    *** the expectation that everything is lists encourages developers to describe the shapes of their data, like how is done for macro syntaxes. if the syntax needs tl;dr description, authors are likely to use math terms or reference similar shapes. this is much nicer than giving a name, forcing me to jump around documentation from name to name (since types are often composed of other types) just to see what kind of data i'm dealing with!
+  ** the expectation that everything is lists encourages developers to describe the shapes of their data, like how is done for macro syntaxes. if the syntax needs tl;dr description, authors are likely to use math terms or reference similar shapes. this is much nicer than giving a name, forcing me to jump around documentation from name to name (since types are often composed of other types) just to see what kind of data i'm dealing with!
   ** uses list to simultaneously express optionality and plurality; `[Either a b]` therefore replaces and generalizes `Maybe (These a b)`. in this case, though, we're even more general: a list of a sum of an arbitrary number of types (cf `Either` which is a sum of only exactly 2 types.) this is why this model works better than product types.
 * permits factoring common properties. e.g. `[(String, [Order], [Order])]` can correspond to shape `((name (open) (filled)))`. this shape is, among its isomorphisms, particularly nice because we can `assoc` to get all orders which are naturally partitioned into open and filled. if we want to perform an operation on all orders, then we simply recurse on the value returned by `assoc` (assuming non-falsy.)
 
-NOTE: a/lists can be expressed better without extra delimitation, e.g. `'(a 1 b 2)` instead of `'((a . 1) (b . 2))` or `'((a 1) (b 2))`; or `'(a 1 b (2 3) c 4)`, which is alternative to `'(a 1 (b 2 3) (c 4))`. the only difference among all these is whether we use `cdr` or `cadr`, and which varieties a given lisp's `assoc` supports.
+a/lists can be expressed better without extra delimitation, e.g. `'(a 1 b 2)` instead of `'((a . 1) (b . 2))` or `'((a 1) (b 2))`; or `'(a 1 b (2 3) c 4)`, which is alternative to `'(a 1 (b 2 3) (c 4))`. the only difference among all these is whether we use `cdr` or `cadr`, and which varieties a given lisp's `assoc` supports. not only is the simpler encoding of alists terser, but it sees "alist" an an _interpretation_ of flat lists, encoding the shape in the traversal rather than in the list itself. this is more efficient than building up a list, and it keeps the list simpler, thus allowing it to be used in more contexts, thus retaining higher flexiblity. also consolidate all discussions of encoding form in shape vs traversal.
 
 .bad
 
 * as `check-order`'s documentation says, we need to choose between speed & safety.
   ** this is a bit unfair since the check can be as detailed as dependent types, which are supported by few languages
-* unsafe
-  ** writing checks is done by hand to some degree, rather than automatically being totally done by a type checker
-    *** though a type checker automates checks, it isn't _all_ we need; haskell developers still write test suites for a reason
+* dynamic; they're either unsafe or require runtime checks, which is less efficient than static checking
+  ** if writing checks is done by hand, then the checks may be flawed, whereas automated checking is more reliable. still, even haskellers write tests; most type systems (except f*, adga, &c) are helpful but rarely capable enough to demonstrate much program correctness
 
 .techniques that i want to later take time to explore
 
@@ -238,8 +236,6 @@ NOTE: a/lists can be expressed better without extra delimitation, e.g. `'(a 1 b 
 
 .things to consider
 
-TODO: given the following paragraph, revise the above code and notes to consider alist as an _interpretation_ of flat lists, thus encoding the shape in the traversal rather than in the list itself. this is more efficient than building up a list, and it keeps the list simpler, thus allowing it to be used in more contexts, thus retaining higher flexiblity. also consolidate all discussions of encoding form in shape vs traversal.
-
 alists are relations natural with `assoc`. really any list can be considered as an alist, a la clojure's `let` syntax. `(massoc 'b '(a b c d))` should return `'(b c d)` (which would be done if i'd defined massoc in a lisp not scheme, wherein the falsy value is the null list rather than `#f`, which is symmetrical with `member` and `assoc`.) in this way all lists can implicitly be alists, here with `a` mapping to `(b c d)`, and `b` mapping to `(c d)` &c. if i want to associate a value with `b` and have `c` map to `(d)` then i just insert it: `(massoc 'b '(a b (3 4) c d))` returns `(b (3 4))` and i can insert `cadr` to connote this expectation that the list is of form `(k1 v1 k2 v2 ...)`, thus getting `b`'s associated value, `(3 4)`. this is still literally is an optimally efficient traversal (for unsorted data; otherwise we'd traverse in a heap-like way.)
 
 in §bad, "a/lists are slower" is not present. while technically their lookup is slower than vectors', the difference is inconsiderable for a/lists of struct size; you'd never use a struct with enough fields for this difference to be appreciable. still, it suggests a good consideration: better rather than alists are splay trees; these are usually preferable over lists that represent sets, i.e. lists whose ordering is irrelevant. like in arc lisp, such lists' (a tree is just a list of a particular shape) elements should be mutable with O(1) update.
@@ -250,7 +246,7 @@ racket is one of few languages that includes _contracts_: basically type checkin
 
 === when types are appropriate
 
-types are appropriate when data's shape has little variability and satisfies specific (and usually simple, depending on the capability of the type system) predicates. type systems are typically cumbersome; except typed racket and roc, which support capable *anonymous* types. more to the point, beyond type systems, structs & enumerations, which may be not typed, but still obviously correspond to product & sum types, follow the same rules as when to use types.
+types are appropriate when data's shape has little variability and specific (and usually simple, depending on the capability of the type system) constraints. type systems are typically cumbersome, at least for not supporting anonymous types (except typed racket and roc.) more to the point, beyond type systems, structs & enumerations, which may be not typed, but still obviously correspond to product & sum types; when they should be used is determined by precisely the same rules as when their corresponding types should be used.
 
 the alternative is lists. lists are universal because they're the simplest structure defined of [binary] relation & recursion. by the magic of math/order, such a fundamental structure must natural describe all other types. therefore we should ask ourselves, for any type, how that type is described by lists. every type can be described by a set list of particular shape(s). when dealing with structure as simple as lists, we can ask the usual properties—associativity, commutativity, invertability, &c—which we cannot so freely do with types, because types (or enums or structs) cannot be computed, unlike lists. of course, this is not the fault of type systems; it's the fault of how type systems are used/implemented in programming languages. if we're talking about type theory in as a subdiscipline of pure mathematics, then we're afforded all the wonderous algebraic freedom that we're used to in math. type theory and its notation creates a very different experience in math vs cs. still, type theory is no more beautiful than anything else in math; we can simply describe it programmatically by lists instead of "types" [cs], and we can either use formal methods or tests (or check via preprocessors such as macros) as a more capable (and much simpler) alternative to today's type systems.
 
@@ -354,11 +350,11 @@ lisp demonstrates a _lack_ of syntax, a lack of design patterns, lack of constra
 
 what's more, lisp has demonstrated that it's an excellent language! so stop trying to do extra shit! just use lisp! just use lists. keep computing as simple as it needs to be; there's no sacrifice in doing so; in fact, it's the nicest experience. in a discipline as complex as computer programming, we can use all the elegance (simplicity & regularity) that we can get!
 
-let's look again at nushell. currently in their discord they're discussing which syntaxes to use. they want something shell like for familiarity (mostly for users new to nushell who already know posix shells,) yet with more capability than posix shells. aaahhh, which syntax to use?! such a conundrum. they have the same issue for features; which features to include? should they allow enabling or disabling them in a config file?
+let's look again at nushell. currently in their discord they're discussing which syntaxes to use. they want something shell-like for familiarity (mostly for users new to nushell who already know posix shells,) yet with more capability than posix shells. aaahhh, which syntax to use?! such a conundrum. they have the same issue for features; which features to include? should they allow enabling or disabling them in a config file?
 
-you know what comes next: "of course, these aren't problems in lisp." we already know the answer to the syntax problem. what about features? the commonality of features & syntax is that they're both builtin—_special_, particular. want a feature in lisp? write a function. want to toggle whether that feature's enabled? either import the function or don't. what about toggling parameters of already defined functions? that's an actually good question. many schemes used fluid-let, or what in racket is basically _parameters_. i don't know what common lisp's solution is (though they almost certainl have one.) picolisp's dynamic binding (still with lexical scoping) is a solution, too. this method is like fluid-let except a bit more convenient (and potentially dangerous.) the programmer hardly has to do anything to parameterize their code.
+you know what comes next: "of course, these aren't problems in lisp." we already know the answer to the syntax problem. what about features? the commonality of features & syntax is that they're both builtin—_special_, particular. want a feature in lisp? write a function. want to toggle whether that feature's enabled? either import the function or don't. what about toggling parameters of already defined functions? that's an actually good question. dynamic binds is an arguably good or poor solution. emacs lisp has dynamic binding by default. racket has _parameters_. other schemes have `fluid-let`. i don't know what common lisp's solution is, though they almost certainly have one.
 
-i want lisp to be used for everything—to be the standard for describing data & so programs. lisp should not be called "lisp" though; if i say that "i want lisp to be standard" then it sounds no different from "i want <my favorite language> to be standard" but that's wrong; lisp is plain, not special. it's the natural notation for expressing data, as must be true considering that it's just primitive literals and or delimited sequences/sets thereof. in other words, lisp is to computers what set notation is for math, and it's no mistake that sets are a foundation of math. similarly, it's no mistake that plaintext files are used in *nix systems to configure everything. lisp is what plaintext is trying to be; in the abscence of lisp, we have many plaintext formats (ini,toml,json,yaml,xml,...) each of which is either inflexible enough to need extensions, or too stylized so that people can't agree on which style they want, or the syntax is regular and completely flexible yet too verbose (talkin' 'bout xml, here.) edn is just what xml should've been. if you don't know, edn is a particular format of sexp. now, for the record, edn is too specific; rather than being a mere sexp, it's a format specifically made for use in clojure, and so it includes keywords, nil, maps (which uses _commas_—the poster child for needless syntax) and at this point suffice it to say that it's too specific to be used for general computing. it remains, fine as any imperfect format is, for clojure.
+i want lisp to be used for everything—to be the standard for describing data & so programs. lisp should not be called "lisp" though; if i say that "i want lisp to be standard" then it sounds no different from "i want <my favorite language> to be standard" but that's wrong; lisp is plain, not special. it's the natural notation for expressing data, as must be true considering that it's just primitive literals and or delimited sequences/sets thereof. in other words, lisp is to programming what set notation is for math, and it's no mistake that sets are a foundation of math. similarly, it's no mistake that plaintext files are used in *nix systems to configure everything. lisp is what plaintext is trying to be; in the abscence of lisp, we have many plaintext formats (ini,toml,json,yaml,xml,...) each of which is either inflexible enough to need extensions, or too stylized so that people can't agree on which style they want, or the syntax is regular and completely flexible yet too verbose (talkin' 'bout xml, here.) edn is just what xml should've been. if you don't know, edn is a particular format of sexp. now, for the record, edn is too specific; rather than being a mere sexp, it's a format specifically made for use in clojure, and so it includes keywords, nil, maps (which uses _commas_—the poster child for needless syntax) and at this point suffice it to say that it's too specific to be used for general computing. it remains, fine as any imperfect format is, for clojure.
 
 json is practically equivalent to edn, but for js instead of clojure. considered as a general data notation, its imperfections are, again:
 
@@ -484,6 +480,80 @@ feel free to work with lists as organically as you please; lists impose no const
 
 using lists instead of structs is like using lambdas instead of needing to define functions; lists are the anonymous complex (cf primitive) data type.
 
+==== designing programs: no need to conceptualize
+
+typical design sees people enumerating various mechanisms, then putting them in a dataflow graph. for example, when designing a vacuum we suppose that there's an inlet, a debris storage chamber, some latch to open said chamber, etc. this object-oriented design is more sensible for physical design, but not so much for programming or math, where we work with _data_. data can be easily transmuted and perform multiple roles. while this is true of physical devices, too, and exploiting particularities can beget some clever designs, it's much easier to exploit such things in code, to arrive at minimal, optimal, clever designs.
+
+NOTE: if a design is so clever as to need explanation, then explanation should be given! please do not be that slick fool who designs genius yet obtuse & undocumented code! for programmers, obscurity bears neither nobility nor glory. still, clever techniques are clever, and so good, and so should be adopted, even if they seem initially obtuse to newcomers.
+
+to identify such clever designs, forget any initial ideas of what puzzle pieces you suppose must be fit together; instead, think in terms of primitive data and relations, since that's exactly what everything must be.
+
+things are defined by parts of speech:
+
+* nouns (items in scope): attributes
+* verbs (lambdas or mutations)
+  ** transitive actions: things that they interact with  and how they interact with them
+  ** intransitive actions: a thing modifying its own form/states
+* constraints (predicates defined of one or more things)
+
+for example, say i'm designing a financial trading order system. certainly we must know what a stock order system is: what does it do, upon what does it act? what's common vs necessary?
+
+let's start with the obvious: we need orders. what's an order? well, it's not an action. it's shape/type is given in the above example. notice that these are all primitives or relations thereof; there are no "opaque" types here—types not known in terms of primitives. such types are vague nonsense; they're assumptions about what should exist, but without having identified why they should exist. in other words, it's usually foolish to make a placeholder for a type with the expectation that its definition will be identified later; if you haven't identified its definition, then you don't know that it needs to exist, so there's no reason to suppose that it will. in fact, supposing that it should exist will only bias your design based on your arbitrary assumptions rather than observed truth.
+
+anyway, with knowledge of what orders are, what's an order system? it's defined (insofar as i'm concerned, anyway) as "thing that enables us to change the amount of money invested in given financial instruments." ok, so it's obviously a relation between between investable funds and investment per instrument. the relation is not a fact, but instead about state change (of both related objects); it's is therefore a transitive verb and not a predicate.
+
+an order is an instruction of how to change our investments. investments are called _positions_, btw, and are easily represented by an alist from stock symbol to money. orders may be functions of candles (or "data" if you're unfamiliar with trading). to be compatible with broker order systems, handling candles will be part of the order system rather than each order.
+
+so the order system is `candles, orders -> positions` which is not strictly a function, but instead a list of inputs and associated outputs, where the only constraint on the inputs is that they're in scope, and the outputs are any representation of updated program state.
+
+now, technically not all orders immediately beget new positions; some orders are _open_ until they're _filled_ by some condition being met. so the mutation is really `candles, orders -> open, positions`. now, as it turns-out, for historical computation, we need to keep track of all filled orders rather than combining them all into a single positions object; therefore we'll change the mutation to `candles, orders -> open, filled`, and `position` will be a unary function of `filled`—a view or aggregation, if you prefer those terms.
+
+the actual order system gets a bit more complicated from there, but this serves enough example. the actual version ended up being:
+
+----
+instrument selector -> ((instrument candles))
+funds := float
+pseudo-order := (quantity symbol type . deps) {- where type is 'moc, 'mkt, or a list of conditions -}
+filled := (open time, open price)
+positions := ((instrument money))
+filled -> positions
+positions, filled -> strategy(candles) -> pseudo-orders, portion determiners {- e.g. expected profit -}
+loop (pesudo-orders, portion determiners -> pseudo-orders) over instruments -> pseudo-orders
+pseudo-orders, candles -> open, filled
+----
+
+aside from readability, the the statements' order is meaningless. rather than assuming that there are objects with attributes, we do the opposite: we know that there are data, which we identify then group [relate] for simplification. there's no concept of "X has a Y;" instead, it's just "there're related things; how can we simplify description of thei relations?"
+
+. `instrument selector` is an abstract variable; it's defined as whatever produces a list of lists of shape `(instrument candles)`
+. there's a datum called `positions`, which is a list of lists of shape `(instrument money)`
+. notice that `((instrument candles))` can be joined [sql] with `positions` on `instrument`
+. there exists a morphism from strategy to portion determiners. there's no consideration of whether a strategy "contains" or "produces" determiners
+. loop over the list of groups of `instrument`, `candles`, and `stategy`. within each iteration of the loop, the group is in scope.
+. strategy is parameterized by / is a function of candles, and each strategy produces a list of pseudo-orders. thus each strategy is associated with both a list of pseudo-orders and a financial instrument
+. given how `instrument` is related to candles, money via positions, and pseudo-orders via strategy, `instruments` is enough to have `pseudo-orders` and `portion determiners` in scope in the loop body. we know that `instruments` is a valid plural of `instrument` because `instrument` is ultimately within a list (precisely it's in a group `(instrument candles)`, of which there is a list)
+
+notice that none of the arrows is named; we do not care about how in code the states are transmuted. we presume _nothing_ about which functions, subroutines, language features, or other programmatic devices shall be used to implement the arrow diagram. we name data (or groups thereof) but not arrows.
+
+given that i've concrete definitions for each item in the schema, i can replace names by their shapes, and i'm left with a program. i can then algebraically simplify for efficiency's sake. no wondering which builtin constructs to use for whatever programming language i'm using, nor which design patterns to use. just scope, state, relation, and grouping. this schema directly translates to any turing complete languages, which must support loops/goto and functions or mutation.
+
+unfortunately most langs don't support alists. fine; using sequences/generators and hash tables or tree maps is still simple, if not as elegant. hopefully the language you're using doesn't offer an abundance of features that others use, so that when you use others' libraries you're constrained by those features' rules (like if someone defines a structure as a GADT—an extremely limiting variety of asymmetric constraint that should be used only by extremely wise designers, and then probably only for describing grammars.)
+
+the most general loop form is `loop <arrow> until <cond>`.
+
+an alternative notation would be based on implicit specification of control flow by defining predicates, à la prolog. e.g. i may define a state `s0` by the condition `a < 10`, rather than defining `s0` by relation to other states; upon `s0` `b <- a + b; a <- a + 1`. there's no explicit control flow statement saying to return to the beginning of any loop; it's implied by the `s0` rule and `a`'s value.
+
+.summary of design method
+
+* describe entire or any fragment of program by state change / input/output arrows: `state0 -> state1`. refers to mutation and/or functions ambiguously. this notation generalizes function notation `A × B × ... -> C` to functions or mutations, and: instead of sets we use particular objects; instead of × we use comma; and multiple "codomains" are written without being enclosed in a tuple.
+  ** `a -> a` means that `a` changes. things on RHS are what changed
+  ** `a -> b` means that `a` produces b, regardless of whether `a` is deallocated
+  ** all objects not present in the expression are assumed to have not changed
+  ** if the arrow needs to be done for each of many data, then `map` it. if the data that you're mapping over are related, then use a loop mechanism—fold, named let or other recursion—or `while` (the most general iterator; called `do` in scheme.) all looping is just systematic / symmetric state change.
+* identify things as (in)transitive verbs, nouns, or conditions
+* don't suppose data; starting from your necessary thing(s), trace your design's implied inputs or outputs
+* express all data in terms of primitives or relations; no opaque placeholders, since those are vague nonsense, so naturally you'll find them difficult to consider
+  ** groups [grouping, oop-like patterns] naturally arise as you factor/simplify shapes as described in state change arrows. you may often find that multiple roles are satisfied by a single group, or that some roles are redundant.
+
 ==== oopy/groupy
 
 _grouping_ is the constraint or suggestion that some things should be used together, that they should not be mixed with other lists. as i explore in §_no refactoring_ below, alists can encode type classes; but more simply, alists whose cdrs are functions makes a good & simple way to bundle functionality together into a sort of on-the-fly class. this with closures makes simple oop style classes. arguably we can improve this by defining a meta-function that's `let` except accepts an identifier whose value is an alist, rather than an alist literal. in languages (like racket) where this isn't possible, we have a decent alternative: returning a function:
@@ -530,7 +600,9 @@ as we've already considered that lists are just recursive relation, it may seem 
 * coproducts are like `cond` (ad-hoc, mutually-exclusive). in fp we use `case` to branch on these. like in lisp's `case`, `case` is a specific version of `cond`.
 * products...correspond to `assoc`? naw; assoc corresponds to selecting one of many ADT constructors....
 
-==== no refactoring [wip]
+==== no refactoring
+
+===== type classes [wip]
 
 type classes have an inherent flaw: people use them. this means that code depends on them. thus to change the type class, dependent code needs to be refactored. what if someone uses it in a way that you don't like? then you can use `newtype` [haskell], which isn't terrible, though it seems like a retrospective hack. and there will _always_ be another type class. perfect example: first haskell had `Monad`. then they added `Functor`, then `Applicative`, and then `Selective` (which is between a monad and applicative.) lists are naturally continuous.
 
@@ -604,6 +676,10 @@ as `pair?`'s instance demonstrates, the use of type class functions in method de
 `tc` is a simple implemenation. a more-advanced macro would not require one to specify tc; type class methods would be defined as macros.
 
 also, the way that `tc` expands, lookup in `G` is done at runtime rather than before runtime. this is a design choice to make this example simpler; i'm using racket scheme, which uses different namespaces for macros vs ordinary code, so ideally i'd define `G` in the macro namespace; this would support type class lookup before runtime#, thus supporting "typecheck-time" errors. however, that would complicate this example, and is a consequence of racket, not lisp in general.
+
+===== scope
+
+consider, in a lexically scoped language, two modules that need to access a common data type. if defining the type via `struct` then we'd need to define a new module just to store the type (or, if we're lucky, then it'd be appropriate for one of the modules to require tho other) so that both modules can have access to the same type. however, because shapes are merely non-programmatically-specified constraints of lists, each of the two modules can simply use alists.
 
 === runtime efficiency [wip]
 
