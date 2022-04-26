@@ -204,10 +204,10 @@ the code was made by following a few design rules:
 * more flexible
   ** order of arguments is irrelevant. by contrast, `These a b` is not equal to `These b a`. (though `(U Stop Limit)`)
   ** `These a b` does not automatically generalize; we'd need to create a new type for each arity, even though the real structure that we want to encode is, given a set `A`, we want some B ⊆ A : p(B) for some predicate p. however, the above logic generalizes easily and is commutative.
-  ** the types are data, so we can use `map`, `member`, &c to transform the "types," and interned symbols can easily be converted to strings, which makes conversion to json much easier.
   ** sexps are inherently as extensible as xml; we can add, remove, or modify the lists. we can't do that with structs.
-  ** auto-optimizing: does not require us to be specific e.g. we may start with `A := B C | D E F`, then find that it should be refactored into `X := B C, Y := D E F, A := X | Y`. with lists, because the checking is done only when necessary, we're free to change structures' shapes without needing to refactor.
-* rather than using constructors, we use symbols. we can use `limit`, `stop`, and `trailing` without worrying about scope or shadowing. in other words, it's like a lisp-standard simpler alternative to prefacb structs in racket.
+  ** lists implicitly describe row types, which allows us types like `{t1, t2, ... | r}` [purescript]; types specify a minimal description rather than a total one. this, especially combined with delaying shape/type checking until each particular place in which a list is used, enables very easy, flexible ad-hoc polymorphism: we can have a shape `(a 3 b 4 c 6)` used in functions `f` & `g` because `f` requires that the list have attributes `a` & `b`. `g` requires them, too, but also optionally supports attribute `c`, which `f` ignores. this is very natural; in reality things are complex, and we allow them to be whatever they are so long as they specify a small whitelist of constraints. in other words, we do not omit things because they satisfy properties that we didn't specify! types not supporting `| r` are effectively like saying "i want a cube," and when you try to give a blue cube, the type checker rejects it, because "blue" wasn't in the type spec; the solution to this in a typed system is to create a new product type of blue and cube—an ad-hoc join that prevents us from using elegant traversals and *structural polymorphism*.
+* rather than using constructors, we use symbols. we can use `limit`, `stop`, and `trailing` without worrying about scope or shadowing. in other words, it's like a lisp-standard simpler alternative to prefab structs in racket.
+  ** fields have context-sensitive meaning because they're bound to identifiers at each match rather than once at definition. this is useful because it reflects the truth that data are data, and we then interpret them, but some can permit multiple interpretations.
 * much simpler
   ** easier to refactor
   ** faster to read (namely `type-map`, which nicely separates code from data)
@@ -215,7 +215,12 @@ the code was made by following a few design rules:
   ** both link & basis are simply sum types, so they can be expressed simply as lisp symbols. same with stop's or limit's ability ta accept percents or numbers.
   ** the expectation that everything is lists encourages developers to describe the shapes of their data, like how is done for macro syntaxes. if the syntax needs tl;dr description, authors are likely to use math terms or reference similar shapes. this is much nicer than giving a name, forcing me to jump around documentation from name to name (since types are often composed of other types) just to see what kind of data i'm dealing with!
   ** uses list to simultaneously express optionality and plurality; `[Either a b]` therefore replaces and generalizes `Maybe (These a b)`. in this case, though, we're even more general: a list of a sum of an arbitrary number of types (cf `Either` which is a sum of only exactly 2 types.) this is why this model works better than product types.
-* permits factoring common properties. e.g. `[(String, [Order], [Order])]` can correspond to shape `((name (open) (filled)))`. this shape is, among its isomorphisms, particularly nice because we can `assoc` to get all orders which are naturally partitioned into open and filled. if we want to perform an operation on all orders, then we simply recurse on the value returned by `assoc` (assuming non-falsy.)
+* natural
+  ** permits factoring common properties. e.g. `[(String, [Order], [Order])]` can correspond to shape `((name (open) (filled)))`. this shape is, among its isomorphisms, particularly nice because we can `assoc` to get all orders which are naturally partitioned into open and filled. if we want to perform an operation on all orders, then we simply recurse on the value returned by `assoc` (assuming non-falsy.)
+  ** the types are data, so:
+    *** we can use `map`, `member`, &c to transform the "types," and interned symbols can easily be converted to strings, which makes conversion to json simple.
+    *** permits using folds over structures. for example, with a product type of numbers `p`, i can `(> (apply min p) n)` for some `n`. this is sensible if `p` represents points on an interval, and we want to see if the whole interval is beyond a boundary.
+  ** auto-optimizing: does not require us to be specific e.g. we may start with `A := B C | D E F`, then find that it should be refactored into `X := B C, Y := D E F, A := X | Y`. with lists, because the checking is done only when necessary, we're free to change structures' shapes without needing to refactor.
 
 a/lists can be expressed better without extra delimitation, e.g. `'(a 1 b 2)` instead of `'((a . 1) (b . 2))` or `'((a 1) (b 2))`; or `'(a 1 b (2 3) c 4)`, which is alternative to `'(a 1 (b 2 3) (c 4))`. the only difference among all these is whether we use `cdr` or `cadr`, and which varieties a given lisp's `assoc` supports. not only is the simpler encoding of alists terser, but it sees "alist" an an _interpretation_ of flat lists, encoding the shape in the traversal rather than in the list itself. this is more efficient than building up a list, and it keeps the list simpler, thus allowing it to be used in more contexts, thus retaining higher flexiblity. also consolidate all discussions of encoding form in shape vs traversal.
 
@@ -480,81 +485,80 @@ feel free to work with lists as organically as you please; lists impose no const
 
 using lists instead of structs is like using lambdas instead of needing to define functions; lists are the anonymous complex (cf primitive) data type.
 
-==== designing programs: no need to conceptualize
-
-typical design sees people enumerating various mechanisms, then putting them in a dataflow graph. for example, when designing a vacuum we suppose that there's an inlet, a debris storage chamber, some latch to open said chamber, etc. this object-oriented design is more sensible for physical design, but not so much for programming or math, where we work with _data_. data can be easily transmuted and perform multiple roles. while this is true of physical devices, too, and exploiting particularities can beget some clever designs, it's much easier to exploit such things in code, to arrive at minimal, optimal, clever designs.
-
-NOTE: if a design is so clever as to need explanation, then explanation should be given! please do not be that slick fool who designs genius yet obtuse & undocumented code! for programmers, obscurity bears neither nobility nor glory. still, clever techniques are clever, and so good, and so should be adopted, even if they seem initially obtuse to newcomers.
-
-to identify such clever designs, forget any initial ideas of what puzzle pieces you suppose must be fit together; instead, think in terms of primitive data and relations, since that's exactly what everything must be.
-
-things are defined by parts of speech:
-
-* nouns (items in scope): attributes
-* verbs (lambdas or mutations)
-  ** transitive actions: things that they interact with  and how they interact with them
-  ** intransitive actions: a thing modifying its own form/states
-* constraints (predicates defined of one or more things)
-
-for example, say i'm designing a financial trading order system. certainly we must know what a stock order system is: what does it do, upon what does it act? what's common vs necessary?
-
-let's start with the obvious: we need orders. what's an order? well, it's not an action. it's shape/type is given in the above example. notice that these are all primitives or relations thereof; there are no "opaque" types here—types not known in terms of primitives. such types are vague nonsense; they're assumptions about what should exist, but without having identified why they should exist. in other words, it's usually foolish to make a placeholder for a type with the expectation that its definition will be identified later; if you haven't identified its definition, then you don't know that it needs to exist, so there's no reason to suppose that it will. in fact, supposing that it should exist will only bias your design based on your arbitrary assumptions rather than observed truth.
-
-anyway, with knowledge of what orders are, what's an order system? it's defined (insofar as i'm concerned, anyway) as "thing that enables us to change the amount of money invested in given financial instruments." ok, so it's obviously a relation between between investable funds and investment per instrument. the relation is not a fact, but instead about state change (of both related objects); it's is therefore a transitive verb and not a predicate.
-
-an order is an instruction of how to change our investments. investments are called _positions_, btw, and are easily represented by an alist from stock symbol to money. orders may be functions of candles (or "data" if you're unfamiliar with trading). to be compatible with broker order systems, handling candles will be part of the order system rather than each order.
-
-so the order system is `candles, orders -> positions` which is not strictly a function, but instead a list of inputs and associated outputs, where the only constraint on the inputs is that they're in scope, and the outputs are any representation of updated program state.
-
-now, technically not all orders immediately beget new positions; some orders are _open_ until they're _filled_ by some condition being met. so the mutation is really `candles, orders -> open, positions`. now, as it turns-out, for historical computation, we need to keep track of all filled orders rather than combining them all into a single positions object; therefore we'll change the mutation to `candles, orders -> open, filled`, and `position` will be a unary function of `filled`—a view or aggregation, if you prefer those terms.
-
-the actual order system gets a bit more complicated from there, but this serves enough example. the actual version ended up being:
-
-----
-instrument selector -> ((instrument candles))
-funds := float
-pseudo-order := (quantity symbol type . deps) {- where type is 'moc, 'mkt, or a list of conditions -}
-filled := (open time, open price)
-positions := ((instrument money))
-filled -> positions
-positions, filled -> strategy(candles) -> pseudo-orders, portion determiners {- e.g. expected profit -}
-loop (pesudo-orders, portion determiners -> pseudo-orders) over instruments -> pseudo-orders
-pseudo-orders, candles -> open, filled
-----
-
-aside from readability, the the statements' order is meaningless. rather than assuming that there are objects with attributes, we do the opposite: we know that there are data, which we identify then group [relate] for simplification. there's no concept of "X has a Y;" instead, it's just "there're related things; how can we simplify description of thei relations?"
-
-. `instrument selector` is an abstract variable; it's defined as whatever produces a list of lists of shape `(instrument candles)`
-. there's a datum called `positions`, which is a list of lists of shape `(instrument money)`
-. notice that `((instrument candles))` can be joined [sql] with `positions` on `instrument`
-. there exists a morphism from strategy to portion determiners. there's no consideration of whether a strategy "contains" or "produces" determiners
-. loop over the list of groups of `instrument`, `candles`, and `stategy`. within each iteration of the loop, the group is in scope.
-. strategy is parameterized by / is a function of candles, and each strategy produces a list of pseudo-orders. thus each strategy is associated with both a list of pseudo-orders and a financial instrument
-. given how `instrument` is related to candles, money via positions, and pseudo-orders via strategy, `instruments` is enough to have `pseudo-orders` and `portion determiners` in scope in the loop body. we know that `instruments` is a valid plural of `instrument` because `instrument` is ultimately within a list (precisely it's in a group `(instrument candles)`, of which there is a list)
-
-notice that none of the arrows is named; we do not care about how in code the states are transmuted. we presume _nothing_ about which functions, subroutines, language features, or other programmatic devices shall be used to implement the arrow diagram. we name data (or groups thereof) but not arrows.
-
-given that i've concrete definitions for each item in the schema, i can replace names by their shapes, and i'm left with a program. i can then algebraically simplify for efficiency's sake. no wondering which builtin constructs to use for whatever programming language i'm using, nor which design patterns to use. just scope, state, relation, and grouping. this schema directly translates to any turing complete languages, which must support loops/goto and functions or mutation.
-
-unfortunately most langs don't support alists. fine; using sequences/generators and hash tables or tree maps is still simple, if not as elegant. hopefully the language you're using doesn't offer an abundance of features that others use, so that when you use others' libraries you're constrained by those features' rules (like if someone defines a structure as a GADT—an extremely limiting variety of asymmetric constraint that should be used only by extremely wise designers, and then probably only for describing grammars.)
-
-the most general loop form is `loop <arrow> until <cond>`.
-
-an alternative notation would be based on implicit specification of control flow by defining predicates, à la prolog. e.g. i may define a state `s0` by the condition `a < 10`, rather than defining `s0` by relation to other states; upon `s0` `b <- a + b; a <- a + 1`. there's no explicit control flow statement saying to return to the beginning of any loop; it's implied by the `s0` rule and `a`'s value.
-
-.summary of design method
-
-* describe entire or any fragment of program by state change / input/output arrows: `state0 -> state1`. refers to mutation and/or functions ambiguously. this notation generalizes function notation `A × B × ... -> C` to functions or mutations, and: instead of sets we use particular objects; instead of × we use comma; and multiple "codomains" are written without being enclosed in a tuple.
-  ** `a -> a` means that `a` changes. things on RHS are what changed
-  ** `a -> b` means that `a` produces b, regardless of whether `a` is deallocated
-  ** all objects not present in the expression are assumed to have not changed
-  ** if the arrow needs to be done for each of many data, then `map` it. if the data that you're mapping over are related, then use a loop mechanism—fold, named let or other recursion—or `while` (the most general iterator; called `do` in scheme.) all looping is just systematic / symmetric state change.
-* identify things as (in)transitive verbs, nouns, or conditions
-* don't suppose data; starting from your necessary thing(s), trace your design's implied inputs or outputs
-* express all data in terms of primitives or relations; no opaque placeholders, since those are vague nonsense, so naturally you'll find them difficult to consider
-  ** groups [grouping, oop-like patterns] naturally arise as you factor/simplify shapes as described in state change arrows. you may often find that multiple roles are satisfied by a single group, or that some roles are redundant.
-
 ==== oopy/groupy
+
+.preface: oop is a lie
+
+oop is said to be made of _composition/encapsulation_, _polymorphism_, and _inheritance_. these are such simple, common features that they can't be said to form a design/paradigm.
+
+i can get ad-hoc polymorphism just by defining a variable then shadowing it in various subscopes. parametric polymorphism (which isn't even available in common oop languages) can be implemented by...(are you ready?)...a function that takes a parameter, where the parameter affects the function's output but not its control flow (it'd be ad-hoc poly if the parameter affected the function's control flow.)
+
+composition or encapsulation is just putting things into data or logical structures whose data are scoped only to that structure.
+
+inheritance is just composition with overridability rules (`public` or `private` to enable or disable overridability) for certain variables. also inheritance is a variety of ad-hoc polymorphism: multiple subclasses having various functions all referred to by the same name is ad-hoc polymorphism. 
+
+oop refers to throwing around 
+
+here's a typical oop example:
+
+[source,java]
+----
+interface Eats() { abstract void eat(); }
+class Animal {
+  public int age;
+  public Animal(age) {
+    this.age = age;
+  }
+}
+
+class Person extends Animal, implements Eats {
+  public void eat() { System.out.println("eatin' like a human"); }
+  public void walk() { System.out.println("walk like a human"); }
+}
+
+class Egyptian extends Person {
+  public void walk() { System.out.println("all the cops in the donut shops say,..."); }
+}
+
+class Dolphin extends Animal, implements Eats {
+  public void jumpThroughHoop(Hoop h) { System.out.println("jumpin' through hoop " + h.serialNumber); }
+  public void eat() { System.out.println("how and what do dolphins eat"); }
+}
+
+Person tom = new Person(10);
+Dolphin carrie = new Dolphin(4);
+tom.age + carrie.age; //14
+----
+
+it features (ad-hoc) polymorphism via an interface, inheritance by subclasses, and composition by one class containing another. like typing, inflexibility is part of the design, to prevent programmers from accidentally writing & running inappropriate code. as with typing, i reject any restrictions, instead favoring simplicity as a way to avoid such mistakes. as with many restriction systems, it's unable to handle common things well (or at all), such as multiple inheritance.
+
+plain version, which doesn't use particular syntax to identify oopy stuff:
+
+[source,scm]
+----
+;; in a good lisp like picolisp, if `member` were to return `NIL`,
+;; then `get` would return `NIL`, rather than the program crahsing,
+;; so this would be a perfectly sensible definition.
+(define (get p s) (cadr (member s p)))
+
+(define (animal age) `(age ,age))
+(define (human age) (list* 'walk (λ () (println "walk like a human"))
+                           'eat (λ () (println "eatin' like a human")) (animal age)))
+(define (egyptian age) (list* 'walk (λ () (println "all the cops in the donut shops say,...")) (human age)))
+(define (dolphin age) (list* eat (λ () (println "how and what do dolphins eat")) (animal age)))
+(define tom (human 10))
+(define carrie (dolphin 4))
+(+ (get 'age tom) (get 'age carrie))
+(get 'walk (egyptian))
+----
+
+i could've used closures instead of alists. that discussion is in the following section, _main discussion_. also, to implement inheritance, we could use bind shadowing, or, as was done by `egyptian`, augment structures that affect lookup/resolution, such as consing onto a list, which makes `get` return at the earlier egyptian-specific function rather than the later human-specific one. this method, keeping all implemenations of given functions, would allow you do define another version of `get` that allows you to type cast, e.g. `(get 'walk (cast (egyptian 10) 'human))` to walk like a human, though this would require either building a class hierarchy when subclassing, or storing class info in the object lists.
+
+i throw away `public` & `private`, types, the `Eats` interface (since i can just check whether `assoc` returns falsy or a function associated with `eat`). as usual the tradeoff is simplicity & flexibility for lack of safety by constraint enforcement, though again that can be accomplished by contracts or program processors or macros.
+
+depending on your dataflow, some things may seem oopy or not. don't presume whether it is or not, though; start with the necessary functionality, then identify which data you need, then identify dataflow; let _each program's facts_ lead your design.
+
+.main discussion
 
 _grouping_ is the constraint or suggestion that some things should be used together, that they should not be mixed with other lists. as i explore in §_no refactoring_ below, alists can encode type classes; but more simply, alists whose cdrs are functions makes a good & simple way to bundle functionality together into a sort of on-the-fly class. this with closures makes simple oop style classes. arguably we can improve this by defining a meta-function that's `let` except accepts an identifier whose value is an alist, rather than an alist literal. in languages (like racket) where this isn't possible, we have a decent alternative: returning a function:
 
@@ -592,6 +596,94 @@ again, in languages with dynamic binding/scoping this isn't a problem. oopy lang
     (alist/fn->fn `((f . ,f) (g . ,g)))))
 `(,(fns 'f 1) ,(fns 'g 4 6)) ; (1 -1)
 ----
+
+==== designing programs: no need to conceptualize
+
+typical design sees people enumerating various mechanisms, then putting them in a dataflow graph. for example, when designing a vacuum we suppose that there's an inlet, a debris storage chamber, some latch to open said chamber, etc. this object-oriented design is more sensible for physical design, but not so much for programming or math, where we work with _data_. data can be easily transmuted and perform multiple roles. while this is true of physical devices, too, and exploiting particularities can beget some clever designs, it's much easier to exploit such things in code, to arrive at minimal, optimal, clever designs.
+
+NOTE: if a design is so clever as to need explanation, then explanation should be given! please do not be that slick fool who designs genius yet obtuse & undocumented code! for programmers, obscurity bears neither nobility nor glory. still, clever techniques are clever, and so good, and so should be adopted, even if they seem initially obtuse to newcomers.
+
+to identify such clever designs, forget any initial ideas of what puzzle pieces you suppose must be fit together; instead, think in terms of primitive data and relations, since that's exactly what everything must be.
+
+things are defined by parts of speech:
+
+* nouns (items in scope): attributes
+* verbs (lambdas or mutations)
+  ** transitive actions: things that they interact with  and how they interact with them
+  ** intransitive actions: a thing modifying its own form/states
+* constraints (predicates defined of one or more things)
+
+for example, say i'm designing a financial trading order system. certainly we must know what a stock order system is: what does it do, upon what does it act? what's common vs necessary?
+
+let's start with the obvious: we need orders. what's an order? well, it's not an action. it's shape/type is given in the above example. notice that these are all primitives or relations thereof; there are no "opaque" types here—types not known in terms of primitives. such types are vague nonsense; they're assumptions about what should exist, but without having identified why they should exist. in other words, it's usually foolish to make a placeholder for a type with the expectation that its definition will be identified later; if you haven't identified its definition, then you don't know that it needs to exist, so there's no reason to suppose that it will. in fact, supposing that it should exist will only bias your design based on your arbitrary assumptions rather than observed truth.
+
+anyway, with knowledge of what orders are, what's an order system? it's defined (insofar as i'm concerned, anyway) as "thing that enables us to change the amount of money invested in given financial instruments." ok, so it's obviously a relation between between investable funds and investment per instrument. the relation is not a fact, but instead about state change (of both related objects); it's is therefore a transitive verb and not a predicate.
+
+an order is an instruction of how to change our investments. investments are called _positions_, btw, and are easily represented by an alist from stock symbol to money. orders may be functions of candles (or "data" if you're unfamiliar with trading). to be compatible with broker order systems, handling candles will be part of the order system rather than each order.
+
+so the order system is `candles, orders -> positions` which is not strictly a function, but instead a list of inputs and associated outputs, where the only constraint on the inputs is that they're in scope, and the outputs are any representation of updated program state.
+
+now, technically not all orders immediately beget new positions; some orders are _open_ until they're _filled_ by some condition being met. so the mutation is really `candles, orders -> open, positions`. now, as it turns-out, for historical computation, we need to keep track of all filled orders rather than combining them all into a single positions object; therefore we'll change the mutation to `candles, orders -> open, filled`, and `position` will be a unary function of `filled`—a view or aggregation, if you prefer those terms.
+
+the actual order system is a bit more complicated:
+
+----
+instrument selector -> ((instrument (candle)))
+funds := float {- positive -}
+pseudo-order := (float {- on (0,1] -} instrument type . deps) {- where type is 'moc, 'mkt, or a list of conditions -}
+filled := (open-time open-price)
+positions := ((instrument money))
+filled -> positions
+apportioner := funds, positions, portion determiners -> ((instrument float))
+apportioner, (strategy(positions, funds, (candle))) -> pseudo-orders, portion determiners {- e.g. expected profit -}
+loop (pesudo-orders, portion determiners -> pseudo-orders) over (instrument) -> pseudo-orders
+pseudo-orders, (candle) -> open, filled, funds
+----
+
+notation:
+
+aside from readability, the the statements' order is meaningless. in the last statement, `filled` being on the RHS implies that there's been a change to `positions`, too, as implied by the earlier-mentioned statement `filled -> positions`.
+
+design/technique:
+
+the most general loop form is `loop <arrow> until <cond>`. non-terminating loops are denoted by `loop <arrow>`. if a loop is over a variable (a list or datum used in `<cond>`), then that variable must be present in the loop arrow's LHS. we do not need to specify loops over lists if it's implied. for example, if i were to have an arrow `candle -> potato`, and `candle` appears only as `(candle)`, and only on the LHS of any arrows, then the program must contain looping [mapping] over `(candle)`. looping would not be implied if there were also an arrow `(candle) -> candle`.
+
+rather than assuming that there are objects with attributes, we do the opposite: we know that there are data, which we identify then group [relate] for simplification. there's no concept of "X has a Y;" instead, it's just "there're related things; how can we simplify description of their relations?"
+
+notice that `((instrument candles))` can be joined [sql] with `positions` on `instrument`. an in-memory relational db e.g. sqlite would be a nice alternative to alists or map structures defined for whatever particular proglang you're using
+
+notice that arrows are not usually named; we do not care about how in code the states are transmuted. the reason that `apportioner` is a named arrow is because that's a feature that i wanted, not because the data suggested that it was a necessary implementation detail. we presume _nothing_ about which functions, subroutines, language features, or other programmatic devices shall be used to implement the arrow diagram. we name data (or groups thereof) but not arrows. we also do not care about the data's purity nor whether they're nullary functions that return values or values stared in memory directly. likewise, there's no consideration of whether a strategy "contains" or "produces" determiners, i.e. whether a morphism is of a coproduct or not; insofar as i'm concerned, they're equal.
+
+step-by-step:
+
+. `instrument selector` is an abstract variable; it's defined as whatever produces a list of lists of shape `(instrument (candle))`. any single expression wrapped in parens means a list of that expression.
+  .. the candle shape is `(float float float float float)`, which is common knowledge among traders.
+. there's a datum called `funds` of primitive type `float` with condition that it be positive
+. `:=` has higher precedence than `->`; `apportioner` refers to the arrow itself
+. `strategy` is a function of `positions`, `funds`, and `(candle)`
+. strategy is parameterized by / is a function of candles, filled orders, and candles, and each strategy produces a list of pseudo-orders. thus each strategy is associated with both a list of pseudo-orders and a financial instrument
+. loop over `(instrument)`. within each iteration of the loop, an instrument is in scope; `instrument` is implicitly in the LHS of the loop arrow given its relation to `pseudo-order`. loops collect effects / outputs; in arrow diagrams, a loop that isn't on the LHS of an `-> <RHS>` means that the loop does not, by its end, have a net change on the program's state.
+. 
+
+given that i've concrete definitions for each item in the schema, i can replace names by their shapes, and i'm left with a program. i can then algebraically simplify for efficiency's sake. no wondering which builtin constructs to use for whatever programming language i'm using, nor which design patterns to use. just scope, state, relation, and grouping. this schema directly translates to any turing complete languages, which must support loops/goto and functions or mutation.
+
+unfortunately most langs don't support alists. fine; using sequences/generators and hash tables or tree maps is still simple, if not as elegant. hopefully the language you're using doesn't offer an abundance of features that others use, so that when you use others' libraries you're constrained by those features' rules (like if someone defines a structure as a GADT—an extremely limiting variety of asymmetric constraint that should be used only by extremely wise designers, and then probably only for describing grammars.)
+
+
+an alternative notation would be based on implicit specification of control flow by defining predicates, à la prolog. e.g. i may define a state `s0` by the condition `a < 10`, rather than defining `s0` by relation to other states; upon `s0` `b <- a + b; a <- a + 1`. there's no explicit control flow statement saying to return to the beginning of any loop; it's implied by the `s0` rule and `a`'s value.
+
+.summary of design method
+
+* describe entire or any fragment of program by state change / input/output arrows: `state0 -> state1`. refers to mutation and/or functions ambiguously. this notation generalizes function notation `A × B × ... -> C` to functions or mutations, and: instead of sets we use particular objects; instead of × we use comma; and multiple "codomains" are written without being enclosed in a tuple.
+  ** `a -> a` means that `a` changes. things on RHS are what changed
+  ** `a -> b` means that `a` produces b, regardless of whether `a` is deallocated
+  ** all objects not present in the expression are assumed to have not changed
+  ** if the arrow needs to be done for each of many data, then `map` it. if the data that you're mapping over are related, then use a loop mechanism—fold, named let or other recursion—or `while` (the most general iterator; called `do` in scheme.) all looping is just systematic / symmetric state change.
+* identify things as (in)transitive verbs, nouns, or conditions
+* don't suppose data; starting from your necessary thing(s), trace your design's implied inputs or outputs
+* don't suppose functions; functions are a way of partitioning/grouping code, but we can't well predict in advance which groupings are best. just write code, then group/simplify/factor it as you write it, but not too soon, since, at any time, you may have yet to code code that uses forms outside the factorizations that you currently observe
+* express all data in terms of primitives or relations; no opaque placeholders, since those are vague nonsense, so naturally you'll find them difficult to consider
+  ** groups [grouping, oop-like patterns] naturally arise as you factor/simplify shapes as described in state change arrows. you may often find that multiple roles are satisfied by a single group, or that some roles are redundant.
 
 ===== analagous to ADTs [wip]
 
