@@ -2,6 +2,7 @@
 
 * have separate shells for interactive & non-interactive use. prefer dash (fast implementation of posix _sh_) for non-interactive and nushell for interactive.
 * simple computing (a/lists only) and a collection of tiny programs communicating with each other as necessary; but this contrasts one system with many dependencies. we want to reduce the liklihood of needing to change one program simply to satisfy another program just because they depend on some common resource. suppose we want to version control only one resource but not another; there's no reason to force a common constraint on both! put the constraint only where necessary!
+* to use db as fs, make a filesystem about it; there'll be syscalls like open, write, etc, but these will simply be implemented in terms of sql statements. otherwise make a vfs about sql to augment some system fs, just in case you need ext4, btrfs, zfs, &c for your root partition.
 
 ''''
 

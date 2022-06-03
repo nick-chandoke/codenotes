@@ -1,12 +1,20 @@
 == best paradigms
 
+.todo
+
+* [where i discuss grouping or common contexts (as an alternative to wrapping _explicitly_ in data structures)] illustrate how common this is in math by example of subscripts: Y~i~|x~m,i~ ~ Bernoulli(p~i~) : m ∈ [1,m]. while it's often nice to use matrices to express relations w/o indices, that's wholy a notational advantage, not a technical one. these contexts will be created automatically, e.g. their (max) size will be identified (when static initialization is appropriate) before compile time, and a block of memory will be created for that context in the asm's `data` section. operations concerning the context will be automatically arranged, too.
+* the advantage of tagged data in a set, instead of inserting into an organized sequence (or more generally graph): identifying proper insert points becomes expensive as the graph becomes complex. with sets, which are inherently unordered, we just insert into the set without regard to location. in fact, auto-organize this document by expressing it as a queryable/organizable set. an _organizing query_ is a fold from a set to a set of sets where each iteration of the loop extracts a subset then inserts it into the output set.
+* reconsider notes on "lists vs arrays" now that i'm ignoring "lists" as a concept, having replaced it by pairs, which generally beget trees rather than lists specifically.
+
+''''
+
 NEXT: learn then incorporate erlang and prolog. consider prolog as the ideal between of contracts and type systems.
 
 it's important for developers to learn
 
 * C (procedural)
 * prolog (declarative, horn clause-based)
-* apl (concatenative, tensor-based)
+* apl (concatenative, array-based)
 * assembly (procedural, purely stateful, register machine)
 * haskell (purely functional, λ-calculus)
 * factor (stack machine)
@@ -30,6 +38,9 @@ TODO: replace "e.g."'s by total consideration.
 what are the necessary components of the minimal practical programming language? turing machines are the simplest, but impractical. here's what we'll do:
 
 . look at languages' models only. e.g. lisp uses lists, factor uses stacks, and link:http://www.om-language.org/[om] uses function composition.
+  .. lists are exactly stacks; they're just used a bit differently in lisp vs factor, but even that could be said to be a difference between two languages rather than a difference of paradigm. also technically lisp is built on _pairs_, not lists. in fact, there's no reason to prefer proper lists over improper ones. `null` (`()`) should not be thought of as "the empty list" any more than `false`. there's the thought that mapping over the empty list is sensible, and returns the empty list, but seeing as `null` is its own value, and not a list (because _list_ is not a lisp data type; there's no primitive predicate that checks that; however there is `atom`, which is a primitive predicate that checks whether an object's type is _pair_), we can define `map false = false; map xs = [...]` which is exactly the same as `map () = (); map xs = [...]`. i do agree that `()` should be used instead of `false` because it's terse and represents the empty set, which is always the null value, cf `false`, which is a non-empty/bottom value of the boolean semiring. this being said, we must, even today, as lisp is, unlearn `()` as "the empty list", and instead recognize it as "null", the special empty value. indeed, this must be recognized in tandem with recognizing that lisp is not of lists, but pairs, and that therefore "lisp" meaning "list processing [language]" is inappropriate. in fact, even "pair lang" is a stupid definition, since "pair" means "ad-hoc relation", which are needed for all mathematical expressions and therefore all programs; to say that anything features relation is redundant. null termination is needed only for static arrays on contiguous memory partitionable into equally-sized cells where each cell corresponds to one object. linked lists do not share such assumptions, and do not require a _cell_ to hold the value of a termination symbol; termination is encoded, in the case of c &c, in the pointer pointing to `null`; or, in the case of lisp, haskell, &c, [the `cdr` of] an object satisfying `atom`.
+    ... even the empty set, though it makes sense, is inconsistent; we'd expect the empty set to contrast with a non-empty set; however, truthy values are usually not lists, and again, there's no reason that they would be, since lists are just a common (recursive) pattern of pairs. the sensible truthy contrast to ∅ for a datum is a singleton set of that datum. there's no singleton pair; by definition it can't exist. assuming `cdr` to be `null` is not a symmetric solution; null is here a dummy value; any other value, e.g. `0` or `647274706`, would equally suffice. in fact, because lisp uses `null` for `false`, there's nothing distinguishing `null` as a terminator from the falsy value being in a list, except that we test `(null (cdr x))` to determine whether we're reached the end of a list, cf `(null (car x))` which tests whether the current value is falsy. however, again, this is just a needlessly verbose method that relies on the arbitrary null-termination convention rather than the natural case: `(not (atom (cdr x)))`. so the question remains: how do we symmetrically represent truthy values as non-empty sets? it turns out that we actually do not need to do anything; the solution is that _there are no sets, no lists._ a pair is a data type just like string, number, or symbol, and we branch on type to determine how to handle it when appropriate. it is inappropriate to consider lists, or to consider pairs different from other types. we can store multiple data in a single string (though usually there're no efficient operations to consider their multiple data,) or single number (e.g. numbers as bitstrings or masks.) pairs are not special. they support the `map` function, and `map` is not special; we can easily write a function that maps an n-ary function over an n-bitstring, or fold over a string as a sequence of characters. `map` should not need to deal with _lists_; it should be general, of pairs, traversing pairs as binary trees; this: 1. is potentially more efficient than traversing lists (because lists are linear, so don't support parallel traversal); 2. preserves structure of whatever tree you have; 3. has (a generalization of) the exact same base case as traversing an improper list (viz `(atom (car x))` and `(atom (cdr x))`). in conclusion, the "solution" to the _empty vs non-empty set_ problem is to recognize that there was never any empty set to contrast! there's only an arbitrary symbol for a falsy value and everything else, and this difference is meaningful *only* wrt the `if` special form, but is also conveniently useful generally to represent a variety of zero different from `0`, which is useful as a number and may be usefully contrasted with the lack of a value.
+    ... we see that "lisp" is really "bitp", _binary tree processing_, since trees are the structure created by recursing on `cons`, though really rose trees &al structures are not binary trees; they recurse on `cdr` only (a rose tree being (root,children) encoded as `(cons root children)`.
 . consider these models as mathematical structures, then we'll describe them by graphs with unlabeled edges and valueless nodes
 . compare these graphs. e.g. _list_ is synonymous with _stack_ (and arrays are equivalent but with different efficiency for random access and reshaping,) functions are representable by lambdas, which can be described by lists, so functions are isomorphic to lists (composing lists is (via `cons`) is equivalent to composing lambdas.) actual "computation" is called `eval` or β-reduction.
 
@@ -40,7 +51,7 @@ what do we have so far, then?
 
 it should be enough to simply define data as relations of other data; this is merely lists, generally graphs, which specify constraints/relations of data, including access and mutation, thereby coding synchronization or other relations of puts & gets. then it should be enough to define programs as mutations (regardless of whether in-place mutation or function) thereof. this is pretty easy currently in any lisp for which mutation is faster than recursion: make some few global vars in a module. allow access to it wherever necessary. you can use such simple, few globals as stack(s) or registers. now we _could_ make this work for recursion-preferring langs, but that's a little more difficult for reasons described in the example in `just-use-lists.adoc`.
 
-aside: why recursion isn't necessary: recursion is merely a switch between a base case and recursive case. the base case is a single instruction without particular control flow; there's no element of recursion/iteration. the recursive case is merely splitting a form into multiple forms over a subset of which you'll recurse. to recurse is to apply either a base case or recursive case, which ultimately expands to base cases. therefore recursion is merely iterated splitting (a form of *indexing*) then applying an operation. therefore the essence of looping (iteration or recursion) is indexing: *identifying subsets*. the only difference between iteration and recursion is that, for lexically scoped languages, at least, the subset is strictly enforced by scope; after we select the subset, we pass it to the next call, within whose context only the subset is in scope. by contrast, iterative loops have invariant scope. scope is a bounding mechanism. bounds are present in finite sets, too. because each data structure can be indexed, we can use finite sets of indices to refer to subsets (iteration, stateful) instead of actually pruning-away subsets (recursion, pure.)
+aside: why recursion isn't necessary: recursion is merely a switch between a base case and recursive case. the base case is a single instruction without particular control flow; there's no element of recursion/iteration. the recursive case is merely splitting a form into multiple forms over a subset of which you'll recurse. to recurse is to apply either a base case or recursive case, which ultimately expands to base cases. therefore recursion is merely iterated splitting (a form of *indexing*) then applying an operation. therefore the essence of looping (iteration or recursion) is indexing: *identifying subsets*. the only difference between iteration and recursion is that, for lexically scoped languages, at least, the subset is strictly enforced by scope; after we select the subset, we pass it to the next call, within whose context only the subset is in scope. by contrast, iterative loops have invariant scope. scope is a bounding mechanism. bounds are present in finite sets, too. because each data structure can be indexed, we can use finite sets of indices to refer to subsets (iteration, stateful) instead of actually pruning-away subsets (recursion, pure.) furthermore, indices can refer to multiple structures that share common indices; their relation is implicit via indices, rather than being specified explicitly by cons. there may be very many things sharing indices or not, so, again like dynamic vs lexical scope, any subset of things may be easily identified by indices rather than specifying every possible combination of relations, which are always ordered and so cumbersome, but may be stored in a way that permits nonsequential access e.g. alists. another way of looking at it is types vs predicates; predicates implicitly work over many things whereas types must be specified & bound manually and are more restrictive.
 
 what all good models have in common is minimizing every variable's scope. however, the language must make doing so elegant. many langs fail here; it's often preferable to use larger-than-necessary scopes for convenience.
 
@@ -175,7 +186,7 @@ j: concatenative, parallel
 
 *as joe armstrong said, "[system] threads are evil anyway because they share resources. you have nice things in operating systems which are actually isolated, so one process can't fuck up another process' internal data structures, but threads are evil, 'cause what's the difference between threads and processes? it's that threads _can_ fuck up each others' internal data structures, so they're absolutely the things you don't want to program with."
 
-all three: simple, based on one data structure (list, stack, tensor), efficient (both cpu & mem; enabled due to language symmetry,) algebraic (particular patterns of lisp, monoids & stack updates, tensors,) data-based (both picolisp & factor see programs as data to which functions can be applied. i'm unsure how this is with j.)
+all three: simple, based on one data structure (list, stack, array), efficient (both cpu & mem; enabled due to language symmetry,) algebraic (particular patterns of lisp, monoids & stack updates, tensors,) data-based (both picolisp & factor see programs as data to which functions can be applied. i'm unsure how this is with j.)
 
 erlang (to learn:) distributed (built on π-calculus,) fault-tolerant (b/c of agent independence,) 
 
@@ -901,14 +912,12 @@ haskell is a good case study of a language based on abstract structures with a g
   ** list types capable enough to iterate over `a b c ...`
   ** refinement types
 * ghc (at least) fails to infer multiparameter type class instances
-* uses nominal typing (only)
+* uses nominal typing
   ** neither isomorphic nor equivalent types are implicitly coercible
   ** by haskell's design, they're needed for type class instance lookup. this is yet another suggestion that type classes have flawed design
   ** suggests seeing a type for its intended purpose rather than for its form
   ** no anonymous types
     *** no anonymous newtypes. we can't bind type classes to type forms on-the-fly
-
-a simple example expression that haskell cannot handle: a function that applies an elementwise operation over a tensor of types.
 
 .nominal typing & type classes
 
@@ -1489,7 +1498,7 @@ both:
 
 neither suggests a traversal; traversals are problem-specific. iteration clearly depends on shape, e.g. a tensor, cycle, general graph with(out) cycles, DAG, tree, list, stack.
 
-arrays (tensors):
+arrays:
 
 * random access
   ** a structure that's nothing more than direct data access. it's the simplest arbitrary-size random access data structure possible.
@@ -1504,7 +1513,9 @@ arrays (tensors):
 * O(1) transpose
 * slow addition of shape
 * parallelizable pointwise ops (since matrices can be considered as columns or rows)
+  ** see blas libs, esp. those official ones optimized for particular cpu architectures
 * especially good for combinatronics (for both efficiency/parallelism and expression elegance)
+* easily translate to databases (relational, distributed, graph, &c), so you can leverage their parallelism &al distributed computing, and ease of computing over large amounts of data, especially just loading data from disk rather than needing to keep it in memory.
 
 linked list (graphs):
 
@@ -1523,7 +1534,7 @@ zippers:
 * are dual to queues. both are pairs of lists that transform into one list by reversing one list and appending to the other, but queues do so in a slightly different manner, and thus achieve different functionality.
   ** queues and zippers are alternaties to doubly-linked lists.
 
-as lists are to graphs, matrices (or vectors, depending on processor architecture) are to tensors: graphs or tensors are the most general mathematical structure, but are programmatically implemented in terms of lists or matrices.
+graphs/arrays are the most general data structure.
 
 zippers are not a particularly fundamental structure; they're given as an example of a possible improvement on a list—namely when one would want to take or split a list. this segways into another point: each graph structure must be designed for particular traversals. however, this is not true of arrays! arrays support all possible traversals over arrays equally well, since arrays are O(1) get & set. therefore arrays are the default solution if you don't know how you'll traverse your data, but you know that it won't change size.
 
@@ -1544,7 +1555,7 @@ lists aren't as powerful as arrays, but i've yet to identify which powers are us
 * suppose we've a db-style m×n matrix (rows are records, cols are fields.) in this case, the array's shape is known at compile time. we can just as well declare n lists each of length m. if we need fast lookup, we can use a treeset. it's not O(1), but O(log~2~n) isn't bad. a proper B-tree or splay tree or skip list (latter both are implemented in racket's `data-lib` lib) is even better. this being said, matrices don't need balancing!
 * vector search always returns an index; if you want the index, then there it is; however, if you want the value, then it's trivial to get the value given an index. lists support search, but would need to return the index and value simultaneously in order to satisfy both needs without writing multiple functions. furthermore splitting lists would require either even more nearly-identical function definitions, or a more complex single function. splits are most elegantly done with zippers, but zippers are still less efficient than arrays, even if they're on the same order of magnitude.
 
-verdict: sequences (lazy lists) and vectors defined by index functions to elemetns are best; these don't require upfront allocation (or, often, _any_ allocation,) and they support fusion. array implementations often come with better functions than lists; such functions shoud be defined & used for lists, too. for example, scalar extension is done on arrays of any shape (tensors,) but this functionality isn't standardly implemented for lists; for lists you'd need to nest `map` multiple times, and you'd need to make the nesting relative to the nested lists' shape. (optics & recursion schemes solve this.)
+verdict: sequences (lazy lists) and vectors defined by index functions to elemetns are best; these don't require upfront allocation (or, often, _any_ allocation,) and they support fusion. array implementations often come with better functions than lists; such functions shoud be defined & used for lists, too. for example, scalar extension is done on arrays of any shape, but this functionality isn't standardly implemented for lists; for lists you'd need to nest `map` multiple times, and you'd need to make the nesting relative to the nested lists' shape. (optics & recursion schemes solve this.)
 
 *open questions*:
 
