@@ -1,0 +1,27 @@
+== sane "os"
+
+unlike _sane computing_, this document deals with code that interfaces with & manages hardware including persistent and volatile memory, graphics cards, drivers, &c. that's what an os is: it's code that the motherboard firmware (namely uefi) or bootloader runs, that runs other code and provides a convenient abstraction layer between programs and hardware.
+
+oses are not necessary. in fact, they're harmful because they're useless, and anything useless that's enforced is just cruft that you need to navigate around—needless constraint.
+
+oses typically:
+
+* come with libs, but that's not necessary; we should just use external libs, just as we use external programs.
+* run "programs." a _program_ is just code that arbitrarily considers one of its functions as being special; that function is called the _entry point_.
+  ** programs commonly accept arguments, just like functions, except that unlike functions their arguments must all be strings—a useless limitation.
+* describe ways of "managing" programs. this is hardly necessary; no code needs to be managed by other code. in fact, i _want_ to be able to directly interface with hw! that's _simple_ and easy: just write & read bytes.
+
+what an os should be: some code that sends & recieves data from hw. 
+
+.questions
+
+* what's with different oses? the machine code is particular to instruction sets, not oses, right? and all os libs are just code that can run on a given architecture, right?
+  ** e.g. any c program compiled for x86 should run on any x86 chip regardless of os, right? why not? how are machine code blobs loaded into the cpu?
+* is there considerable benefit to _programs_ (meaning _a blob of machine code_) instead of running it dynamically à la picolisp?
+* look at minix again; iirc it gives programs direct access to hw but is fault-tolerant.
+
+.langs that compile to machine code
+
+really, how beneficial is compiling to machine code? i mean obviously machine code is all that actually runs; so basically what varieties of vm are sufficiently efficient, especially for code that we can pause and edit its state then resume it, which is ideal? compare rust, which is extremely optimized but non-dynamic, and picolisp or a stack machine. on modern hw, especially when using matrices to exploit gpus as a main vector of computation, what's a good optimization/hackability tradeoff?
+
+_TODO: see lisps.adoc

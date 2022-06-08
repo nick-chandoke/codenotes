@@ -110,7 +110,7 @@ M: rect area [ l>> ] [ w>> ] bi * ;
 
 three functions from class to class:
 
-* derivatino
+* derivation
 * union (n-ary)
 * intersection (n-ary)
 

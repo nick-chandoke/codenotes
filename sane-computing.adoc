@@ -1,108 +1,96 @@
-.to add
+== sane computing
 
-* have separate shells for interactive & non-interactive use. prefer dash (fast implementation of posix _sh_) for non-interactive and nushell for interactive.
-* simple computing (a/lists only) and a collection of tiny programs communicating with each other as necessary; but this contrasts one system with many dependencies. we want to reduce the liklihood of needing to change one program simply to satisfy another program just because they depend on some common resource. suppose we want to version control only one resource but not another; there's no reason to force a common constraint on both! put the constraint only where necessary!
-* to use db as fs, make a filesystem about it; there'll be syscalls like open, write, etc, but these will simply be implemented in terms of sql statements. otherwise make a vfs about sql to augment some system fs, just in case you need ext4, btrfs, zfs, &c for your root partition.
+see also _sane os_, _best paradigms_, and _just use lists_. this document discusses the user's experince with using a computer—common tasks like writing & reading information, configuring their system, communication among code, guarding themselves against incorrect operations, recovering from accidents, communicating with other machines, extending the functionality of one's machine, &c.
 
-''''
+this document expects all users to program, but for programming to be no more difficult than the problem that the program aims to solve i.e. the programming itself is trivially simple, and in fact quite fun, since it should use notation much superior to natural language, and is beautiful. anything else is inadmissable.
 
-TODO: consider multiple programs connecting to a common sql db for ipc; atomicity means that we can use sql to wait for events (though hopefully not inefficiently; surely we can use even a simple server to simply communicate between programs when one program has committed to the db so that the other program can read therefrom) and that our parsing is as simple as using vectors (table rows.) there also won't be any dealing with pipes; there'll only be a fault-tolerant connection to the db!
+=== ideal 
 
-NEXT: incorporate the following two points into the notes in their proper places, and revise this whole document into one that's useful in addendum to best-paradigms, which discusses some of the same topics that this document does but with better description; what this document provides that best-paradigms does not: the sway or kakoune style IPC design (subprocesses/piping & envars.) this is separate because it discusses how to use multiple wares together to implement a given design, whereas best-paradigms discusses the designs only.
+living, organic, self-sustaining, self-repairing, context [environment]-sensitive, helpful, adaptive, polymorphic information manipulation & parsing system. it seeks to _help understand my will, then help me fulfill it, rather than being a dumb, dangerous machine that takes my orders._
 
-* use haskell for developing typed combinators (e.g. lenses,) then use those in untyped langs. the trick is finding combinators that always combine sensibly, so that you're free to combine them in untyped languages without worry. identifying such types/combinators can be tricky, and thus is the ideal problem for which strongly typed systems (e.g. ghc's type calculator) is an ideal solution.
-* seek elegance rather than minimalism. elegance will always be minimalist, but never too much.
+* forget _programs_; think of just _code_
+  ** all code should execute in shared memory and have direct access to hardware
+* forget _languages_; think of [notations for] simple abstract machines (e.g. stack, register, array, or list machines)
+  ** your notation [graphical representation] should be elegant and terse
+* forget text, and forget _editors_; have a single data manipulatiion program. data may be parsed by any pattern, expressed by any form (graphical, audial, &c) and manipulated by any gesture, where _any_ means _whatever appropriate_.
+* never represent non-textual data by text. for example, never should the text string "1245.657" exist; that should always be a number! parse bytes, not text!
+* hierarchical filesystems suck; as with most sucky things, they impose unnecessary constraint: namely, for starters, being a tree rather than general graph; however, even a graph is overconstrained: it assumes discrete nodes, whereas data is continuous. prefer a database.
+  ** blobs still have their place; some things, like media or books, are to be viewed by themselves, and so should be stored with definite bounds (considered as closed sets rather than an open ones.)
+* no thing's constraint should affect other things' constraints, unless a constrained group of things is considered, in which case some subset of those things must modify their constraints in order to satisfy the group's constraint.
+* _better than web_ paradigm: rather than http, requests are db queries & responses are some form readable by the db. the *data viewer* program can present & manipulate these responses just as it does of any data.
+* code should be able to be paused. this may happen manually or when an error occurs. a paused program should be 1. manipulable while running, and 2. writable to persistant media; then resumable from either (1) or (2).
+* "data soup" (implicit definition): specify things without regard to order, then allow any order(s) to be calculated. examples:
+  ** a la prolog, specify states (by predicate, even if that predicate is equality with an arbitrary nominal label, "λx. label(x) = such-and-such-state") and maps from states to successor states
+  ** hooks are implicit definition: rather than insert an operation at a particular point of execution / control flow in a program, a hook specifies a relation between a (named) point (generally 1+ point(s) satisfying a predicate) of execution context and some function. the hooks of a given execution context usually run in indeterminate order, btw.
+  ** put into dbs instead of into a file. for files, you must seek to the correct place (assuming that only one exists) to insert the data; dbs have no such restriction.
+* messaging (async communication among code) is good e.g. π-calculus or racket's thread mailboxes. in fact, generally concurrent systems are best: they're parallel and generalize to being distributed over multiple machines, but most importantly concurrent programs that work tend to have better designs than non-concurrent programs.
+* persistent and volatile storage should be shown to programs as a single thing. TODO: how? link:http://metamodular.com/Common-Lisp/lispos.html[apparently] this was first done in the 1960's.
 
-.general principles
+===== benefits of dbs
 
-* any discussion of a language or other tool that isn't exclusively about elegance is a worthless discussion. terseness/minimalism, nor prettiness, is no worth without regard to elegance. just in case it needs mention, any mention of people is worthless in a discussion about a tool. how some people sometime use a tool has nothing to do with the tool itself.
-* it's better to hack together currently existing code (regardless of language!) than to write your own
-  * programs can achive ipc via:
-    * cmdline invocation
-    * direct communication via:
-      * tcp/http, websockets, udp, etc (this is generally rpc)
-      * unix socket (fastest, and thus preferred)
-    * proxy, e.g. via databases or files (a program writes/puts (in)to a common resource, then another gets therefrom)
-      * a good database should allow unix socket connections
-  * startup times are negligible for programs running as servers
-    * smaller languages with smaller runtimes are better than larger languages with larger VM requirements anyway
-  * cmdline IPC means:
-    * i/o, but that's not considerably slower
-    * parsing, which may take some time
-  * marshalling and ffi is the best solution
-* there's *data*, manipulations thereof (*functions*,) and how we express those manipulations (*syntax*.)
-  * there're also _hooks_ (code executed upon asynchronous events.) a hook on a synchronous event is just another expression of procedural code. however, handling async events is a special consideration of computer programming that doesn't typically have a mathematical analogue (except the process (i.e. π) calculus.)
-  * _programs_ are data that permit interpretations as morphisms, either pure or stateful, which are really equal, differing only semantically about which context is considered. being that programs are orderly, the code used to encode them must follow a grammar.
-* functions can be data just as verbs can be gerunds or infinitives
-* the manipulations are functions/proofs (see curry-howard correspondence) and/or structures. structures are at least related to functions [algorithms]: every algorithm is neatly implementable for a given data structure, i.e. every data structure supposes [at least one] natural morphism over it.
-* use parallel algorithms & systems. GPUs or other parallel matrix tech is good.
-* constraint solvers generalize type systems, compute most efficient solutions, and take least amount of programming (they're declarative)
+* acid resists malformed states/data.
+* there's no difference, in code, between a local vs remote db
+* supports information soup, non-unique data, and overlapping data
+* optimized for storage, access, and modification
+* often serverized, so machines can communicate
+  ** supports the _better than web_ paradigm
+* no _pipes_; pipes (at least as currently used) support only linear pipelines of byte streams.
+* rows are parsable as collections of distinct attributes
+* can modify more efficiently than files? but databases are stored as files on filesystems; TODO: how can dbs more efficiently reshape themselves than filesystems or files (e.g. editing a csv file, which is a [linear] blob instead of a tree or rope)?
 
-.basic technique
+==== tech currently nearest to the ideal
 
-basically: *pipe data and call functions. disregard languages.*
+* TODO: is there anything better than linux?
+* on *nix systems:
+  ** for db fs, make a [virtual] fs; open, write, &c are simply sql statements. this allows one to use a db instead of hierarchical fs, but serves as an interface for current h.fs programs (e.g. picture viewers) so that you can continue to use them as they are.
+* programs can communicate via http/tcp, udp, unix sockets, websockets, cmdline, pipes, or writing to & reading from shared state e.g. files, dbs
+  ** to make a program interactive, daemonize / serverize it; allow it to run in the background, and accept input from socket, stdin, reading from a file &c
+* if it's appropriate to use a poor language, then at least there's probabily a lisp or scheme of that lang.
+* because often data is represented by strings, you should know a good parser well. parsing expression grammars (pegs) are very good. however, the only lang that i know of that uses them is janet, which is a poor language. haskell has good parsers (megaparsec) but haskell is a bit high-level. racket has megaparsec but its implementation seems to be buggy/flawed. fortunately, if you know programming well, then writing parsers is trivial. in fact, ease of writing parsers is a good measure of how good a programmer you are, specifically how well you understand ad-hoc and/vs symmetric structures.
 
-non-lisp languages suck because they can only get in the way of the actual logic. consider haskell: it's expressive, and commonly good, but it's not perfect: sometimes its syntax is inelegant. if it were a lisp, then we could just add syntax via a macro. instead, to augment its syntax, one would need to modify the haskell compiler's source code. yikes.
+=== design principles
 
-the very fact that non-lisp languages are not as general/simple as possible implies that they're more convenient for some things and less convenient for other things. rarely will any given language perfectly suit your needs, so you'll need to consider the conveniences and inconveniences that any language provides. this is fine for small projects, but god forbid that those should grow into larger projects, you may well find yourself uncomfortably beholden to that language.
+.non-technical
 
-fortunately, languages aren't much a concern because each one supports:
+* computers don't do much: they just change [byte] values at given locations in memory. any other presumption about what computers do is merely an interpretation that's only appropriate if accurate and useful. remember that you can always choose to just move bytes; you don't need to burden yourself with unnecessary suppositions. now, naturally, since we're dealing generally with ordered information, you'll want to encode information by groups of bytes and define transforms (or an algebra) on them.
+* eschew unnecessities & redundancies
+* code should be easy to refactor; this is afforded by making small subsets of code meaningful, where they, if abstract in meaning, are concretely meaningful in the contexts in which they're placed, e.g. a sentence fragment is syntax that is meaningful by itself, but is not a complete thought; it can be associated with other sentence fragments of particular form in order to constitute o complete thought.
+* language is a tool, a representation of truth, not the truth itself! do not allow language to mislead you! indeed, choose a _notation_: a _direct representation_ of truth by symbols, so that you can manipulate truth while benefitting from the ease of reasoning enabled by symbolic reasoning!
+* keep particular _principles_, techniques, or other _abstractions_, not particular tools (including langs)!
 
-. reading from stdin and outputting to stdout or stderr
-. running extenal programs via command lines, e.g. `os.execute("ls", "-a")`
+.technical
 
-this means that all programs are interoperable! if there's functionality implemented in a language that you don't want, then you can make a little "main shim" (cmdline invocation to either a running server or a program to be launched) in that language that simply parses a command line or stdin, and rest assured that you'll never need to code anything more in that language. alternatively you could have one program write to a database or filesystem, then instruct another program to read therefrom. this is useful for caching. for example, a program may request data from a remote server over a slow connection, then effectively pass it to another program. if that second program had an error, then we'd be able to retry without re-requesting; we'd just pull from the database or filesystem.
+* _constraint_ has two forms: ad-hoc and symmetric. ad-hoc is arbitrary grouping. symmetric is whether a thing follows a predicate or not. constraints are the domain of a "branching" map (really _partitions_), whose cod is any object. partition functions are the basis for *parsing*.
+* _code_ is order (vs chaos). code is not necessarily executable. however, as any (orderly) thing may permit multiple interpretations, one of those interpretations may be as executable instructions.
+* the order of the structure (i.e. the form of a structure considered as a duple of mass & form) directly corresponds/represents operations on / traversals over the structure.
+* use metaprogramming i.e. use a framework that does not distinguish between executable & non-executable code. avoid macros (as e.g. picolisp does) if you can.
+* trees are isomorphic with nested lists. this is universal, not particular: `cons` (ad-hoc binary association) is the primitve association operator; trees are the result of recursing on `cons` produces binary trees, any subset of which may be interpreted as a list. `cons` is the mechanism that enables grouping physical data; sets defined by predicates define abstract & symbolic data.
 
-commonly databases make parsing easier, too. for example, i create a table corresponding to a struct. in one program i easily insert an object of that struct type, then in another program i read the record such that each field is a separate object in an array or dict. this is handled by sql libraries each written for their program's language.
+.princples
 
-''''
+* seek elegance; minimalism & beauty always follow, though seeking the latter two do not guarantee elegance.
+* seek simplicity; safety will follow. seeking safety will not guarantee simplicity.
+* ignore how things are done; consider only naïve ideals, then identify an optimized version thereof, constrained by any [currently] inescapable constraints (namely constraints of the implementing system)
+* resist data types; store everything as groups of bytes, and allow any group multiple interpretations. if data should be interpreted particularly, then make it difficult to interpret (parse) it as (into) any other data.
+  ** magic numbers are easy solutions
+  ** if a thing fails to match a predicate, then it should fail to match as early as possible
+* maximize unambiguous polymorphism
 
-so whenever you're using a computer, decide: what functionality do i want? what offers it? how easy is each option to use? even if the language is nice, installing it or using its tooling may suck.
+.useful particularities
 
-functionality is the domain of structures—not languages. algorithms are usually easily-enough translated among languages.
+* using delimiters instead of indentation means that anything can be a one-liner. this is often useful when mixing languages, e.g. `ls -1 | janet -e '(loop [l :in (string/split "\n" (file/read stdin :all))] (when (string/has-suffix? "adoc" l) (print l)))'`. this example is not so good because it uses both starting and ending delimiters, which can be unruly to keep properly nested; instead, a stack lang would be much better for one-liners.
 
-.particular tools
+=== using non-ideal systems
 
-* lisp(s) for code (e.g. racket, chicken, janet, fennel,....) these have nearly as little syntax as a language can have: it's just [parens-]delimited funcalls, and maybe some data literal syntaxes.
-  * usually i prefer janet for scripting and typed racket for large/complex programs, especially if safety is needed
-  * its syntax is extensible via macros, for convenience, only when & where desired
-  * simple to parse and refactor
-  * using delimiters instead of indentation means that anything can be a one-liner. this is often useful when mixing languages, e.g. `ls -1 | janet -e '(loop [l :in (string/split "\n" (file/read stdin :all))] (when (string/has-suffix? "adoc" l) (print l)))'`
-  * there are many lisps, but usually their syntaxes are mostly the same
-  * for each of many languages (especially popular ones,) there is at least one lisp that transpiles to it. therefore you hardly need to waste time familiarizing yourself with various syntaxes. remember! a program is not its syntax! it's the logic referred to by the syntax!
-* databases for data. their data management is far better than anything you'd personally implement.
-  * sqlite is excellent for non-distributed systems:
-    * ACID
-    * small
-    * easy to use and install
-    * supported by many languages
-* a good parser (i generally recommend janet pegs)
-
-.sane computing
-
-* concern yourself with knowing the logic—not much the language that describes it nor tools that implement it
-* as with everything, identifying something mathematically will tell you exactly what it is and nothing of what it isn't
-* keep everything minimalist and simple. this way, you can easily write scripts and create small systems that resolve specific problems. because everything you're working with is simple, you'll've not spent much time nor effort learning it, which will emotionally free you to use other solutions. your norm will be using "whatever works" rather than becoming attached to any particular tools. instead, you'll be attached to particular _principles_, techniques, or other _abstractions_.
-* C isn't bad. hacking lua (for fennel) or many other lisps (including janet, chicken, guile, or racket, in that order) have easy C ffi.
-
-.data vs code
-
-code is expressible by an AST, which is obviously a data structure. where code and data appreciably differ is
-
-* nestability: functions' outputs are easily passed as inputs to other functions, e.g. `(+ 10 (* 20 3))` this has 5 data—`+`, `10`, `*`, `20`, and `3`—arranged in a tree. remember that trees are isomorphic with nested lists.
-* executability (of primitives/builtins): in the above example, `+` and `*` are irreducable (i.e. inexpressable by other terms) functions that produce outputs.
-* side effects: data can't have side effects, but code can, especially doing so without useful return value (viz null or void)
-* scope: every identifier [symbol] in code must be resolvable in its context. databases do not have scope beyond nullity of result sets.
-
-these aren't strict differeneces; they more are common patterns. in fact, we can do all of our programming in sql, and it'd actually be useful to do so. the only inelegance there is the need to create tables for each data structure. commonly we have anonymous structures (denoted by lists or tuples) in programming languages. finally sql databases don't support dictionaries.
-
-many of these are better supported by small csv files. large csv files don't have the efficient writing or reading (nor ACID) that db's have.
+* use others' code, if available, rather than writing your own, unless you can implementat (more) elegantly, quickly, efficiently, and easily enough.
+* use external invocation (`execl` in c, `system` in racket, `os.execute` in python) and stdin & stdout, or sockets, servers &c to wire dataflows independent of language. if you can't call fns directly, then wrap the fn in a main method that accepts (from stdin, a file, db, cmdline arg &c) the data that you want.
+* to resume from a crash, write program state to a db or file.
 
 .stability & sanity
 
 programming as a field is always seeing new tools, people, techniques. often we're expected to know them because new, useful software uses them, or because an employer or customer demands so, or because we're collaborating with others who use these novel things. keeping up with it all is hopeless: there's too much, and much of it isn't even useful! often "new" technologies are just common ones being marketed differently. for example, currently blockchain, machine learning, and orchestrated containerization are being applied _everywhere_, though they're needed (or even useful/appropriate) in few places.
 
-we find ease in the things that do not change: algorithms, data structures, common software that's been around for a very long time, and is so known to be reliable. we also find ease in minimalism: using few, flexible tools—again, databases and lisps, but also the likes of kakoune, kmonad, tmux, nmap.
+we find ease in the things that do not change: algorithms, data or abstract structures, and even common software that's been around for a very long time and/or is known to be reliable.
 
 .prefer (sql) databases
 
@@ -128,7 +116,7 @@ therefore to use a database is to make an efficient program. the only places whe
 
 basically, databases are good for everything that involves data, but inappropriate or unaccomodating to everything else (namely anything involving i/o.) not only this, but databases may work locally as a program, or run as a server, which makes database code automatically work for either single-host or distributed use cases.
 
-.cheating
+.beneficial imperfection, and non-symmetric exploitation
 
 know when you need to program for perfection or not. for example _linearize_ (use a linear approximation of) mathematical expressions, or estimate mathematical expressions over reals by a series of bitshift and linear algebra operations. know when it's better to use a hard-coded lookup table or use an algorithm to produce values. code for your purpose rather than a "good" implementation. for example, your situation may call for random numbers. your choices are a random number source like `/dev/urandom` or a pseudo-random number generation algorithm. you can use the former if it provides enough data. if using an algorithm, then it only needs to be seemingly random—something that depends on what the value is to be used for. don't waste your time making a super-unpredictable algorithm if no user will notice the difference. an algorithm may be convincing enough for pseudo-random game events but horribly obviously not truly random for producing a grayscale image of white noise.
 
@@ -138,7 +126,7 @@ this may seem obvious, and maybe it's only a problem for few people, but please 
 
 .fundamental computer science
 
-programming is just recursion, lists & maps / alists (i.e. lists of pairs) / tagged unions (lua shows that these are all the same structure,) and concurrency. computer science is implementing mathematics by these. vectors, lists, stacks,...they're implementation details, which can be important, but only for efficiency rather than result state. graphs are the most general data structure (though not the most general mathematical structure) but are implemented in terms of arrays & maps. ADTs are useful, but they're expressible recursively by lists and maps. strictly, pair is the smallest data structure. it corresponds to the fundamental mathematical principle of _association/relation_—the basis for all super-singleton structures.
+programming is just recursion, lists & maps / alists (i.e. lists of pairs) / tagged unions (lua shows that these are all the same structure,) and concurrency. computer science is implementing mathematics by these. vectors, lists, stacks,...they're implementation details, which can be important, but only for efficiency rather than result state. graphs are the most general data structure (though not the most general mathematical structure) but are implemented in terms of arrays & maps. ADTs are useful, but they're expressible recursively by lists and maps—more general and thus more flexible structures. strictly, the cons pair is the smallest data structure. it corresponds to the fundamental mathematical principle of _association/relation_—the basis for all super-singleton structures.
 
 given pairs' fundamentality, we see that every structure can be considered or traversed as: itself naturally; a tensor/matrix; a graph. if you're familiar with these structures, it should be clear how databases or parallelized GPU operations can be very useful here.
 
