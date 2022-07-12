@@ -1,8 +1,12 @@
 == sane "os"
 
-unlike _sane computing_, this document deals with code that interfaces with & manages hardware including persistent and volatile memory, graphics cards, drivers, &c. that's what an os is: it's code that the motherboard firmware (namely uefi) or bootloader runs, that runs other code and provides a convenient abstraction layer between programs and hardware.
+unlike _sane computing_, this document deals with code that interfaces with & manages hardware including persistent and volatile memory, graphics cards, drivers, &c. that's what an os is: code that:
 
-oses are not necessary. in fact, they're harmful because they're useless, and anything useless that's enforced is just cruft that you need to navigate around—needless constraint.
+. the motherboard firmware (namely uefi) or bootloader runs
+. runs other code
+. allows direct access to hardware or device drivers at varying layers of abstraction
+
+operating systems are not necessary. in fact, they're harmful because they're useless, and anything useless that's enforced is just cruft that you need to navigate around—needless constraint. instead, just have code that is intended to make the system run without the user running the code explicitly—so-called _system code/software/programming_.
 
 oses typically:
 
@@ -11,7 +15,7 @@ oses typically:
   ** programs commonly accept arguments, just like functions, except that unlike functions their arguments must all be strings—a useless limitation.
 * describe ways of "managing" programs. this is hardly necessary; no code needs to be managed by other code. in fact, i _want_ to be able to directly interface with hw! that's _simple_ and easy: just write & read bytes.
 
-what an os should be: some code that sends & recieves data from hw. 
+what an os should be: some code that sends & recieves data from hw, and practically, acts as an abstraction [virtualization] layer to certain hw (e.g. primary and/or secondary memory, physical threads)
 
 .questions
 
@@ -25,3 +29,35 @@ what an os should be: some code that sends & recieves data from hw.
 really, how beneficial is compiling to machine code? i mean obviously machine code is all that actually runs; so basically what varieties of vm are sufficiently efficient, especially for code that we can pause and edit its state then resume it, which is ideal? compare rust, which is extremely optimized but non-dynamic, and picolisp or a stack machine. on modern hw, especially when using matrices to exploit gpus as a main vector of computation, what's a good optimization/hackability tradeoff?
 
 _TODO: see lisps.adoc
+
+=== writing a sane os
+
+see link:https://www.youtube.com/user/Computerphile[computerphile] for vids on low-level computing.
+
+the contending implementation langs:
+
+* scheme48
+  ** failing that, chicken
+* pil
+* link:ulisp.com[ulisp] (μλ)
+* link:http://ferret-lang.org/[ferret] (see link:https://nakkaya.com/2016/06/10/ferret-a-hard-real-time-clojure-for-lisp-machines/[this example project])
+* cl (with one of these compilers: embedded common lisp, clozure, sbcl)
+* link:cons.io[gerbil scheme]
+* nim
+* go
+* asm
+* d
+* spark ada
+
+c didn't make the list because, despite being low-level and simple, it lacks macros, has highly redundant and non-tacit syntax without a macro system capable enough to feasably overcome, and most considerably, relies on compilers to find & link libraries—a task that shouldn't be problematic, but also should be done automatically; neither of these is actually happening, though.
+
+qualifications of the chosen lang:
+
+* system lang
+  ** efficient
+  ** direct hw access
+  ** good semantics & syntax
+    *** hacky (no restrictions; no data types, memory access restrictions, purity, overly-restrictive scoping, &c)
+    *** tacit
+
+compiling should be done only where appropriate (hot-loading machine code would be better) and _linking_ should be considered very uncommonly; rather than have static vs dynamic linking, just have dynamic, and version control everything and/or allow multiple copies of things. linking static libs is not practically better than compiling the lib's source along with other code into one executable; though more efficient, such an efficiency gain is unconsiderable for good, terse code compiling on modern hardware. if linking is to be done, then it should appear to the programmer as simple as importing a racket or lua library. most certainly, at least, having link:http://www.yolinux.com/TUTORIALS/LibraryArchives-StaticAndDynamic.html[separate `.a` and `.so`] types is outright tomfoolery; code is code, and may be either embedded into an executable or dynamically loaded.

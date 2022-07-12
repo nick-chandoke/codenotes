@@ -1,0 +1,452 @@
+== sql
+
+sql is an array-based proglang whose sole data structure—the table—generalizes maps and arrays to matrices any subset of whose columns can be indexed. like APL, a table's cell's value can itself be a table. 1D arrays in sql are represented by single columns. objects [structs] are represented by single rows, and arrays of objects are represented by tables. features:
+
+* slicing
+* concatenation
+* sorting
+* partitioning
+* folds
+  ** map
+  ** filter
+* generators
+* set-theoretic operations—a very unique feature for arrays!
+* extremely efficient; much easier to reason about performance than using linked lists, hash maps, arrays, etc
+* link:https://www.sqlite.org/json1.html[native JSON support] (introduced in the SQL 2016 standard)
+* null propogation
+
+but appears to lack:
+
+* ability to call foreign funcs (though other langs can easily call sql)
+* pointfree funcomp
+
+.what is sql
+
+sql is a bit mysterious:
+
+* there's an open standard, but you must pay to access it
+* despite the standard existing, no sql database totally conforms to the standand—both lacking standard features and including extra non-standard features
+* sql began as merely a relational database system in 1974, but from SQL-99 onward has introduced much more functionality
+* sql is commonly misunderstood to be a query & storage dsl, but it's really a tensor/map transformation general-purpose language on an ACID runtime
+
+.sql basics
+
+a table A may have a primary key (unique identifier) column, and may have a column that, in another table B, is a primary key; this column is called a _foreign key_, B is called the _child_ table, and A is called the _referenced_ or _parent_ table. foreign key is its own concept (as opposed to a column that we can `join` on) because it can be used as a constraint in a table's schema, which is basically a type check that we won't modify columns improperly.
+
+=== relational algebra
+
+.terminology
+
+[options="header"]
+|===================================================
+| relational algebra | common name or implementation
+| tuple              | row
+| attribute          | column (includes type when applicable)
+| relation/selection | table
+|===================================================
+
+* _constraints_ on a table or column [attribute], e.g. `UNIQUE`, `NOT NULL`.
+* tuples are unordered, instead being expressed as attribute-tagged unions
+* a tuple's set of attributes is called its _heading_, _domain identifying list_, or when as an argument to projection (see below,) a _projection list_. the heading is a list of indexes, whether ordinal or nominal.
+* a set of tuples sharing a common heading is called a _body_
+* a relation can thus be partitioned into a heading and body
+
+degree:: number of attributes
+schema:: heading with constraints (all needed to produce a selection)
+
+.primitive operations
+
+TODO: continue from ~/Downloads/pacific75-eval.pdf
+
+union-compatible:: having the same attribute (column) sets
+
+* link:https://en.wikipedia.org/wiki/Selection_(relational_algebra)[selection (aka _restriction_)] (σ_pred(R)): filter by predicate
+* link:https://en.wikipedia.org/wiki/Projection_(relational_algebra)[projection] (π) of a heading onto a table, π_L(R) := {r[L]: r ∈ R}, is all tuples r of a relation R where the elements of r are restricted to L.
+* link:https://en.wikipedia.org/wiki/Rename_(relational_algebra)[rename ρ]: rename an attribute
+* [flattened cartesian] product (×). TODO: test: in sql lhs & rhs tables must have mutually exclusive attribute sets.
+* set difference (aka _relative complement_) (\). requires union-compatiblity and may be defined in terms of union: given relations R & S of equal degree _n_, R \ S = (σ_(r[1] ≠ s[1] ∨ ... ∨ r[n] ≠ s[n])(S)).
+* union (∪). union-compatible.
+* intersection (∩). union-compatible.
+* join
+  * natural (⋈): defined when lhs & rhs share at least one attribute. lhs records with new heading: the union of lhs' & rhs' attribute sets
+  * inner: natural but with repeated columns (attributes are multisets)
+  * outer: flattened cartesian product
+  * left or right
+* division: for relations R & S of headings A & B (without repitition) of degrees m & n respectively, the division R[A÷B]S is a subset of π_A'(R), viz {r[A']: r ∈ R ∧ ∀s ∈ S ∃r' ∈ R : r[A'] = r'[A'] ∧ r'[A] = s[B]}. definitions vary when S is null.
+
+the _theta join_ is a non-primitive operation: x θ y = σ_pred(x ⋈ y), expressed in sql as `select _ from _ join _ on <cond>;`
+
+the relational algebra is closed under all these operations.
+
+NOTE: *for the love of god, use `BEGIN TRANSACTION` &al*
+
+=== the language
+
+==== semantics
+
+* everything is a table (multiset of tuples whose positions may be bound to, in a given conext, a name) viz the results of statements, which can be enclosed in parens, e.g. `select * from (select * from mytbl) t`
+  * such statements are called _derived tables_
+  * thus tables can be anonymous. this allows passing multiple data, e.g. `select * from (values(1),(2),(3)) t` to mean scheme `(values 1 2 3)`
+    * this is apparently equivalent to `select * from (select 1 as a from dual union all; select 2 as a from dual union all; select 3 as a from dual) t`
+  * _rows_ have no special meaning; they're just singleton tables. all operations are over tables.
+    * generally all operations are on the entire table
+
+[options="header"]
+|==============================================================================
+| sql                 | java 8, math, or scheme
+| `table`             | stream of tuples
+| `select`            | map
+| `distinct`          | distinct
+| `join`              | flatmap
+| `where` or `having` | filter
+| `group by`          | concatMap (useful for aggregates only)
+| `order by`          | sorted
+| `union all`         | concat
+| `with`              | `letrec`
+| `check`             | guards
+| `join`              | ⋈
+| `cross join`        | cartesian product
+| `inner join`        | intersection (no nulls)
+| `left join`         | all left elements and corresponding right elems or null
+| `right join`        | corresponding left elems or null and all right elements
+| `full join`         | union (may have nulls on either right or left)
+| `execpt`            | set difference
+|==============================================================================
+
+==== syntax
+
+`table.attr` disambiguates when `attr` is shared by multiple tables; otherwise attr is resolved against the table of the `from` clause.
+
+basic operators
+
+| &          | bitwise and
+| \|         | bitwise or
+| ^          | bitwise xor
+| += &al, %= | assignment can be used for variables bound in a funcbody
+| &=         | bitwise and assignment
+| ^-=        | bitwise or assignment
+| \|*=       | bitwise xor assignment
+
+===== `create table`
+
+* `create table as` still inserts a table into a database. it's used to init a table at declaration time, for convenience.
+* `temp(orary)` tables are accessible in the remaining sql script, but is not persistent; it isn't inserted into the database, and so doesn't exist after the sql script that created it finishes execution.
+
+===== functions (not in sqlite)
+
+[source,sql]
+----
+-- define
+create procedure foo @param1 nvarchar(30), @param2 nvarchar(10) as
+select * from customers where p2 = @param1 and p2 = @param2
+go;
+
+-- invoke
+exec foo @param1 = 42, @param2 = "stuff";
+----
+
+`select` is the main statement of sql; it's where data transformation occurs.
+
+* select distinct
+
+===== columns
+
+====== `case`
+
+determines a column's value. syntax: `case [when <cond> then <value>]+ [else <value>] end`.
+
+.examples
+
+[source,sql]
+----
+select customername, city, country from customers
+order by (case when city is null then country else city end);
+
+-- or
+select (case when city is null then country else city end) from customers;
+----
+
+====== null
+
+* ifnull(<col>,<val>)
+* isnull(<col>) -- returns bool. called nvl on oracle.
+* coalesce(<col>) -- 1st non-null value in a list. generalizes `ifnull` to accept multiple values each of which may be null (though it'd be expected that at least one isn't)
+
+====== constraints
+
+all constraints can be added or dropped via `alter table` or can be added in `create table`
+
+* primary and foreign keys
+* `check`, which guards inserts
+* default
+* indexes
+* auto increment
+
+===== filters
+
+* `having` is simply `where` that accepts aggregates, e.g. `having count(_) > 5`
+* `where` clause accepts things that eval to bools
+  ** <, = &al common equivalence relations and boolean conjunctions
+  ** between <lb> and <ub>
+  ** in <set>
+  ** like <pat> (useful only for strings)
+    *** `%` is regex `/.*/`
+    *** `_` is regex `/./` 
+    *** regex-style character classes
+  ** exists
+  ** <attr> <bin_comp_op> <`any` | `all`> <single_col_tbl> -- `any` is called `some` in some sql implementations
+
+===== result set modifiers
+
+* order by
+* limit (or `select top <number> [percent]` in MSSQL; or `fetch first <number> rows only` in oracle 12+) 
+* group by
+
+==== table set operations
+
+===== join
+
+inner join on a condition is the union of column sets and intersection of the condition holding true for both tables being joined.
+
+===== union
+
+union tables' rows. valid only for tables of equal column sets. `union` returns sets; `union all` returns multisets.
+
+==== views (named, non-parameterized select functions)
+
+[source,sql]
+----
+create view [<name>] as select ... ; -- the view name is whatever, including spaces, delimited by brackets
+----
+
+==== `with` (common table expression aka CTE kak subquery refactoring)
+
+TODO: cf normal aliases
+
+* supports recursion
+* exists temporarily: discarded after the statement that uses its binds
+* considered a cleaner alternative to temp tables
+* alternative to views (prob like `let*` in alt to `define` in funcbods)
+* repeated aggregations, e.g. avg of maxes
+* "overcome constraints such as what `select` has, e.g. non-deterministic `group by`"
+
+[source,sql]
+----
+with
+  t1(v1, v2) as (select 1, 2),
+  t2(w1, w2) as (select v1 * 2, v2 * 2 from t1)
+select *
+from t1, t2
+----
+
+produces
+
+[options="header"]
+|==================
+| v1 | v2 | w1 | w2
+| 1  | 2  | 2  | 4
+|==================
+
+.generator example
+
+[source,sql]
+----
+with recursive t(v) as (
+  (select 1) union all (select v + 1 from t)
+) select v from t limit 5
+----
+
+produces a column `v` with five rows of values 1 through 5, effectively equal to haskell `take 5 (Data.List.NonEmpty.unfoldr (\n -> (n, pure $ n + 1)) 1)`
+
+.example: select subtree
+
+[source,sql]
+----
+with recursive prev (id, parent) as (
+  select t.id, t.parent from t where t.id = ?
+union all
+  select t.id, t.parent from t join prev on t.parent = prev.id
+) select * from prev;
+----
+
+===== insert
+
+* `select <cols> into <new_tbl_name> [in <external_db>] from ...` is equivalent to a sequence of `create table` and `insert` statements (not available in sqlite)
+  ** remember that you can use `as` to rename the columns. they'll retain their column attributes.
+  ** `select * into <newtable> from <oldtable> where 1 = 0;` creates a new empty table with the same schema
+* `insert into <dest> select <cols> from <src> ...;` is the same but for a table that already exists. both tables must be of the same schema.
+
+===== table ops
+
+* `alter table` changes schema
+* <create | drop> db
+* <create | drop> table
+
+==== compound examples
+
+.select by day
+
+[source,sql]
+----
+select * from tbl where strftime("%Y-%m-%d",date) == "2022-07-01";
+----
+
+`date` may be a datetime or date string.
+
+.resample 1m candles into day candles (single day)
+
+[source,sql]
+----
+with x(start,end,high,low,open,vol)
+  as (select strftime("%Y-%m-%d",min(datetime)), max(datetime), max(high), min(low), open, sum(vol)
+  from AAPL where datetime between datetime("2010-01-04 09:30") and datetime("2010-01-04 16:00"))
+select start,high,low,open,vol,close from x join (select close from AAPL where datetime = (select end from x limit 1));
+----
+
+NOTE: the datetime format requires leading zeroes for all values, e.g. day, hour, &al.
+
+.resample 1m candles into day candles (multiple days)
+
+first i'll introduce the `group by` clause. the following query means "for each day between 2010-01-01 & 2010-02-01, return the sum of the opening prices for each candle of the normal trading hours (9:30~16:00)
+
+[source,sql]
+----
+select strftime("%Y-%m-%d",datetime),sum(open) from x_AAPL
+where datetime between datetime("2010-01-01") and datetime("2010-02-01")
+      and time(datetime) between time("09:30") and time("15:59")
+group by strftime("%d",datetime);
+----
+
+returns
+
+----
+2010-01-04|11908.9899
+2010-01-05|11960.1763
+2010-01-06|11879.4352
+2010-01-07|11718.1006
+2010-01-08|11755.9473
+2010-01-11|11693.4767
+2010-01-12|11591.5434
+2010-01-13|11593.0865
+2010-01-14|11680.2651
+2010-01-15|11571.2879
+2010-01-19|11881.8933
+2010-01-20|11759.3202
+2010-01-21|11634.9784
+2010-01-22|11329.9219
+2010-01-25|11303.598
+2010-01-26|11639.715
+2010-01-27|11412.125
+2010-01-28|11161.6593
+2010-01-29|10877.7678
+----
+
+summing the opens is nonsense, but it demonstrates `group by`; i chose it b/c if i were to sum the volumes, you wouldn't be able to tell how sum was applied.
+
+next we combine this query with the one from the prior example:
+
+[source,sql]
+----
+with x(start,end,high,low,vol) as (
+  select min(datetime), max(datetime), max(high), min(low), sum(vol)
+  from x_AAPL
+  where datetime between datetime("2010-01-01") and datetime("2010-02-01")
+    and time(datetime) between time("09:30") and time("15:59")
+  group by strftime("%d",datetime)
+)
+select strftime("%Y-%m-%d",start),high,low,open,close,vol
+from x join (select datetime as cdt, close from x_AAPL) on end = cdt
+       join (select datetime as odt, open from x_AAPL) on start = odt;
+----
+
+returns
+
+----
+2010-01-04|30.6429|30.34|30.4871|30.5971|116694802
+2010-01-05|30.7986|30.4643|30.64|30.6257|136014592
+2010-01-06|30.7471|30.1071|30.6257|30.1343|133300727
+2010-01-07|30.2857|29.8643|30.25|30.0829|113809059
+2010-01-08|30.2857|29.8657|30.0429|30.27|104221936
+2010-01-11|30.4286|29.7786|30.4143|30.01|111353487
+2010-01-12|29.9671|29.4886|29.8843|29.6757|129700571
+2010-01-13|30.1329|29.1571|29.6957|30.0571|145122992
+2010-01-14|30.0657|29.86|30.0157|29.9171|98356076
+2010-01-15|30.2286|29.41|30.1314|29.4143|130680837
+2010-01-19|30.7414|29.6057|29.7671|30.72|161574329
+2010-01-20|30.7929|29.9286|30.6914|30.2614|148014426
+2010-01-21|30.4734|29.6014|30.2971|29.7486|145818463
+2010-01-22|29.6429|28.1657|29.54|28.2514|205441418
+2010-01-25|29.2429|28.5986|28.93|28.9286|216214306
+2010-01-26|30.53|28.94|29.3986|29.4129|425729542
+2010-01-27|30.0829|28.5044|29.5471|29.71|417601177
+2010-01-28|29.3571|28.3857|29.2714|28.4714|281731401
+2010-01-29|28.8857|27.1786|28.7243|27.4457|300374774
+----
+
+leaving me successful but wanting to master joins—namely when outer or cross or w/e joins are appropriate.
+
+TODO: is using `exists` better?
+
+[source,sql]
+----
+SELECT SupplierName
+FROM Suppliers
+WHERE EXISTS (SELECT ProductName FROM Products WHERE Products.SupplierID = Suppliers.supplierID AND Price <= 22);
+----
+
+=== implementation-specific
+
+==== mutiple databases
+
+[source,sql]
+----
+create table table1(x integer);
+attach database "db2.db" as db2;
+create table db2.table1(y integer primary key autoincrement);
+insert into main.table1 values(56);
+insert into main.table1 values(90);
+insert into db2.table1 select * from main.table1 limit 1; -- table1 of file "db2.db" now contains 56.
+----
+
+.common
+
+* `insert into t1 (a, b, c) select a, b, c from t2;`
+* `all` (cf `distinct`) is often not supported. this is fine because it's the default anyway.
+
+.sqlite3-specific execution
+
+* to open a db as read-only, specify its location as a URI, then append a query: `file://<path>?mode=ro`
+
+.quoting
+
+|===
+| single quotes | string literal
+| double quotes | identifier (used to, e.g. use a keyword as a symbol
+| brackets      | (non-standard) identifier, same as double quotes. used by MS-SQL server and sqlite
+| backticks     | (non-standard) identifier. used by MySQL and sqlite
+|===
+
+see link:https://www.sqlite.org/lang_keywords.html[sqlite's documentation] on parsing quoted strings.
+
+.csv to sqlite
+
+NOTE: sqlite has a csv plugin
+
+prefer using link:https://github.com/harelba/q[q] (not in nixpkgs,) which allows running sql on multiple csv files or sqlite databases.
+
+use package `csvs-to-sqlite`. you'll probably want to use options `pk`, `d` or `dt`, `i` whose arguments are the column names as in first row of csv file. if you use these options, then you'll need to run the command for each table that you want to add, unless the tables share common columns for which the options apply.
+
+it's likely in your best interest to add csvs as tables into a db, then use sql to create a new table, rather than doing this all at once programatically.
+
+.list all tables
+
+|===
+| sqlite | .table
+|===
+
+.describe a table
+
+|===
+| sqlite | `pragma table_info(tableName);` (don't quote the table name)
+| mysql  | `describe tableName`
+|===

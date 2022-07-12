@@ -1,6 +1,8 @@
 == types? structs? enums? just use lists!
 
-this article criticizes typing as it's currently used in programming. this does not pertain to using computational type-algebraic systems or formal type theory for exploration & study of mathematical structures which i wholeheartedly condone.
+this article criticizes typing as it's currently used in programming, and suggests using lists instead (favoring _shapes_ instead of [nominal] types). this does not pertain to using computational type-algebraic systems or formal type theory for exploration & study of mathematical structures which i wholeheartedly condone.
+
+TODO: this article suggests that sexps are ideal for all code. this is incorrect; sexps are perfect only for general code. for specific systems, where meaning can be inferred from syntax that exploits particularities of the language, then sexps are inefficient. sexps are perfect only when there are no constraints on the code, making sexps basically a better version of xml, json, &c. revise this article to reflect this. in fact, homoiconicity is not even necessarily ideal; other metaprogramming is often more efficient (again, mp requires mere manipulation & evaluation of data.) furthermore stack & functional paradigms are never more efficient than stateful ones; in fact, they're equally efficient only for composition of unary fns.
 
 .preface
 

@@ -25,6 +25,8 @@ living, organic, self-sustaining, self-repairing, context [environment]-sensitiv
   ** put into dbs instead of into a file. for files, you must seek to the correct place (assuming that only one exists) to insert the data; dbs have no such restriction.
 * messaging (async communication among code) is good e.g. π-calculus or racket's thread mailboxes. in fact, generally concurrent systems are best: they're parallel and generalize to being distributed over multiple machines, but most importantly concurrent programs that work tend to have better designs than non-concurrent programs.
 * persistent and volatile storage should be shown to programs as a single thing. TODO: how? link:http://metamodular.com/Common-Lisp/lispos.html[apparently] this was first done in the 1960's.
+* all specification of constrained data must specify, as you're entering it, and with tab-completion/antiparsing, the set of valid elements, so that any ultimate input from the user is guaranteed to be sensible
+* proglang uses free & bound vars, requiring disambiguation / binding only as necessary
 
 ===== benefits of dbs
 
@@ -47,6 +49,7 @@ living, organic, self-sustaining, self-repairing, context [environment]-sensitiv
   ** to make a program interactive, daemonize / serverize it; allow it to run in the background, and accept input from socket, stdin, reading from a file &c
 * if it's appropriate to use a poor language, then at least there's probabily a lisp or scheme of that lang.
 * because often data is represented by strings, you should know a good parser well. parsing expression grammars (pegs) are very good. however, the only lang that i know of that uses them is janet, which is a poor language. haskell has good parsers (megaparsec) but haskell is a bit high-level. racket has megaparsec but its implementation seems to be buggy/flawed. fortunately, if you know programming well, then writing parsers is trivial. in fact, ease of writing parsers is a good measure of how good a programmer you are, specifically how well you understand ad-hoc and/vs symmetric structures.
+* for text ui, use kakoune to manipulate text, then pass text to a backend program that actually parses it and performs an action and/or modifies the buffer.
 
 === design principles
 
@@ -65,6 +68,7 @@ living, organic, self-sustaining, self-repairing, context [environment]-sensitiv
 * the order of the structure (i.e. the form of a structure considered as a duple of mass & form) directly corresponds/represents operations on / traversals over the structure.
 * use metaprogramming i.e. use a framework that does not distinguish between executable & non-executable code. avoid macros (as e.g. picolisp does) if you can.
 * trees are isomorphic with nested lists. this is universal, not particular: `cons` (ad-hoc binary association) is the primitve association operator; trees are the result of recursing on `cons` produces binary trees, any subset of which may be interpreted as a list. `cons` is the mechanism that enables grouping physical data; sets defined by predicates define abstract & symbolic data.
+* create/identify structures that increase brevity by encoding symmetry implicitly in the structure's algebaric axioms. matrices are such an example.
 
 .princples
 
