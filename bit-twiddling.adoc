@@ -1,0 +1,147 @@
+== bit twiddling!
+
+why?
+
+. fun like number theory, which it practically _is_, but in binary
+. keeps programmers familiar with information theory, which all programmers should know intimately
+. efficient:
+  .. bitwise ops are single-cycle
+  .. elementary arithmetic uses few cycles
+  .. word is the physical unit of memory
+  .. bitwise (and simd) ops parallel: `a&b` = `(map and a b)`
+  .. opcodes are inline; no jumping
+. flexible: boolean/integer duality
+. all systems support this variety of data, including direct support by ISAs
+
+requirements:
+
+. knowledge of information & encoding theory
+. metaprogramming
+
+.conventions, terms, and other notes
+
+* 2's complement is assumed
+* _word_ always means machine word, not natural language word
+* for bits, 1 may be called _set_, and 0 _unset_
+* _bits_ is short for _bitstring_ i.e. a bit vector. because any bits can be split into many, _bits_ means a bitstring or a string of bitstrings, recursively.
+  ** _bits_ is plurality-agnostic
+
+=== bit twiddler's mindset
+
+often bit twiddling, like assembly, is considered difficult to manage; this simply means that a good notation hasn't been chosen. it may be difficult or arduous to identify compression schemes then apply them. sure, but doing either by hand is silly; automate it. the only part to do manually is the part that actually requires the programmer! namely, that task is identifying relevant information; given any naïve idea/concept/datum, just identify the considerable attributes and the relevant sets of which they're members; mapping any domain to {0,1}ⁿ (isomorphic with the more general form, dⁿ where d is a digit of a given radix) is easy. after that, allow the computer to use algebraic rules (see below) to auto-compress and arrange your data conformant to the program-defining predicates (the program _spec_) that you provide.
+
+the bit twiddle model forces programmers or designers to consider their data's properties, such as any datum's properties' e.g. mutual information or any of a datum's attribute's mathematical properties e.g. symmetry, closure, or associativity. this is very good; one must consider why they're using some assumedly useful data, or interpretations thereof, and the nature of the data [type]: how it behaves / can be manipulated, and how it can be interpreted, and, surprisingly importantly, the amount of redundant information of any interpretation.
+
+.bits & decimals
+
+tl;dr: floating point considered harmful unless you're using division an arbitrary number of times on values on (0,1) or need ±∞.
+
+floating point is hardly necessary; use fixed point instead. arbitrary precision is best handled by perfect precision e.g. rationals instead of floats; rationals are perfect precision whereas floats are arbitrary but often incapable of exact representation. furthermore one must consider 1. what degree of precision is useful and 2. what degree of precision is meaningful viz sigfigs.
+
+consider the polynomial 3.452069245x³ - 6.25678x²: how many digits are useful? would 3.452x³ - 6.257x² produce significantly different values? if not, then we need to encode (3.452,3,6.257,2). the exponents are naturally expressed by indices (see polynomial representation of numbers in §_bits algebra_) which leaves the decimals. if we assume that 3 decimals is sufficient, then we can have 1000 decimal values expressible by 10 bits; on a 64-bit system, that leavs 54 bits to express the non-decimal, so the max value is ≈18 quadrillion. 4 decimal digits requires 14 bits, so the max then is ≈1 quadrillion. finally, the larger the whole part, the less significant the decimal; i can't imagine a context in which 10,645,245,627.2345 is significantly different from 10,645,245,627.2346. therefore you should consider bits to represent the number of sigfigs! indeed, the meaning of the decimal operator directly corresponds to the fact that there's an infinite number of values on [0,1] and [1,∞)! this implies that, without division, a single unit cannot express all values on [0,∞). for places where that property does not apply, e.g. `$120.67`, we can simply change the unit from dollars to cents, or tenths of a cent, etc; this trades the decimal place for leading zeroes, e.g. `$120.67` = `1206700` when the unit is one-hundredth of a cent. use of integers acknowledes that the choice of unit is arbitrary rather than inherently meaningful. all this said, even 32 bits should more than suffice for a polynomial; who needs a polynomial of degree greater than 5? nobody, that's who. rather than using floats for all purposes, the programmer specifying the number of decimal bits explicitly tells the expected order of magnitude for the value, which can suggest the meaning/nature of the program where that value is used.
+
+anyway, back to the polynomial: the most needed to express an 8^th^-degree (3 bits) polynomial with maximum coefficient of 32,768 (15 bits) at 4-digit (10 bits) precision, we need 8×(3+15+10) = 8×28 bits. rather than consider that as 204 bits, it's useful to say that 28 is less than but approximately 32 bits—a halfword on common modern systems, so we need 2 words or 1 dword to express an *eigth degree* polynomial—only 25% the size of `float[8]`, and doesn't use the heap!
+
+for `floor`, `and` with a mask that has 1 for non-decimal indices and 0 for decimal indices. we can express this mask simply as "not decimal." no iteration nor type conversion. one cycle.
+
+by this expression, polynomials naturally support addition and subtraction. for multiplication or division, replace the polynomial representation by its numeric output value. that requires a couple more cycles, but still is far more efficient than anything not done with bit twiddling. you'd need to define separate addition & subtraction operations for `float[8]`—not so, here!
+
+what about marshalling between languages? no need to convert array types or throw-around pointers to allocated memory! just pass some few ints—trivially easy in any marshalling system.
+
+lastly, decimals occur only when dealing with continuous things. most non-scientific computing is discrete. besides, for scientific computing you'll probably use a gpu which handles floats extremely well.
+
+==== efficiency vs/and simplicity
+
+the real polynomial example shows us that we get total elegance: efficiency *and* simplicity, naturally together. this is common, though it often requires a bit of tact to identify elegant encoding schemes.
+
+bits are a data structure that lives entirely on 1+ register(s). they can be traversed and mutated incrementally, and thus support some common or uncommon algorithms.
+
+=== entropy & encoding
+
+TODO: read about encodings, e.g. huffman, hugh-tucker, and wavelet trees; and hilbert curves.
+
+==== _succinct_ data structures
+
+∃ papers about them, but not how to use them (according to link:https://www.youtube.com/watch?v=sdHXaYCX3RE[kmett in 2015].)
+
+* you need H = log(n choose k) + 1 bits to encode n bits where k are set.
+* rank(α s i) is #{1 | α == s[k], k ≤ i}. rank(0) shares all info with rank(1). rank can be computed in O(1) by chunking s into chunks each of size log(n).
+* select gives the position of the ith α in s. it can be done in O(1) by recursing upward through a huffman tree.
+* rank & select share information.
+  ** rank(α,select(α,i)) = i (rank is a left-inverse of select)
+  ** select(α,rank(α,i)) ≤ i (select & rank form a galois connection)
+
+the rank of a huffman tree (which is isomorphic with a bits) can be found by recursing on rank.
+
+rank & select work on alphabets of any size, and on all prefix-free codes, especially order-preserving compression schemes.
+
+an important principle that this technique demonstrates: we only need to encode data. we do not need to have separate "cells" for each "separate datum." such conceptualization is naïve and inefficient. do not constrain yourself to keeping data separate; only care that you can _effectively_ manipulate the data as desired (namely CRUD), which may mean compressing, mixing, &c the data together, then extracting or reconstructing the actual logical data. this sees data as-manipulated and as-stored.
+
+the _order_ of an encoding is the number of bits that each datum encodes, assuming that enough data is available. a positive order means autoregression.
+
+==== miscellaneous little tips
+
+* search by fewest possibilities first, e.g. lookup dates as month day year, because there are at most 12 months, 31 days, and an unbounded number of years. looking-up by 12 then 31 then n enforces a lookup complexity upper bound. 
+
+=== bits algebra
+
+* bitstrings can be split. e.g. a 32-bitstring can be 4 8-bitstrings i.e. a 4-vector of octal values.
+* index is exponent. radix is always 2
+* a length n bit vector can encode 2ⁿ values
+* numbers are expressed as polynomials: Σdᵢrⁱ where d is a digit and r is a radix
+* like how the smirnov transform in statistics transforms into U[0,1], a set of values can be compressed into a set of bitstrings and a back-transform.
+* for booleans/bits, complement = opposite; both are represented uniformly by `not`.
+* an unordered set of bits is expressible entirely by its count of set bits.
+
+==== symmetries
+
+efficiency is obtained by exploiting symmetry and/or coincidence.
+
+TODO: expand stub
+
+=== integer algebra
+
+TODO
+
+==== symmetries
+
+TODO
+
+=== exploiting bits' multiple interpretation
+
+note the _in bitstrings_; we can encode bitstrs such that certain substrs have useful boolean/integer interpretations. 
+
+shift for expt/log, _ for multiply/divide
+
+TODO: explore modular arithmetic, number theory, combinatronics
+
+the operation (when (p x) (inc x)) can be expressed x=x+p x when p returns 0 or 1.
+
+=== what bits can't/don't accomodate
+
+* a type that requires more than a word to encode a single datum of that type, e.g. arbitrary ad-hoc sequences e.g. arbitrary strings
+* branching; branchless programming does not concern bit twiddling, though relatedly bit twiddling can often well encode combinations of conditions
+
+one may assume that categorical values must be represented by _arbitrary_ numbers/bitstrings, but this is not true: mnemonic strings can be expressed by words: a word on a 64-bit system can represent a string of 12 ci latin characters, and 6 chars by 32 bits, since ⌈log₂26⌉ = 5, and ⌊64/5⌋ = 12 & ⌊32/5⌋ = 6. thus `int[n]` is a more efficient version of `char[12][n]`.
+
+=== recepies
+
+set nth bit to 1, 0, or complement:
+
+. (1 << n) | x
+. ~(1 << n) & x
+. (1 << n) ^ x
+
+* trailing 0's to 1's: (x - 1) | x
+* -x: ~x + 1
+* lowest set bit: x & -x ; (number->string (let ([p 52]) (bitwise-and p (- p))) 2) prints "100". 52 is 110100b.
+* masked copy: given bitsets A, B and a mask M, copy bits from B into A where M is set (where M is unset A we have A's value at that bit): (B & M) | (A & ~M)
+* swap bits an indices i & j of x: y = ((x >> i) ^ (x >> j)) & 1; x ^= y << a; x ^= y << b
+* # of set bits (POPCNT on x86): because x & (x - 1) unsets the lowest set bit, our solution is: [TODO: this solution is obviously wrong] for (c = 0; x != 0; c++) x = x & (x - 1)
+* # of set substrings: (+ (& x 1) (/ (popcnt (^ x (>> x 1))) 2))
+* next highest number with the same number of set bits: let t = x | (x - 1); nt = ~t in (t + 1) | (((nt & -nt) - 1) >> (bsf(x) + 1)), i.e. let t = trailing(x); nt = ~t in (t + 1) | (lsb(t) - 1)
+* toggle case of ascii character (or set case by anding with 1 or 0): c^32
+
+==== square-and-multiply
+
+TODO
