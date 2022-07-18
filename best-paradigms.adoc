@@ -1,27 +1,112 @@
 == best paradigms
 
-.todo
+TODO: REVISE, REORGANIZE
 
+btw ad-hoc & symmetric/parametric poly are better called a/symmetric values; the parameter/context either determines the value or is orthogonal with it. ad-hoc poly is thus _conditional_ value whereas parametric/symmetric poly is augmented by the parameters but not in a way that _affects the information_ of the thing being augmented. in other words, it's a question of independence [rand vars]. *ad-hoc:=program statement depends on values; symmetric:=not ad-hoc.*
+
+.overview
+
+keywords: bound vs free, symmetric vs ad-hoc, axiom, algebra [universal algebra]/model & notation.
+
+it's inappropriate to say that each algebra has a notation/syntax; within each algebra's set of axioms are, among predicates, defined of particular objects and functions e.g. T = T ∨ F, which implicitly: 1. says that ∃ T & F which are special objects of the algebra (since they weren't brought into scope by ∃ or ∀), 2. partially defines `∧` (with the total meaning specified by other axioms involving `∧`), and 3. is a predicate (though this predicate being an _axiom_, by definition it always holds, though that's moot here because _always_ is practically meaningless because the predicate is of only specific elements (viz T & F) vs unbound variable e.g. ∀ a : a ∧ F = F.)
+
+the following are considered harmful:
+
+[options="header"]
+|===============================================================================================
+| harmful                                | preferable
+| programs (countable)                   | code (mass noun)
+| recursion                              | loops
+| [holding] data structures [in memory]  | loops (traversals)
+| language                               | algebra
+| syntax                                 | encodings (which _may_ support any representation(s))
+| coding                                 | specifying constraints
+| semantic structure / strict guarantees | [naming] conventions / _practical_ guarantees)
+| many program-specific modules          | one file. bind free vars by dynbinds at file's start.
+|===============================================================================================
+
+rather than have a _checking_ system to help catch mistakes, it's better to have an _encoding_ system that fits together well. *checking without inference is cruft.*
+
+naming conventions are better:
+
+. easy regex for finding symbols for refactoring
+. less constraint means more flexibility, though [common] intention is clear
+
+also conceptual representation should not reflect technical encoding. e.g. (map add1 (map add1 xs)) is...well, bad notation anyway; map add1 . map +1 $ xs is better: it represents composing fns. of course, this code should be parsed into one that traverses xs only once. there's a common assumption in how to write code and write code interpreters that must die: that code is broken into _instructions_ rather than general ideas. forget `map +1` as an instruction; consider it generally as an idea. then the question arises of its meaning and grammatical & semantic rules, e.g. that map f . map g = map (f . g). i expect / hope to god that apls do this. such simple & obvious compositions of ideas is taken for granted in natural language (which is logical & semantic) but in programming it's still assumed that the programmer needs to specify everything _literally_, since programs these days are still glorified instruction sequences, excepting prolog: the only language that can be stepped through forwards or backwards, and whose statements' order never matters. often but not generally is a sequence of arbitrary _actions_ a (sub)program. this is expressed in j as link:https://code.jsoftware.com/wiki/Vocabulary/Loopless[expressions rather than statements].
+
+another main idea is to look at the form of data devoid of meaning/interpretation. consider data only as information [information theory]; *generally code should not reflect interpretation.* code always permits multiple models [algebras] simultaneously. only some of these are human readable, even by a programmer. similarly, only some of these models should be considered [reasoned] by a programmer. progarmmers should define axioms, identify structures & operations that implement those axioms (e.g. uncons & cons with lists, or opcodes with registers), then perform arrangements of manipulations that eventually tend data toward a goal while preserving invariants to guarantee sensible future considerations thereof. this is similar to how we use closed form expressions to reason about sums rather than summing every number.
+
+example: traversing a tree: the traversal must not change any element of the tree. let's say that we want any element that matches a predicate. hopefully we've encoded our tree to make this search fast, which means mere parallelism, since the predicate cannot be known a priori; we can't optimize the tree based on the kind of data that it has. this is obviously true if its type is `∀a. Tree a` i.e. *free* in its data's type.
+
+the developer should not care to understand or be able to trace/visualize each step in a process that transforms state, change-by-change. instead, the developer should know, by applying axioms, what the end result of a process (loop or series of operations) will be. all data's axioms, and their average properties, should be considered; for example, ages are never negative, and usually within [5,90]. they're just discriptive—not computable—data, so their encoding only must be lossless; it's not constrained by e.g. needing to support addition. also the distribution of data tells us the average entropy and complexity of getting or storing uncommon data.
+
+data used in the condition of a loop must support at least one axiom, even if that axiom is mere equality. if the loop is traversing a structure, then that structure must have at least one axiom: that it's constructed by repeated application of some closed operation. usually the inverse thereof is used to traverse the structure. typical loops are application of a fn f to some x where such application tends toward a y : f(y) = y; y is a fixed point of f. for imprecise data (e.g. floats) we can check whether f(y) ≈ y i.e. |f(y) - y| < δ. fixed points are usually the base case / exit condition. loops can break before then, though, if a condition is found to be violated, which means that we discovered _during_ the loop that its input was inappropriate. such checks are sensible only if we can't validate in O(1) before looping.
+
+.todo
+* the thing that everyone got wrong about macros is that they considered _syntax_. i've always thouht of lisp as syntaxless i.e. its syntax is merely the very least needed to encode arbitrary data (it includes only grouping and, for functionality, exploits ordinality of sequential items [of the same group] viz head vs tail). however, even lisp said that that should be syntax so that macros can be done! how stupid to include the constraint that the syntax (user-written expression) must directly encode the code-as-stored-in-the-system! homoiconicity is useless; just define syntax as a PEG that parses into a programmatic object. macros are syntax -> syntax. why do that instead of syntax -> object? the syntax isn't _the encoding of a program_! it's _one_ that exists solely for the convenience of the programmer! template haskell made the same syntax -> syntax mistake! programs are not syntax! they're particularly ordered information! syntaxes (plural) only _represent_ these orders. the truth/fact exists independent of any representation, much like an idea has meaning before it's considered.
+* no single point of definition. implicit def. do we organize programs like trees or linked lists rather than arrays? i'd like to be able to reorganize programs as easily as apl rotates or transposes arrays.
+* any expression not ultimately used in a value passed to an action (e.g. print) is useless
+* we see lexical scoping become amazingly awkward or verbose when the user [of some fns] isn't the chooser. for example, say that the entry point chooses an implementation of an ad-hoc polymorphic object by a cmdline arg. that choice must be communicated to the user of the choice. usually this is accomplished by passing it as a fn arg. dynamic binding provides a solution, but lexical scoping can still hamper its flexibility, depending on the system (e.g. in picolisp i can define `x` in main and any code run thereafter can use it, whereas in racket i'd need to define `x` as a parameter (dynbind) in a module, then have both main and other modules import it, and have main set its value): namely you may still need to partitioned your modules properly so that the requirement graph is a tree. for example, the cmdline arg `test | backend1 | backend2` chooses a dry or normal run through a program; the dry run implementation sees each abstract fn defined as a print statement. each of the backends implements actual instructions. all choices must be in the user's scope. they need be also in the chooser's scope only if the chooser passes them rather than something that represents them, such as an interned symbol or a string, e.g. `(use "backend2")` in the chooser; in `use`'s scope there's a map from string to actual fn collection. ad-hoc poly is always simply implementable by the shape `((id ((id fn))))`. still, it's nicest to have the fns be directly accessible, as though they'd been defined in the same scope that uses them instead of needing to use `send` [racket] or `assoc`.
+  ** generally, ask how important parameterization is; for example, you may write a single file that uses no parameterization devices, but the parameterization is simply using the file as a template; to parameterize, just replace a definition. you need parameterization devices only if you are using multiple parameters either simultaneously or you're frequently running a common computation but with different parameter values. parameterization (which is merely making a variable free to be bound elsewhere) trades simple, static binding for slightly more complex context-dependent binding. thus, each time you consider parameterizing, see it as generalizing the binding from one option to many context-dependent options, which naturally begs the question: "which contexts exist, and what is the map between contexts and the value to which we're binding?"
+    *** parameterization breaks symmetry about bind value and context, turning into an ad-hoc set of pairs of context & value.
+  ** classes instead of dynbind may be appropriate if multiple instances of a type class are needed simultaneously. i need to consider this throughly before knowing whether generally oop is advantageous over dynbind for this use case.
+  ** dynbind makes everything parameters implicitly: anything can be defined anywhere and used anywhere; hence anything may be a parameter of anything else simply by a thing _using_ a symbol assumed to be in scope, without requiring that the symbol be _given_ to it. of course, other binds have this same property, but require particular definition and inclusion of contexts (e.g. A & B require C, A requires B, and x∈C. C exists only to be included by A & B because both use x, but A binds x then B uses it. it'd be nice to define x∈A but that'd imply circular dependency between A & B.
+  ** TODO: just like dynbinds are effectively implicit definition of programs, so should there be a way to implicitly define relations, namely for easy ad-hoc polymorphism. this is akin to adding a relation to a dynamically bound map. this is accomplished by prolog, and by prolog embeddings e.g. racklog for racket or pilog for picolisp. reading racklog's tutorial, i'm pleased that control flow is implicit.
+  ** my favorite solution to this problem is to continually build the state of the program as it runs instead of passing state in a big fn composition graph. this is basically the RIO [haskell] paradigm except 1. it doesn't require anything to be declared so that it can be imported into both the user's and choosers scopes independently; and 2. it doesn't group objects together [into an ADT], so we can declare attributes anywhere during execution, which may affect later computations (no single point of definition.)
+  ** any system that does not feature imports has a good level of flexibility. examples are lua, js, picolisp; in these langs "import" is not a concept; instead, we can simply run other files' code and optionally bind their return value.
+  ** it's interesting to think about how all programs are just sequences of instructions or loops, and all of those instructions are either setting/updating values or executing actions. loops either map or change state until it matches a predicate. map is mere multitude and is thus parallelizable. loops, e.g. folds, are not generally parallelizable because the nth computation depends on prior ones i.e. a key difference between map vs other loops is that the loop is stateless. one may argue that map is defined in terms of fold, and fold has state, so therefore map must have state; however, this is incorrect: map's "state" is a list that's being accumulated, but this information is already present in the input list. `map id` is ineffectful. `map f` sees each application of `f` being independent of others, and applying `f` to each element is `map`'s only effect i.e. it's the only new information that `map` provides. in fact, `map` provides different information from `f`. they are independent, though they can be used jointly (think _joint distribution_); *their joint composition is orthogonal.*
+  ** all programming can be interpreted as setting things up then using them. setting state / [fn] parameters can be seen as setup. people are used to thinking in terms of fn units, that the fns alone are computable concepts. this is fine, but should be interpreted as each fn being something that adds or removes some definite information; the information transform (representation/encoding) or addition or removal is precisely the fn's definition. two fns that add or remove the same information are equivalent up to transformation/encoding.
+    *** of course, fns considered as such must be independent/orthogonal, and their _general_ composition must not be in any particular order, though obviously each particular program may order their composition; here the set of fns with an order is the very definition/signature of the [unique] particular program; thus the selection & order of fns is the program's information, not the functions'.
+  ** also all programming can be thought of as sets of rules, each of which has a/symmetry for each of some properties. every structure should, for each of its properties, note their a/symmetries. symmetries give implicit operations. e.g. a list whose order is said to not matter should make `sort` a nop, and lists whose elements are symmetric over application should have map automatically applied e.g. `1 + xs` = `map +1 xs`. i'm yet unsure whether this would imply that `xs + ys` = `map + xs ys`. the problem of elegance of expressing both a/symmetric list operations (e.g. `map` and `head`) is similar to that of composing higher order fns e.g. a loop condition should be tested as-is if not thunked (nullary fn), but if it's thunked then it should be evaluated and _that_ value tested. similarly, `+` should equal `liftA2 +`. such schemes may be possible with clever idea composition mechanisms, but it's untennable if one tries to use fns that compose only if unary, in-order, and may generally support optional or kwargs.
+  ** there should be only one ad-hoc poly construct in any single language. this is basically `cond-let`. however! i mean that _any_ ad-hoc poly should be done by this ad-hoc coupling mechanism! we can't have both `if` and classes and hash maps and alists! they all accomplish the same thing: arbitrary relations! that a language may treat a collection of identifiers differently from an equivalent alist or hash table is immensely troubling.
+    *** alists (not linked lists—just n-groupings of binary sets) are the simplest, most natural ad-hoc relation representation.
+    *** fns are not a flexible enough encoding of arbitrary relation. they _are_ exactly that, though: nullary fn (A) becomes unary fn (A param) or binary (A p1 p2) which merely associates `A` with a set of parameters (usually indexed by ordinal position (list) or key (dict)). this is ideal when each invocation of A has different parameters, but is inappropriate otherwise.
+      **** to be symmetric with syntaxless programming, rather than fns there are only data which may permit many interpretations, some of which may be in terms of actions. instead of an n-ary fn F, there should be a thing called `F` that may be optionally associated with other data. this may be called parameterizing, but association is commutative; F parameterized by X is no different from X parameterized by F, since it's just an association of X & F. furthermore there's no difference in `(F X)` and `X` being in scope when F is evaluated, and language / encoding / evaluation system should reflect that.
+  ** problems with current non-simple ad-hoc binding mechanisms:
+    *** constrained by their arbitrary definitions, and thus less flexible. e.g. java accomplishes ad-hoc poly via interfaces & instances, or haskell by type classes and their instances. ok, but that means that we inherit type classes' limitations like failing to well accomodate multiple parameters; or the limitations of java classes; i can't even think of an example of how they may be limiting (b/c i'ven't touched java in like 6 years,) but the fact that we must use them instead of something else is inherently limiting. *generally _anything_ predefined may not be exactly what we want, and so we'd find workarounds or clever exploitations. thus all parts of any programming system should be optional* or support arbitrary user-definable alternatives.
+  ** _factoring_ is another term for _coproduct_; it's dual to product/combination. all asymmetry implies coproduct/cond. product may preserve independence of information or not, which determines whether an inverse coproduct exists; e.g. (α,ω) does and supports (α,ω) -> α and (α,ω) -> ω, whereas α+ω does not support either of those coproducts. α+ω still supports morphisms to α or ω _given_ ω or α (consider like conditional probability distributions) because addition supports 1. inversion (viz subtraction or addition with an inverse element) and 2. uniqueness (i.e. in a+b=c, any one variable can be determined when given only the other two.)
+  ** example of generalization: the initial design says that f & g return A, and h processes values from f & g. during implementation it's discovered that g must return B : A ∩ B = ∅; now h must be changed to handle both A & B, right? it seems that the trouble is that the inclusion of one more case requires changing more of the rest of the system than necessary. conversely, using exception rules seems less easy to manage; however, it _is_ appropriate! exceptions are asymmetries, and a/symmetry should be obviously shown in code! regardless, h must handle B or something that uses h must handle B &c. it seems that either A∪B is the "true" type that our program should consider or else that B should be converted to A. the existence of this choice inevitable; it directly reflects the program's information. however, there does not need to be a choice about where to put these ad-hoc relations/rules! in prolog all rules are in the same context and are unordered. in other langs there exist (usually many) particular constrained constructs for specifying rules. the need to choose a construct and deal with entailed constraint is needless encumberment. this is, yet again, the _needless ordering problem_: needing to care about ordering even when it doesn't matter, simply because we're using ordered structures. storing knowledge graphs in text files has this problem; we must choose in which section to store knowledge in a text file, even if multiple appropriate locations exist. indeed, a truly good language is merely an unordered (though often context-specific) set of rules. context is nothing more than a _choice_ of rule. i use _choice_ to mean cond block (from predicate to result) i.e. a partitioning fn. generalize fns to nodes in a state machine. nodes are subroutines that make the program's state more desireable. when desirability is maximized, the program terminates or loops back to a place where it awaits more input, thus moving back to a less desirable state, ready to increase desirability again.
+    *** *_location_ and _ordering_ are each horrible. _relation_ is necessary.* many langs incorrectly forcably constrain that partitions of code (into modules) (usually for mere organization/navigability) correspond to separate execution/logical contexts! the programmer is forced to put everything in one file, wherein everything exists in the same context and so we don't need scoping mechanisms (e.g. fn args, dynbinds, object modifier methods [oop], closures) just to include objects in current scope or modify objects unincludable in current scope (both of which together support a unified representation in c#: that all vars can be in any scope, but only in some scopes can they be mutated. generally this pattern is plain inclusion of an object in scope but where the possible operations on it is related to context.)
+      **** manually ordered module importing is preferred over importing whose ordering is implied by the import DAG e.g. `req A req B` is better than `req A B C` where C defines x which is set by A and used in B when A calls f∈B.
+        ***** that we've organized our code into separate modules should not imply that each module exists on its own! _loading a module_ is a bad idea; _including_ a module is useful! _including_ here means inclusion of that module's code in the whole program, not that the module is evaluated then accessible to whatever module imported it. again, code should encode _ideas_, and scoping should exist *only* for name collision resolution i.e. context-sensitive names. in racket, `(require (only-in "a.rkt" a)) (set! a 3)` fails: `set!` does not allow setting imported identifiers. that surely should not be a technical limitation! thus it's an unnatural restriction. racket fails developers in not having its scoping being exactly renaming imported identifiers to avoid ambiguity.
+  ** fns are decent for writing libs, but not programs. in libs, each fn corresponds to a unique functionality independent from other functionalities, or if they're related, then they can usually easily enough be written in terms of a common "helper" fn. but programs' objects are much more interrelated, so fns can be quite inelegant!
+* x∈{a,b,c}<=>x:=⨿(a|b|c) where a, b, or c can be products (lists)
+* like rank invariance, fn app invariance, so that `f + g` (when f & g are unary) is just as well as `a + b`. i just don't want to need to make specific combinators for all sorts of things. TODO: test whether, in factor, i'm satisfied with the generality of napply, cleave, & spread.
+* metaprogramming can't exist in a syntaxless coding model, right? at that point all programming is equally meta or not: at that point it's just truth by any preserving encoding/representations—graphical, syntactic, textual, compressed, encoded by any of numerous bases, &c.
+* i like how, in joy, f g h composes them; to do f g h [haskell] (i.e. g & h are params to f) in joy, you quote the fns: f 'g 'h.
+* rather than fns & macros, it may be more sensible to define syntax patterns (where _syntax_ means the representation of data that the user/programmer sees) and semantics; thus a program is parsed not according to a dynamic rather than static set of syntaxes. this means that we don't have "a language" but instead a collection of maps from syntaxes to semantics. multiple separate models may be used simultaneously, e.g. lisp & j can be used together; anything that can't be parsed as lisp is tried to be parsed as j and vice versa. obviously one may define parser combination rules.
+  ** i think this is what red/rebol call _dialects_. it's similar to racket's `#lang` construct.
+  ** this is the same as pil macros, except without being constrained to fexprs; rather than pattern matching to a list, we pattern match to any general structure.
+  ** while a powerful and interesting paradigm, it should not be used much, if ever; a single good basis accomodates all data. we can immediately see in red/rebol that the language is a large collection of ad-hoc constructs. there's practically no symmetry. even link:http://re-bol.com/rebol_quick_start.html#section-11[the documentation only promotes features] and no algebraic basis nor spec is given for the language. anyone can make a big library of functions & data, invoking and using them. to be able to compose functions or constructs elegantly and freely is very good design, and rebol is good in that respect, but note how rebol is a case study in the result of indiscriminate use of ad-hoc syntaxes! this is separate from the design principles of 1. separating data from its representation(s); 2. using highly-symmetric structures to express many encodings & transforms. indeed, syntax is occasionally particularly useful or nice, but usually only gets in the way of actual programming; syntax is a necessary evil that enables *the user to specify* _encoding_ [transforms or arrangements [relations] of data], and syntax is needed only to express relations, which transforms and data, as transforms merely relate an input to an output, e.g. the pair `[x (+ x 2)]` which expresses the function `λx. x+2`. generally, as pico shows, fns relate formals to an output. i emphasize "the user to specify"; the user does not need to use syntax to specify every relation directly; they can express relations as functions that produce those relations. syntax is not truth; it's an interface between truth and ; it merely facillitates communication. therefore syntax should 1. not constrain ability to encode ideas; 2. should express ideas so that they may be understood easily; naturally syntax should clearly show relations, and the a/symmetry of each.
+  ** homoiconicity sucks. syntax should be terse, but again, syntax has nothing to do with what the syntax represents! and all concepts permit multiple syntaxes [representations]! a cool thing would be to enable syntaxes for delimited parts of a program, just like is done for math papers: "in this section, <syntax> refers to <concept>." have no language: just a dynamic collection of syntaxes; the semantics will be asm-like: just mutable variables/registers, dynamic binding—just pil's semantics. and metaprogramming is still useful, though not necessary; it's conceiveable that the option to `eval` syntax that's been produced rather than specified literally is nice, though surely often it'd be just as easy or easier to construct an object then pass it to some fn.
+* "high/low level" is precisely expressed as the number of axes of symmetry. the more aos, the higher level; the fewer, the more low-level. one may say that the number of all relations determines, but ad-hoc relations are just as cumbersome as relating multiple low-level objects. there is never reason to _choose_ a level; aos are properties of data structure; they are _determined_ exclusively by the predicates/constraints that define the form/shape of information—the very facts that distinguish the information from random noise.
+* predicates are pointfree forms of sets: A = {s|a(s)} can be encoded as a. for B & b defined similarly, a AND b is much more efficient than A intersect B. this method doesn't support sets of ad-hoc elements. but, if *anything* is known about the elements, then at least some of the set can be expressed in terms of those properties [predicates], making set operations more efficient.
+* how can programming benefit from knot theory? seems like there're "pointfree" ways to undo knots rather than unraveling it all.
+* explore encoding programs non-textually, e.g. graphically or audially (though these are isometric with classes of text schemes with matching degrees of freedom)
+* metric spaces should be useful in designing efficient lookup structures
+* distinguish code trichotomy: _descriptive_ (not necessarily exist instructions of which this code can be an argument,) _computable_ (instructions exist whose args are this code,) and _executable_ (instructions themselves). executable ⊂ computable ⊂ descriptive.
+* rather than use a paradigm that's always good, and thus uniform, i prefer one that's usually good, but that when occasionally is insufficient, we use a natural extension, much like how lazy eval is related to strict eval, or enclosing a datum in a heap memblock (contiguous or otherwise) is a natural extension of storing it in a register.
+* linked lists should sometimes be replaced by skip lists.
 * [where i discuss grouping or common contexts (as an alternative to wrapping _explicitly_ in data structures)] illustrate how common this is in math by example of subscripts: Y~i~|x~m,i~ ~ Bernoulli(p~i~) : m ∈ [1,m]. while it's often nice to use matrices to express relations w/o indices, that's wholy a notational advantage, not a technical one. these contexts will be created automatically, e.g. their (max) size will be identified (when static initialization is appropriate) before compile time, and a block of memory will be created for that context in the asm's `data` section. operations concerning the context will be automatically arranged, too.
 * the advantage of tagged data in a set, instead of inserting into an organized sequence (or more generally graph): identifying proper insert points becomes expensive as the graph becomes complex. with sets, which are inherently unordered, we just insert into the set without regard to location. in fact, auto-organize this document by expressing it as a queryable/organizable set. an _organizing query_ is a fold from a set to a set of sets where each iteration of the loop extracts a subset then inserts it into the output set.
   ** e.g. rather than write a non-computational yet organized text file (e.g. [asciidoc] markup), wherein i may make a terminology section, it's better to just define terms as an alist. this is *computable* and perhaps even more importantly can be *queried rather than looked-up.* queries do lookup for you; that's why people opt to query google for answers or ask other people questions; they want the answer immediately, easily, not to move some abstract "cursor" to the answer's "location", then look there! i want to not use a text editor to work with notes! i want a knowledge editor that may work with text among other data formats; the importance here is that whereas text is ordered unilaterally in a text file (which is a stream of bytes,) knoweldge is not ordered linearly; it's ordered [structured as opposed to unstructured; not as in _total ordering_] by a graph. thus the expectation of looking up a definition is merely typing the query and getting an answer *without changing my current view of some knowledge* i.e. i don't "lose my place" when looking-up something else, and i can do this without keeping tabs or new windows. this can be done in text editors by using marks, but that's a bit clunky: we use arbitrary letters or numbers as marks, and must remember which mark corresponds to which location; they require a single location, which is not generally sensible since linear ordering of data is not generally possible; the data may permit multiple useful orders; also the keystrokes are inconvenient: they must be 3 keys, usually `"<mark>z`. a graph of marks would be most sensible. at first i was going to say "stack," but then i thought, "why not generalize to a tree" but then realized that graph is the most general, so let's use that. relations are practically constraints, and constraints are always kept in an [unordered] set. knowledge is stored in a graph, and all relations are *implicit*. to insert into an rdf, you insert a triple; you don't need to find a vertex then add to it an edge!
 * reconsider notes on "lists vs arrays" now that i'm ignoring "lists" as a concept, having replaced it by pairs, which generally beget trees rather than lists specifically.
+* the ideal "language" is really just a notation for operations on an algebraic or categorical structure e.g. stack, array, register, i.e. programming is merely an optimized notation for expressing programs as mathematical processes. good languages are not designed; they're identified by careful consideration of mathematical objects.
 
 ''''
 
-NEXT: learn then incorporate erlang and prolog. consider prolog as the ideal between of contracts and type systems.
+NEXT: learn then incorporate erlang and prolog. prolog, being predicate-based, ideally accomplishes structural typing (where each type is exactly defined mathematically i.e. by a set of predicates)
 
-it's important for developers to learn
+hackers should consider the following paradigms, which are incidentally expressed in these langs:
 
-* C (procedural)
-* prolog (declarative, horn clause-based)
-* apl (concatenative, array-based)
-* assembly (procedural, purely stateful, register machine)
-* haskell (purely functional, λ-calculus)
-* factor (stack machine)
-* erlang (agent & message-based, π-calculus)
+* prolog: declarative, horn clause-based
+* apl: concatenative, array-based
+* assembly: procedural, purely stateful, register machine
+* haskell: purely functional, λ-calculus
+* factor: stack machine
+* erlang: agent & message-based, π-calculus
 
-these are different from common langs like python, ruby, go, java, &c. C fits in this category, except that C is the simplest version of all these, and so is best. common langs are all complex, interchangable, and mixed-paradigm—all of which are bad qualities.
+these are different from common langs like python, ruby, go, java, &c. common langs are all complex, interchangable, and mixed-paradigm—all of which are bad qualities.
 
 learning all these languages is important because each language is very different from all the rest. each is a simple language with one underlying structure, one paradigm. one can look at these languages altogether and infer the fundamentals of computing, and see how paradigms completely at odds with each other nonetheless are turing-complete, convenient, and elegant.
 
@@ -36,12 +121,17 @@ considering such things makes one realize how bloated & confused most other lang
 
 TODO: replace "e.g."'s by total consideration.
 
-what are the necessary components of the minimal practical programming language? turing machines are the simplest, but impractical. here's what we'll do:
+a/symmetry is measured by whether the elements of the domain must be individually stated, or if instead multiple can be stated by a single statement.what are the necessary components of the minimal practical programming language? turing machines are the simplest, but impractical. here's what we'll do:
+
 
 . look at languages' models only. e.g. lisp uses lists, factor uses stacks, and link:http://www.om-language.org/[om] uses function composition.
   .. lists are exactly stacks; they're just used a bit differently in lisp vs factor, but even that could be said to be a difference between two languages rather than a difference of paradigm. also technically lisp is built on _pairs_, not lists. in fact, there's no reason to prefer proper lists over improper ones. `null` (`()`) should not be thought of as "the empty list" any more than `false`. there's the thought that mapping over the empty list is sensible, and returns the empty list, but seeing as `null` is its own value, and not a list (because _list_ is not a lisp data type; there's no primitive predicate that checks that; however there is `atom`, which is a primitive predicate that checks whether an object's type is _pair_), we can define `map false = false; map xs = [...]` which is exactly the same as `map () = (); map xs = [...]`. i do agree that `()` should be used instead of `false` because it's terse and represents the empty set, which is always the null value, cf `false`, which is a non-empty/bottom value of the boolean semiring. this being said, we must, even today, as lisp is, unlearn `()` as "the empty list", and instead recognize it as "null", the special empty value. indeed, this must be recognized in tandem with recognizing that lisp is not of lists, but pairs, and that therefore "lisp" meaning "list processing [language]" is inappropriate. in fact, even "pair lang" is a stupid definition, since "pair" means "ad-hoc relation", which are needed for all mathematical expressions and therefore all programs; to say that anything features relation is redundant. null termination is needed only for static arrays on contiguous memory partitionable into equally-sized cells where each cell corresponds to one object. linked lists do not share such assumptions, and do not require a _cell_ to hold the value of a termination symbol; termination is encoded, in the case of c &c, in the pointer pointing to `null`; or, in the case of lisp, haskell, &c, [the `cdr` of] an object satisfying `atom`.
     ... even the empty set, though it makes sense, is inconsistent; we'd expect the empty set to contrast with a non-empty set; however, truthy values are usually not lists, and again, there's no reason that they would be, since lists are just a common (recursive) pattern of pairs. the sensible truthy contrast to ∅ for a datum is a singleton set of that datum. there's no singleton pair; by definition it can't exist. assuming `cdr` to be `null` is not a symmetric solution; null is here a dummy value; any other value, e.g. `0` or `647274706`, would equally suffice. in fact, because lisp uses `null` for `false`, there's nothing distinguishing `null` as a terminator from the falsy value being in a list, except that we test `(null (cdr x))` to determine whether we're reached the end of a list, cf `(null (car x))` which tests whether the current value is falsy. however, again, this is just a needlessly verbose method that relies on the arbitrary null-termination convention rather than the natural case: `(not (atom (cdr x)))`. so the question remains: how do we symmetrically represent truthy values as non-empty sets? it turns out that we actually do not need to do anything; the solution is that _there are no sets, no lists._ a pair is a data type just like string, number, or symbol, and we branch on type to determine how to handle it when appropriate. it is inappropriate to consider lists, or to consider pairs different from other types. we can store multiple data in a single string (though usually there're no efficient operations to consider their multiple data,) or single number (e.g. numbers as bitstrings or masks.) pairs are not special. they support the `map` function, and `map` is not special; we can easily write a function that maps an n-ary function over an n-bitstring, or fold over a string as a sequence of characters. `map` should not need to deal with _lists_; it should be general, of pairs, traversing pairs as binary trees; this: 1. is potentially more efficient than traversing lists (because lists are linear, so don't support parallel traversal); 2. preserves structure of whatever tree you have; 3. has (a generalization of) the exact same base case as traversing an improper list (viz `(atom (car x))` and `(atom (cdr x))`). in conclusion, the "solution" to the _empty vs non-empty set_ problem is to recognize that there was never any empty set to contrast! there's only an arbitrary symbol for a falsy value and everything else, and this difference is meaningful *only* wrt the `if` special form, but is also conveniently useful generally to represent a variety of zero different from `0`, which is useful as a number and may be usefully contrasted with the lack of a value.
     ... we see that "lisp" is really "bitp", _binary tree processing_, since trees are the structure created by recursing on `cons`, though really rose trees &al structures are not binary trees; they recurse on `cdr` only (a rose tree being (root,children) encoded as `(cons root children)`.
+    ... WAIT, no, homoiconicity & metaprogramming requires that null be the empty list; if we want functions and their args to be encoded in sexps, and we want to metaprogram by outputting sexps, then we must, for nullary functions, distinguish between reference to a it vs invoking it: f vs (f). non-nullary functions aren't ambiguous whether they're being referenced vs invoked, e.g. for unary f, f vs '(f . 1). you may argue that f refer to invoking and 'f be non-invoking, but this would be inconsistent with notation for non-nullary functions. null-termination makes nullary and non-nullary functions symmetric about reference vs invocation. you may still say that (f) is (f . ()) i.e. a pair of f and the falsy value, but at this point, since we've already established that 1. all pairs, to be outputs of macros, must be null-terminated, and 2. that functions and their args may as well be called a list of function and its args; then we arrive at the fact that lists are null-terminated. for consistency's sake, _all_ lists, regardless of whether they'll be macro outputs, should be null-terminated. yet non-null-terminated lists can still exist; their existence is naturally implied by the language axioms; therefore it's appropriate to give them their own name, _improper lists_.
+      .... this suggests the question: should we use sexps? mexps are the same but without redundant parens. again, we can use 'f and f to distinguish a fn vs evaluating a fn, and we can still use parens to delimit otherwise-ambiguous nested mexprs. it's obviously insensible to ever have 'f not as an argument to something, and that can be inferred! haskell does away with the need for quoting by being non-strictly evaluated.
+      .... this suggests a related question: should code be homoiconic? indeed, there maybe a language with a different model that cannot reasonably afford homoiconicity, or even differently, should try _not_ to be homoiconic, because homoiconicity limits brevity! yet without homoiconicity metaprogramming can still be done, and structures visualized, modified, produced, and evaluated as code!
+      .... certainly we don't need macros; picolisp's fexps demonstrates that merely choosing to not evaluate the argvec suffices. the only property that makes macros useful is delayed evaluation. we can just as well quote then selectively eval. in fact, homoiconicity per se isn't even valuable; what's actually valuable is _evaluable structures_. macros are overconstrained: they have the constraint that code must be encoded as syntax. more sensibly, however, there should be no constraints beyond 1. the structure is mutable; 2. the structure is executable. many langs allow evaluation of strings as syntax, which satisfies (2) but not (1), since modifications to syntax do not describe modifications to the semantics that the syntax represents. so the real sole concern of metaprogramming is that we can execute code, where _code_ means literally _the encoding of information_.
 . consider these models as mathematical structures, then we'll describe them by graphs with unlabeled edges and valueless nodes
 . compare these graphs. e.g. _list_ is synonymous with _stack_ (and arrays are equivalent but with different efficiency for random access and reshaping,) functions are representable by lambdas, which can be described by lists, so functions are isomorphic to lists (composing lists is (via `cons`) is equivalent to composing lambdas.) actual "computation" is called `eval` or β-reduction.
 
@@ -225,7 +315,7 @@ disregard givens; design from scratch by _first principles_: defining [adj] cons
 
 there are only two properties to make a program ideal: efficiency and elegance.
 
-structure:: generally means _form_, i.e. arrangement (of data), i.e. particular relation (of data.) i parenthesize "of data" to emphacize that structure is independent of data, but ultimately is useless unless applied to data; structure is abstract over data, and like all abstractions, represents useful truth, but in practice must eventually be reified. pointfree functions are example structure abstracted over data.
+structure:: generally means _form_, i.e. arrangement (of data), i.e. particular relation (of data.) i parenthesize "of data" to emphasize that structure is independent of data, but ultimately is useless unless applied to data; structure is abstract over data, and like all abstractions, represents useful truth, but in practice must eventually be reified. pointfree functions are example structure abstracted over data.
 
 .TODO's
 
@@ -308,16 +398,6 @@ prints `NaN NaN NaN 1/2 1/4 9/8 49/16`. note that we discard for/fold's return v
 
 * we not only omit the eventually-redundant `k` parameter, but also the `if` statement that branches upon it.
 * we need to use the `next` function in both the average-accumulating and ema-accumulating cases.
-
-''''
-
-things to do when i've enough time:
-
-* look into agda and f*
-* learn lenses further
-  ** consider HKDTs
-* read about free theorems (walder 1987)
-* refactor util.rkt:795~ into lenses or arrays
 
 .summary
 
@@ -642,6 +722,8 @@ we can express a graph by an adjacency matrix. we can take eigenvalues of matric
 
 === branchless
 
+tl;dr: represent conditionality by the indicator fn.
+
 not only is branching slow, but we must write extra code to account for it. it's also slower for any computer to calculate because it can only predict (often badly, and always entailing extra computation) what the upcoming code is. if there's no branching, then it obviously loads whatever code is next; however, if it branches, then it must load some code from wherever the branch tells it to go (determined during runtime,) which generally is impossible to know in advance.
 
 [source,c]
@@ -668,13 +750,18 @@ void upper(char* d, int n) {
 }
 ----
 
-general branchless is a × cond~a~ + ... + z × cond~z~, which can be obviously expressed by a matrix.
+*general branchless is a × cond~a~ + ... + z × cond~z~, expressable by a matrix. on a vector processor, or with MIMD, a GPU, or other parallel device, the conditions can be simultaneously evaluated.* `(cond [p r] ... [else e])` can be expressed as `(or (and p r) ... e)` where `and` & `or` short-circuit on ⊥ and ⊤ respectively.
 
-NOTE: be careful that whatever method you choose is efficient as *output* by your compiler!
+still branching is needed to delay computation:
 
-* branchless handcoded assembly is always faster than branching handcoded assembly
+. speedup: if you're branching over many conditionals each of whose predicates require many cycles to compute, then branching can be more efficient than branchless
+. correctness: if any of your predicates are effectful, but should affect only if prior predicates failed, then you'd need branching
+
+i'm unsure whether either of these are necessary concerns, or if these patterns can always be refactored into predicates that support branchless programming—namely that they compute quickly and are pure.
+
+* branchless handcoded assembly is always faster than branching handcoded assembly. one can't generally trust a compiler to produce faster assembly from branchless c.
 * array-based programming on some architectures (e.g. intel) avoids branching but still loops, by using `esi` & `edi` special looping-designated registers. instructions like `cmp ...; cmovg ...` are branchless but still obviously use conditionals.
-  ** SIMD/AVX branchless is the fastest variety of cpu (cf gpu) programs. many apl programs should be easily translatable to SIMD branchless.
+  ** SIMD/AVX branchless is the fastest variety of cpu (cf gpu) programs.
 
 ==== eventually branchless
 
@@ -1567,11 +1654,14 @@ verdict: sequences (lazy lists) and vectors defined by index functions to elemet
 
 === array-based tacit languages (abtl)
 
-j & apl, and probably both burlesque & bqn.
+j, apl, burlesque, bqn. sql is array-based but not tacit.
+
+NB. linux comes with apl keymap: us,apl, dyalog variant, option grp:lswitch.
 
 advantages:
 
 * array-based. array algebra, because it works on multiple data automatically, is a simpler alternative to iteration; rather than performing an operation on each element, an operation is performed on all elements at once. furthermore we can consider a whole structure easily rather than using functions that go element-by-element, which are inelegant whenever we need to consider specific substructures.
+  ** arrays directly represent axes (where the number of axes is the rank.) a list of 1-data can become a matrix: a list of j-dimensional data; that matrix can then be extended into a rank-3 array, i.e. a list of rank-2 arrays. extruding is obvious by arrays; by lists (pointers) there are multiple equally-elegant implemenations, which introduces the trouble of choice/standardization/(uni/con)formity.
 * implicit plurality & mapping
 * simple & regular
 * polymorphic
@@ -1584,10 +1674,20 @@ advantages:
 === abtl algebra (WIP)
 
 * reshaping uses modular arithmetic
+* rather than have a set of structures, we have rows of vectors; each row is a point, and each column a feature.
+* APL HAS A FIXED-POINT PRIMITIVE
 * (in apl at least) _rank_ differs from _depth_: a matrix (array of arrays) has depth 1 but rank 2. "The length of the shape of an array is equal to its rank. Therefore, we can find the rank of an array with ⍴⍴—the shape of the shape. Since a scalar is rank 0 (i.e it has no dimensions) the shape of a scalar has length 0 and is an empty vector: ⍬"
 * scalar operations are applied to all points without changing shape
 * if α f ω, if α or ω is scalar, then f is applied to all elements of ω or α (this is called _scalar extension_). if both are arrays of the same shape, then f is applied pointwise. _incompatible_ shapes raise an error: if shapes differ, then the smaller shape is repeated until it's the same size as the larger array (in t.racket's `math/array` this is called _broadcasting_). this makes expressions like `1 2 3+(3 2 1) (¯1 ¯2 ¯3) ((44 71 11) 1 (32 0.5) )` valid. this example's β-reduction is `(4 3 2) (1 0 ¯1) ((47 74 14) 4 (35 3.5) )`; `1+` is mapped over `(3 2 1)`, `2+` is mapped over `(¯1 ¯2 ¯3)`, and `3+` is mapped over `((44 71 11) 1 (32 0.5))`.
   ** this expression is invalid in t.racket's `math/array` (error "expected rectangular data"). however, for arrays of the same shape, broadcasting is obvious: `(array+ (array [1 2 3]) (array [[3 2 1] [-1 -2 -3] [44 71 11]]))` => `(array [[4 4 4] [0 0 0] [45 73 14]])`. see §6.3.1 _broadcasting rules_ for complete spec. i haven't understood the rules technically enough to want to try to find an array representation that accomplishes the same result as the abtl (viz apl) version.
+
+again, arrays should be sparse. just as sets may be represented by a predicate adjoined with some ad-hoc enumeration of elements, so can an array. consider the identity matrix; it's defined as [xᵢᵢ=1;0] (shorthand for [xᵢⱼ=i==j]). this is a fn (i,j) → {0,1}. I₄+[xᵢ₂=3;0]=[(j==2?3:0)+i==j]] which is encoded by the exact same bits regardless of size. this is a shape-invariant sparse array. all mostly-symmetric arrays should be mere fns from index to value.
+
+==== trees
+
+can store in [[parent] [sibling] [value]] matrix. the de facto apl structure is _inverse tablized form_. _parent vectors_ are standard in high-performance computing; a parent vector (afaict yet) is a pointer from child to parent. of course many children may point to a common parent. by beginning with an array of children you maximize parallelism. each child has (n)one parent; thus at each iteration up the tree, that whole level is in scope.
+
+what's neat about codfns is that in the ast (of the code that it's compiling) the interpretation of the children is given by the parent.
 
 ==== case study: fibbonacci
 
@@ -1645,7 +1745,7 @@ TODO: use racket link:file:///nix/store/90c33f811d9vhlhs9qkr2xycrcv3xgqw-racket-
 * apply works nicely with the fact that quoting produces a list; it allows me to effectively do `(my-or 'a 'b 'c ...)` without needing to quote each argument: `(apply my-or '(a b c ...))`
 * a proper lisp would allow me to say `(if xs)` because `()` would be falsy and `#f` wouldn't exist
 
-=== misc & studies
+=== some misc study
 
 consider the following function. it operates on sequences and lists. that's one degree of asymmetry, as clearly marked by `case-lambda`. why have both? how can we express this one simple idea (take no more than) by one simple function rather than two?
 
@@ -1690,7 +1790,7 @@ but those're the variant and invariant of the _implementation_. what are the mat
 
 TODO: identify
 
-==== haskell & lisp
+=== haskell & lisp
 
 [options="header"]
 |==========================================================================
@@ -1702,3 +1802,20 @@ TODO: identify
 | constructors     | alist of interned symbols to lists
 | non-strict lists | `(de nats ((i 0)) (cons i (lambda () (nats (+1 i)))))`
 |==========================================================================
+
+=== case study: redbean
+
+TODO: likewise investigate justine's other code
+
+* tiny
+* dynamic (lua)
+* built from ground-up for efficiency &al 1st principles
+* naturally gzip-encoded responses
+
+==== ape (actually portable executable)
+
+* runs on bare metal
+* runs on 6 oses
+* avoids syscalls
+
+==== cosmopolitan
