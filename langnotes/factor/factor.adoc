@@ -1,10 +1,33 @@
 == factor
 
-continue on page 49 of dls
+[TODO]
+* concurrency
+
+continue on page 49 of factor.pdf
 
 === design
 
-* stack paradigm
+* like scheme ([non-pure] functional, code is data (quote & eval, custom syntaxes)) but:
+  ** backslash is needed to refer to a fn without execution e.g. `\ drop` pushes `drop`; `drop` alone would execute it. `\ drop` is different from `[ drop ]`.
+  ** no parens!
+  ** quotations are sequences
+  ** easily examine the whole program state in the debugger
+  ** can pass around macros like any other data
+  ** good, _flexible_ (somewhat implicit by generic words, mixin classes & instances) oop support (like cl)
+    *** this is how we do ad-hoc relations. this makes encoding ad-hoc polymorphism easy, so we can have haskell-like concision but without haskell's restrictions.
+      **** programs are often prolog-like: small facts (except here fns) that are used like a vocabulary; more code re-use than big, specialized chunks of code.
+  ** stack instead of applicative
+* NB. named local binds is implemented as a factor macro (so they're expanded before runtime). same for square and curly brackets, quote marks, and colon for fndefs. (meta-circular)
+* code is compiled on the fly into highly optimized single static assignment (SSA IR). such a simple lang supports extreme optimization.
+  ** use `optimized.` (instead of `.`) to see optimization details of some code
+* extremely good ide: simple, debugger/stepper, inline docs (all local), quickly see everywhere that any word is used, and any word's definition
+* uses arrays with pseudo-indexing (i->a) e.g. `<reversed>`
+* has a PEG lib! (uwu) (`EBNF:`) furthermore pegs are for SYNTAX!
+* comes with memoization library
+* λ syntax is `::`
+* good unicode support
+* supports dynamic scope!
+* debugging steps through ops and shows the stack at each op
 * postfix; read left to right, e.g. `2 even? [ "OK" ] [ "Cosmic rays detected" ] if` for `2|2 ? "OK" : "Cosmic ..."`
   ** pipeline [unix cmd pipe] design
 * design influenced by forth, joy, cat, oop, metaprogramming
@@ -24,19 +47,32 @@ continue on page 49 of dls
 * factor is oop, but all methods are generic
 * uses _virtual sequences_, i.e. functions from index to element
 
+=== env
+
+* `USE: <lib>` imports a lib. `USING: <lib> ... ;` imports many.
+* see `QUALIFIED:`, `FROM:`, `EXCLUDE:`, AND `RENAME:`, too.
+* `IN:` defines a module
+
 === semantics
 
 * pushing quotations does not use memory
 
-=== the repl
+=== the repl (the _listener_)
 
 * runs as a gui rather than cli program
 * is a client that connects to a repl server
 * tracks the stack for you, which makes easy both working with state and debugging
+* to enable dark mode (no idea how this was found): run `USE: tools.scaffold scaffold-factor-boot-rc` then add `USE: ui.theme.switching dark-mode` to `~/.factor-boot-rc`, then run `run-bootstrap-init save`, then restart the listener. on nixos i got a _read-only filesystem_ error, so this didn't work totally.
 
 === syntax
 
+[source,factor]
+----
+! starts comments
+----
+
 * spaces are required adjacent to delimiters; otherwise, like lisp, they're seen as part of an identifier
+  ** this isn't generally true; that's just how these delimiters were implemented. delimiters are factor macros.
 
 |===========================
 | {}             | array literal
@@ -76,19 +112,6 @@ e.g. `quot` can be a function from one value to one value, or two to two, &c.
 ( ..a seq quot ( ..a elt -- ..a ) -- ..a )
 ----
 
-===== named inputs
-
-[source,factor]
-----
-:: foo ( input ... -- output ... )
-  body ... ;
-----
-
-* with `::` instead of `:`, inputs are lexically scoped and available in `body ...`.
-* `expr :> id` or `expr :> ( id ... )` binds to identifiers
-
-this form permits elegant solutions to e.g. factors of a quadratic, whereas joy does not.
-
 === oop/generics
 
 probably the easiest & most flexible oop ever:
@@ -123,18 +146,32 @@ three types of classes:
 
 primitive & tuple classes use >> & << (but not derived ones?)
 
-=== common funcs
+=== common fns ("words")
+
+.s:: print stack
+.:: pop & print that which was popped
+clear:: clear stack
+drop:: pop
+nip:: remove 2nd stack item
 
 ==== stack shuffle
 
+uses haskell as-patterns and ellipsis represents [part of] the stack. implicit in this notation is the fact that the word is at the top of the stack before being evaluated.
+
+f:: fn
+q:: quotation
+
 |====================
-| drop | x --
-| dup  | x -- x x
-| over | x y -- x y x
-| swap | x y -- y x
+| drop  | ... x -> ...
+| dup   | ... x -> ... x x
+| over  | ... x y -> ... x y x
+| swap  | ... x y -> ... y x
+| dip   | ... x q -> (q ...) x
+| keep  | z@(... x) q -> (q z) x
+| curry | ... x q -> ... (λX. q x X)
 |====================
 
-* remember that input & output names are programmatically unrelated
+* remember that input & output names are programmatically unrelated (what does this mean?)
 
 mentally tracking stack effects is troublesome. you should use three easy-accounting fundamental combinators:
 
@@ -152,28 +189,52 @@ bi & tri combinators are a bit more convenient: they eliminate braces or a numbe
 * `bi*` & `tri*` are 2- & 3-spread
 * `bi@` & `tri@` are 2- & 3-apply
 
-==== combinators
+==== control flow
 
-_
+|==================================================
+| when   | ... x q -> ... ! side effect q run if x
+| unless | negation of when
+| if     | ... x q u -> ... ! run q if x else run u
+| when*  | ... x q -> ... x ! when but leaves x
+|==================================================
 
-==== analagous or equivalent
+==== common higher-order fns & loops
 
-[options="header"]
-|===============
-| factor | other
-| each   | mapM_
-| map    | map
-| reduce | fold
-|===============
+* `each`, `map`, `reduce` (fold), `replicate` (scan), `accumulate` (pushes (scan w/o last elem) and (fold's last elem))
+* `x f g produce` scans g over x until not f. while is same but fold rather than scan.
 
 ==== unique to factor
 
 [options="header"]
 |=================================
 | word or syntax | meaning
-| :              | define new word
-| --             | stack effects-
+| : [...] ;      | define new word (literally `:` sets factor in compile mode until `;`
+| --             | stack effects
+| :: [...] ;     | `:` but either stack effect symbols are locally bound vars or are bound by `val :> id` clauses before the body. requires importing `locals` vocab.
 |=================================
+
+* `[| m n | m n + ]` binds m & n to 2nd and top stack elems, then uses them to push m+n.
+
+.mutable vars example
+[source,factor]
+----
+USE: locals
+! 3 f => 11
+:: f ( x! -- t ) ! x! makes x mutable by enabling x! to set x (see below)
+  x 2 * x! ! x<-2x
+  5 x + ;  ! return 5+x
+----
+
+`x!` pops into `x`. exclamation marks ("shrieks") are particular here.
+
+===== globals
+
+[source,factor]
+----
+SYMBOL: x      ! declare
+4 x set-global ! set
+x get-global   ! access
+----
 
 === examples
 
@@ -192,7 +253,7 @@ each example here is a 1-liner
 : tail-factorial ( acc n -- n! )
   dup 0 =
   [ drop ]
-  [ [ * ] [ 1 - ] bi tail-factorial ]
+  [ [ * ] [ 1 - ] bi tail-factorial ] ; [ * ] [ 1 - ] bi = λx. x*(x-1)
   if ;
 
 : factorial ( n -- n! ) 1 swap (factorial) ;
@@ -203,3 +264,7 @@ each example here is a 1-liner
 === caveats
 
 * `print` doesn't accept numbers (generic word `string-lines` does not define a method for the fixnum class)
+
+=== libs
+
+* for graphics, use cairo; it has bindings to factor

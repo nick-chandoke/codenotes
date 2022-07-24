@@ -17,6 +17,12 @@ oses typically:
 
 what an os should be: some code that sends & recieves data from hw, and practically, acts as an abstraction [virtualization] layer to certain hw (e.g. primary and/or secondary memory, physical threads)
 
+given current *nix-inspired designs, the most sane ffi/ipc is either:
+
+. running an external program then reading its output (from stream or other data store)
+. directly using a shared object (in picolisp, since all other langs' ffi's are needlessly not simple/plain)
+. for bytecode of a lang X, writing a small program (or program that writes a program) in X that accepts module/library name/path, function name, and function args, and outputs the result to stdout; then reading from that stdout
+
 .questions
 
 * what's with different oses? the machine code is particular to instruction sets, not oses, right? and all os libs are just code that can run on a given architecture, right?

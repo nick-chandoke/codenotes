@@ -1,12 +1,17 @@
 == types? structs? enums? just use lists!
 
+TODO: use `de/aljs` as a premier example, and compare against `json-struct`.
+
 this article criticizes typing as it's currently used in programming, and suggests using lists instead (favoring _shapes_ instead of [nominal] types). this does not pertain to using computational type-algebraic systems or formal type theory for exploration & study of mathematical structures which i wholeheartedly condone.
 
 TODO: this article suggests that sexps are ideal for all code. this is incorrect; sexps are perfect only for general code. for specific systems, where meaning can be inferred from syntax that exploits particularities of the language, then sexps are inefficient. sexps are perfect only when there are no constraints on the code, making sexps basically a better version of xml, json, &c. revise this article to reflect this. in fact, homoiconicity is not even necessarily ideal; other metaprogramming is often more efficient (again, mp requires mere manipulation & evaluation of data.) furthermore stack & functional paradigms are never more efficient than stateful ones; in fact, they're equally efficient only for composition of unary fns.
 
+TODO: write examples in apl, POW!ass, or other general form that most exploits symmetry and makes a/symmetry clear. this notation would exploit common information, would be mutable and likely use arrays^*^, would use dynamic or global binding, sensible shortcuts like pil's `@` (which requires dynamic binding). also give solution in prolog. the haskell solution is first, since that's whose faults this article seeks to demonstrate; then the ideal (most reduced notation that exploits common info) is given; then other solutions are given to see how they compare. ^*^also explore & discuss arrays as the natural structure where each array axis corresponds to one of symmetry.
+TODO: when writing factor's version, use factor oop; cf lists & ADTs. in fact, very much attention should be given to lisp vs factor; they're very similar, but factor has easier syntax and is actually totally flexible, which lisp purports to be, but really isn't (except pil.)
+
 .preface
 
-i used haskell from 2017 through oct 2019, and it was the first real programming language that i'd learned since java, and it totally blew my mind. i still say that it (haskell2010) is an excellent language, yet lisp obviates it. i began learning scheme in feb 2020, and started using typed racket shortly thereafter, until feb 2022, when i decided that types were hardly beneficial overly-restrictive cruft. i'd always wondered how anyone ever got _anything_ done in untyped languages—and i still do! here i discuss types, when they're good, why they usually aren't, what's better, and how this better untyped system is different from common untyped systems like javascript or python. for almost all of my life i've been using typed programming and relying on the typechecker heavily, and using it (in the case of haskell) for considering the mathematical structure of my code, and using type calculus to redesign my code and correct design logical inconsistencies. i say all this so that you understand that i have valued formal math even before discovering haskell (and in fact i found haskell because it was the closest extant language to a theoretical purely-declarative language that i'd drafted over a few years)—that i'm not just someone who thought that it was "easier to get started" with untyped languages such as python just because they make it easier/faster to get code to run correctly in common use cases. to put it lightly, i'm *not* a fan of non-reproducability, unmanaged/emergent state, oop, or not being told the shape/type of the data with which i'm working.
+i used haskell from 2017 through oct 2019, and it was the first real programming language that i'd learned since java, and it totally blew my mind. i still say that it (haskell2010) is an excellent language, yet lisp obviates it. i began learning scheme in feb 2020, and started using typed racket shortly thereafter, until feb 2022, when i decided that types were hardly beneficial overly-restrictive cruft. i'd always wondered how anyone ever got _anything_ done in untyped languages—and i still do, but only as its currently commonly done in practice; in principle, however, using untyped code is much better, when the code [encoding scheme] is simple. furthermore we can exploit common information in a system without types; we're free to work with information instead of trying to partition everything by types, which is hopeless; the types will either be so specific that they're a pain to use, or they'll be simple but lose the granularity to express particular facts. here i discuss types, when they're good, why they usually aren't, what's better, and how this better untyped system is different from common untyped systems like javascript or python. for almost all of my life i've been using typed programming and relying on the typechecker heavily, and using it (in the case of haskell) for considering the mathematical structure of my code, and using type calculus to redesign my code and correct design logical inconsistencies. i say all this so that you understand that i have valued formal math even before discovering haskell (and in fact i found haskell because it was the closest extant language to a theoretical purely-declarative language that i'd drafted over a few years)—that i'm not just someone who thought that it was "easier to get started" with untyped languages such as python just because they make it easier/faster to get code to run correctly in common use cases. to put it lightly, i'm *not* a fan of non-reproducability, unmanaged/emergent state, oop, or not being told the shape/type of the data with which i'm working.
 
 ''''
 
@@ -15,54 +20,43 @@ consider the following typed racket code that simply describes placing orders to
 [source,scm]
 ----
 ;; sum types
-
 (define-type LinkType (U 'value 'percent 'tick))
 (define-type LinkBasis (U 'last 'bid 'ask 'mark))
 
 ;; product types
-
-(struct ([price : Positive-Float]
-         [link-type : (Option LinkType) #f] [link-basis : (Option LinkBasis) #f])
-  #:type-name Limit)
-
-(struct ([value : Positive-Float] [trailing? : Boolean]
-         [link-type : (Option LinkType) #f] [link-basis : (Option LinkBasis) #f])
-  #:type-name Stop)
+(struct ([price : Positive-Float] [link-type : (Option LinkType) #f] [link-basis : (Option LinkBasis) #f]) #:type-name Limit)
+(struct ([value : Positive-Float] [trailing? : Boolean] [link-type : (Option LinkType) #f] [link-basis : (Option LinkBasis) #f]) #:type-name Stop)
 
 ;; equivalent to the type These Limit Stop where These a b := This a | That b | These a b
 ;; typed racket does not support ADTs
 (struct order-cond ([stop : (Option Stop)] [limit : (Option Limit)])
   #:guard (λ (s l n) (cond [(and s l (stop-trailing? s)) (raise-arguments-error 'order "trailing stop limits are unsupported" "stop" s "limit" l)]
                            [(or s l) (values s l)]
-                           [else (raise-arguments-error 'order
-                                                        "every price condition must have a stop, limit, or both."
-                                                        "stop" s
-                                                        "limit" l)]))
+                           [else (raise-arguments-error 'order "every price condition must have a stop, limit, or both." "stop" s "limit" l)]))
   #:type-name OrderCond)
 
 ;; structs -> hash tables -> json objects, which will be
 ;; later passed in an http request body to an online trading api.
 (define (order-cond->hash pc)
-  (let ([s (order-cond-stop pc)]
-        [l (order-cond-limit pc)])
-    (hash-set (hash-union
-                (if s
-                    (let ([v (stop-value s)])
-                      (hash (if (stop-trailing? s)
-                                'stopPriceOffset   ;; 4 decimal digits allowed if price is below $1; else 2.
-                                'stopPrice)        (round/num-digits (if (>= v 1) 2 4) v)
-                            'stopPriceLinkBasis    (kabob-case->UPPER_SNAKE_CASE (stop-link-basis s))
-                            'stopPriceLinkType     (kabob-case->UPPER_SNAKE_CASE (stop-link-type s))))
-                    (hash))
-                (if l
-                    (let ([v (limit-price l)])
-                      (hash 'price          (round/num-digits (if (>= v 1) 2 4) v)
-                            'priceLinkBasis (kabob-case->UPPER_SNAKE_CASE (limit-link-basis l))))
-                    (hash)))
+  (let ([s (order-cond-stop pc)] [l (order-cond-limit pc)])
+    (hash-set (hash-union (if s
+                              (let ([v (stop-value s)])
+                                ;; 4 decimal digits allowed if price is below $1; else 2.
+                                (hash (if (stop-trailing? s) 'stopPriceOffset 'stopPrice) (round/num-digits (if (>= v 1) 2 4) v)
+                                      'stopPriceLinkBasis                                 (kabob-case->UPPER_SNAKE_CASE (stop-link-basis s))
+                                      'stopPriceLinkType                                  (kabob-case->UPPER_SNAKE_CASE (stop-link-type s))))
+                              (hash))
+                          (if l
+                              (let ([v (limit-price l)])
+                                (hash 'price          (round/num-digits (if (>= v 1) 2 4) v)
+                                      'priceLinkBasis (kabob-case->UPPER_SNAKE_CASE (limit-link-basis l))))
+                              (hash)))
       'orderType (cond [(and s l) "STOP_LIMIT"]
                        [s (if (stop-trailing? s) "TRAILING_STOP" "STOP")]
                        [l "LIMIT"]))))
 ----
+
+22 lines. pretty straightforward structure.
 
 we'll pretend that type inference in typed racket is as good as haskell. this article is criticizing typing, not how languages implement typing.
 
@@ -79,25 +73,6 @@ now consider this alternative which uses lists of particular shape instead of a 
 
 [source,scm]
 ----
-;; example order conditions:
-;; '((limit 42.04) (trailing 1%) mark) ; mark is applied to both trailing stop & limit
-;; '((limit 42.04 mark) (stop 40 bid)) ; mark is applied to limit, and bid to stop
-;; '(limit -2%)                        ; duh.
-
-;; use if you feel like trading speed for safety
-;; e.g. call before passing to order-cond->hash.
-;; returns the original order or raises an argument error
-(define (check-order o)
-  (cond [(and (assoc 'trailing o) (assoc 'limit o)) (raise-argument-error 'order-cond->hash "trailing stop limits are unsupported" o)]
-        [else o]))
-
-;; there are no structures to define. just define order-cond->hash:
-(require (for-syntax racket/base syntax/parse) (only-in racket/hash hash-union))
-(define-syntax (uncons-let stx)
-  (syntax-parse stx
-    [(_ ([h t xs] binds ...) pos neg)
-     #'(let ([lstg xs]) (if (null? lstg) neg (let* ([h (car lstg)] [t (cdr lstg)] binds ...) pos)))]))
-
 (define-syntax (cond-let stx)
   (syntax-parse stx
     [(_) #'(void)]
@@ -106,97 +81,59 @@ now consider this alternative which uses lists of particular shape instead of a 
     [(_ [g (~literal =>) x e ...+] . rst) #'(let ([x g]) (if x (begin e ...) (cond-let . rst)))]
     [(_ [p e ...+] . rst) #'(if p (begin e ...) (cond-let . rst))]));; combo of assoc & member. also doesn't enforce racket's needlessly restrictive contract on assoc.
 
-;; this works on a mix of alist & list, which is a more useful structure than "plain" lists (i.e. that don't support assoc) or alists.
+;; returns first list element matching a predicate or tail of first pair whose car matches a predicate.
+;; this works on a mix of alist & list, which is a more useful structure than flat lists or alists.
 ;; as this is a mix of alists & lists, i'll call them "a/lists."
-(define (massoc k s [p equal?])
-  (let lp ([s s])
-    (if (null? s)
-        #f
-        (let ([c (car s)])
-          (if (or (and (pair? c) (p k (car c))) (p k c))
-              c
-              (lp (cdr s)))))))
+;; massoc with a/lists is a common. more generally, though, you'd loop over a list [stack], taking n elements where
+;; n is related to the top of the stack.
+(define (massoc k s)
+  (let ([k (if (procedure? k) k (curry equal? k))])
+    (let lp ([s s])
+      (and (pair? s)
+           (let ([c (car s)])
+             (or (and (pair? c) (let ([y (k (car c))]) (and y (cdr c))))
+                      (and (k c) c)
+                      (lp (cdr s))))))))
 
-(define order-cond->hash
-  (let ([B (λ (ts lb lt p) (λ (ovr) (let ([m (foldl (λ (v m) (cond [(member v '(last bid ask mark)) (hash-set m lb (kabob-case->UPPER_SNAKE_CASE v))]
-                                                                   [(symbol? v) (hash-set* m lt "PERCENT" p (string->number (cadr (regexp-match #px"([0-9-]+)%" (symbol->string v)))))]
-                                                                   [(number? v) (hash-set* m lt "VALUE" p (round/num-digits (if (>= v 1) 2 4) v))]
-                                                                   [else (raise-argument-error 'order-cond->hash "link basis, number, or percent symobl" v)]))
-                                                    (hash)
-                                                    ts)])
-                                      (if ovr (hash-set m lb (kabob-case->UPPER_SNAKE_CASE ovr)) m))))])
-    ;; the loop here seems very monadic: Loop (a -> b a) where b ~ (->). this is just a catamorphism. loops, like in graph theory, must be ultimately [after function composition] endomorphic, e.g. (a -> b -> c -> a) is loopable.
-    ;; loops are a study in self-similarity; loops, like recursion, is fractal.
-    (λ (o) (hash-set ((λ (y) (if (procedure? y) (y #f) y)) ; y is a procedure if o like '(limit 42). this `if` (asymmetry) is due to supporting the asymmetry of allowing both e.g. '((limit 42)) and '(limit 42)
-                            (let loop ([fns '()] [all #f] [o o]) ;; need fns: as we go through the loop, we compose functions; the last item is what we're composing with. then afterward we apply the fn to all.
-                                ;; i took awhile to notice to accept multiple fns instead of just one. that's because i needed (loop fns h ts) to not modify anything except h, yet also effectively return (hash),
-                                ;; so that we can hash-union all accumulated functions after applying them to all.
-                                (uncons-let ([h ts o])
-                                  (cond-let [(assoc h '((trailing . (stopPriceLinkBasis stopPriceLinkType stopPriceOffset)) (stop . (stopPriceLinkBasis stopPriceLinkType stopPrice)) (limit . (priceLinkBasis priceLinkType price)))) => x (apply B ts (cdr x))]   ; base cases. fns from all to hash tables.
-                                            [(symbol? h) (loop fns h ts)]                    ; set all
-                                            [else (loop (cons (loop '() #f h) fns) all ts)]) ; recurse
-                                  (apply hash-union (map (λ (f) (f all)) fns)))))
-                     ;; can't use cond-let here since we need the bound vars in multiple cases
-                     'orderType (let ([stop (massoc 'stop o)]
-                                      [limit (massoc 'limit o)]
-                                      [trailing (massoc 'trailing o)])
-                                  (cond [(and stop limit) "STOP_LIMIT"]
-                                        [(and trailing limit) (raise-argument-error 'order-cond->hash "stop, limit, or stop-limit; trailing stop limits are unsupported" o)]
-                                        [stop "STOP"] [limit "LIMIT"] [trailing "TRAILING_STOP"]
-                                        [else (raise-argument-error 'order-cond->hash "stop, limit, or stop-limit" o)]))))))
+;; example order conditions:
+;; '((limit 42.04) (trailing 1%) mark) ; mark is applied to both trailing stop & limit
+;; '((limit 42.04 mark) (stop 40 bid)) ; mark is applied to limit, and bid to stop
+;; '(limit -2%)                        ; limit is 0.98 × link basis
+(define TS '((trailing "TRAILING_STOP" stopPriceLinkBasis stopPriceLinkType stopPriceOffset)
+             (stop     "STOP"          stopPriceLinkBasis stopPriceLinkType stopPrice)
+             (limit    "LIMIT"         priceLinkBasis     priceLinkType     price)))
+(define (order-cond->hash s)
+  (let*-values ([(glb s) (partition symbol? s)]
+                [(glb) (if (null? glb) #f (kabob-case->UPPER_SNAKE_CASE (car glb)))]
+                [(type) (map car s)])
+    (hash-union (for/fold ([h (hash)]) ([i (if (pair? (car s)) s `(,s))])
+                  (cond-let [(massoc (car i) TS) => T
+                             (match T [(list _ lb lt p) (for/fold ([h h]) ([v (cdr i)])
+                                                          (cond [(member v '(last bid ask mark)) (hash-set h lb (kabob-case->UPPER_SNAKE_CASE v))]
+                                                                [(symbol? v) (hash-set* h lt "PERCENT" p (let ([x (symbol->string v)])
+                                                                                                           (string->number (substring x 0 (sub1 (string-length x))))))]
+                                                                [(number? v) (hash-set* h lt "VALUE" p (round/num-digits (if (>= v 1) 2 4) v))]
+                                                                [else (raise-argument-error 'order-cond->hash "link basis, number, or percent symobl" v)]))])]
+                            [else h])) ; ignore now; catch invalid types below
+                (cond-let [(subset? '(limit stop) type) (hash-set (if glb (hash 'stopPriceLinkBasis glb 'priceLinkBasis glb) (hash)) 'orderType "STOP_LIMIT")]
+                          [(subset? '(limit trailing) type) (raise-argument-error 'order-cond->hash "trailing stop limits are unsupported" s)]
+                          [(massoc (car type) TS) => x (hash-set (if glb (hash (cadr x) glb) (hash)) 'orderType (car x))]
+                          [else (raise-argument-error 'order-cond->hash "stop, limit, stop & limit, or trailing" s)]))))
 
 (order-cond->hash '(limit 42.04))
 (order-cond->hash '(mark (limit 42.04) (stop 1%)))
 ----
 
-ok, that's 22 lines, compared to the first solution, which was 24 lines. i'm counting lines when comments and blank lines are removed, and not having line breaks in sexps unless really needed. also i'm counting only the lines of `order-cond->hash`; `cond-let`, `massoc`, &c are considered primitives of this style of coding. `check-order` is not necessary, and so not included in the line count. so why, if this method is better, is it only 2 lines shorter?
+20 lines, not counting `cond-let`'s & `massoc`'s definitions, since those are standard for this style of programming, and would be always included implicitly. so at only 2 lines terser, what does this style offer?
 
-* this one has more code to handle more flexible order description; order literals are much cleaner.
+* this one has more code to handle more flexible order description; order literals are represented simply by quasiquoted lists.
 * not only is the order description more flexible, but the order structure is more flexible, too; this code generalizes much more elegantly than the struct-based method.
 * *[EDIT]* in retrospect, it was stupid to allow any order for value and link basis; it's always going to be price then basis. this reminds me of a truth i'd forgotten: parsers (with backtracking) are an elegant basis for all programs. they should be used to accept function args; function args should be either evaluated before or not a la picolisp; and the parser should be applied to the list of args a la `syntax-parse`. while a parser would not have made this code shorter nor easier to read, it would stay about the same size while ensuring that, e.g. neither price nor basis is specified more than once. the parser here would be `((U 'limit 'stop 'trailing) (-> (? price) parse-price) (-> (? 'last 'bid 'ask 'mark) kabob-case->UPPER_SNAKE_CASE))`. i should explore this more, especially comparing them with a/lists.
   ** parsers would make base cases vs recursive cases easier, too: we can try matching against either case (or the more specific of either case). of course, once part of the match fails the next parser is tried.
 
-but hey, we can do better. let's trade that last `let` block for state kept in a variable called `types`:
-
-[source,scm]
-----
-(define order-cond->hash
-  (let ([type-map '((trailing "TRAILING_STOP" stopPriceLinkBasis stopPriceLinkType stopPriceOffset)
-                    (stop     "STOP"          stopPriceLinkBasis stopPriceLinkType stopPrice)
-                    (limit    "LIMIT"         priceLinkBasis     priceLinkType     price))]
-        [B (λ (ts lb lt p) (λ (ovr) (let ([m (foldl (λ (v m) (cond [(member v '(last bid ask mark)) (hash-set m lb (kabob-case->UPPER_SNAKE_CASE v))]
-                                                                   [(symbol? v) (hash-set* m lt "PERCENT" p (string->number (cadr (regexp-match #px"([0-9-]+)%" (symbol->string v)))))]
-                                                                   [(number? v) (hash-set* m lt "VALUE" p (round/num-digits (if (>= v 1) 2 4) v))]
-                                                                   [else (raise-argument-error 'order-cond->hash "link basis, number, or percent symobl" v)]))
-                                                    (hash)
-                                                    ts)])
-                                      (if ovr (hash-set m lb (kabob-case->UPPER_SNAKE_CASE ovr)) m))))])
-    ;; the loop here seems very monadic: Loop (a -> b a) where b ~ (->). loops, like in graph theory, must be ultimately [after function composition] endomorphic, e.g. (a -> b -> c -> a) is loopable.
-    ;; loops are a study in self-similarity; loops, like recursion, is fractal.
-    (λ (o) (let ([types '()])
-             (hash-set ((λ (y) (if (procedure? y) (y #f) y)) ; y is a procedure if o like '(limit 42). this `if` (asymmetry) is due to supporting the asymmetry of allowing both e.g. '((limit 42)) and '(limit 42)
-                        (let loop ([fns '()] [all #f] [o o]) ;; need fns: as we go through the loop, we compose functions; the last item is what we're composing with. then afterward we apply the fn to all.
-                          ;; i took awhile to notice to accept multiple fns instead of just one. that's because i needed (loop fns h ts) to not modify anything except h, yet also effectively return (hash),
-                          ;; so that we can hash-union all accumulated functions after applying them to all.
-                          (uncons-let ([h ts o])
-                            (cond-let [(assoc h type-map) => x (set! types (cons h types))
-                                                               (apply B ts (cddr x))]  ; base cases. fns from all to hash tables.
-                                      [(symbol? h) (loop fns h ts)]                    ; set all
-                                      [else (loop (cons (loop '() #f h) fns) all ts)]) ; recurse
-                            (apply hash-union (map (λ (f) (f all)) fns)))))
-                       ;; can't use cond-let here since we need the bound vars in multiple cases
-                       'orderType (begin (set! types (sort types symbol<?))
-                                         (cond-let [(equal? types '(limit stop)) "STOP_LIMIT"]
-                                                   [(equal? types '(limit trailing)) (raise-argument-error 'order-cond->hash "stop, limit, or stop-limit; trailing stop limits are unsupported" o)]
-                                                   [(assoc (car types) type-map) => x (cadr x)]
-                                                   [else (raise-argument-error 'order-cond->hash "stop, limit, or stop-limit" o)])))))))
-----
-
-great: got it down to 21 lines. despite shortening the last `let` block, 1 line was added to declare `types` and 2 to setting it. the code is arguably cleaner, but at this point i think it'd be inappropriate to try to improve it in scheme; to make it really shorter and extremely terse like i desire, i'll probably use a different paradigm, even if i don't _need_ to. i think this is the best i can do for now. granted, this work is novel, at least to me, so i'll certainly discover better primitives and patterns than just `cond-let` and a/lists. i've yet to consider using state more, but that's really much better done in picolisp than racket (or even other schemes) anyway. it's obviously pretty hacky code; i could've done the scoping better. it's been a good exercise, and is not a failure; though it didn't lose length, it's much easier to refactor and makes obvious places of (a)symmetry. on that note, this is probably an excellent style for symmetric constructs, but not as good as typed structs for asymmetric constructs such as these. degree of asymmetry is the number of conditional branches in a construct's *definition.* degree of (a)symmetry is not a property of implementation/expression.
-
 the code was made by following a few design rules:
 
-* use lists for everything
+* store all information in lists
   ** factor-out common list shapes
 * if a list's value changes dependent on some later data, then parameterize the list by wrapping it into a lambda that accepts that later data
   ** this associates the conditionality with the data that is affects, making for easier refactoring than using branching forms, all of which are special syntax
@@ -210,9 +147,10 @@ the code was made by following a few design rules:
   ** lists implicitly describe row types, which allows us types like `{t1, t2, ... | r}` [purescript]; types specify a minimal description rather than a total one. this, especially combined with delaying shape/type checking until each particular place in which a list is used, enables very easy, flexible ad-hoc polymorphism: we can have a shape `(a 3 b 4 c 6)` used in functions `f` & `g` because `f` requires that the list have attributes `a` & `b`. `g` requires them, too, but also optionally supports attribute `c`, which `f` ignores. this is very natural; in reality things are complex, and we allow them to be whatever they are so long as they specify a small whitelist of constraints. in other words, we do not omit things because they satisfy properties that we didn't specify! types not supporting `| r` are effectively like saying "i want a cube," and when you try to give a blue cube, the type checker rejects it, because "blue" wasn't in the type spec; the solution to this in a typed system is to create a new product type of blue and cube—an ad-hoc join that prevents us from using elegant traversals and *structural polymorphism*.
 * rather than using constructors, we use symbols. we can use `limit`, `stop`, and `trailing` without worrying about scope or shadowing. in other words, it's like a lisp-standard simpler alternative to prefab structs in racket.
   ** fields have context-sensitive meaning because they're bound to identifiers at each match rather than once at definition. this is useful because it reflects the truth that data are data, and we then interpret them, but some can permit multiple interpretations.
-* much simpler
+* much simpler structure
   ** easier to refactor
-  ** faster to read (namely `type-map`, which nicely separates code from data)
+  ** faster to read (namely `TS`, which nicely describes ad-hoc groupings)
+  ** uses `kabob-case->UPPER_SNAKE_CASE` only twice: once for when global link basis is set; and once for when local link bases are set. notice that the 2nd case is plural, yet we use `kabob-case->UPPER_SNAKE_CASE` only once for that case. this sees `kabob-case->UPPER_SNAKE_CASE` as being used ad-hoc in two different cases: singleton in the first case, and the 2nd case is a set of cases over which `kabob-case->UPPER_SNAKE_CASE` is symmetric.
   ** exploits mutual exclusivity of link & basis types, allowing them to be expressed in any order.
   ** both link & basis are simply sum types, so they can be expressed simply as lisp symbols. same with stop's or limit's ability ta accept percents or numbers.
   ** the expectation that everything is lists encourages developers to describe the shapes of their data, like how is done for macro syntaxes. if the syntax needs tl;dr description, authors are likely to use math terms or reference similar shapes. this is much nicer than giving a name, forcing me to jump around documentation from name to name (since types are often composed of other types) just to see what kind of data i'm dealing with!
@@ -226,12 +164,10 @@ the code was made by following a few design rules:
 
 a/lists can be expressed better without extra delimitation, e.g. `'(a 1 b 2)` instead of `'((a . 1) (b . 2))` or `'((a 1) (b 2))`; or `'(a 1 b (2 3) c 4)`, which is alternative to `'(a 1 (b 2 3) (c 4))`. the only difference among all these is whether we use `cdr` or `cadr`, and which varieties a given lisp's `assoc` supports. not only is the simpler encoding of alists terser, but it sees "alist" an an _interpretation_ of flat lists, encoding the shape in the traversal rather than in the list itself. this is more efficient than building up a list, and it keeps the list simpler, thus allowing it to be used in more contexts, thus retaining higher flexiblity. also consolidate all discussions of encoding form in shape vs traversal.
 
-.bad
+.different
 
-* as `check-order`'s documentation says, we need to choose between speed & safety.
-  ** this is a bit unfair since the check can be as detailed as dependent types, which are supported by few languages
-* dynamic; they're either unsafe or require runtime checks, which is less efficient than static checking
-  ** if writing checks is done by hand, then the checks may be flawed, whereas automated checking is more reliable. still, even haskellers write tests; most type systems (except f*, adga, &c) are helpful but rarely capable enough to demonstrate much program correctness
+* if you want safety (like what types provide) then you need to implement your own mechanisms
+* dynamic, so checks or other computations are at runtime rather than before.
 
 .techniques that i want to later take time to explore
 
@@ -567,8 +503,8 @@ _grouping_ is the constraint or suggestion that some things should be used toget
 [source,scm]
 ----
 ;; convert an alist of functions into a function that selects & applies therefrom
-(define (alist/fn->fn m) (λ (f . args) (apply (cdr (assoc f m)) args)))
-(define fns (alist/fn->fn `((f . ,(λ (a) (+ 4 a)))
+(define (alist->fn m) (λ (f . args) (apply (cdr (assoc f m)) args)))
+(define fns (alist->fn `((f . ,(λ (a) (+ 4 a)))
                       (g . ,(λ (a b) (/ (+ a b) 2))))))
 `(,(fns 'f 1) ,(fns 'g 4 6)) ; (5 5)
 ----
@@ -595,7 +531,7 @@ again, in languages with dynamic binding/scoping this isn't a problem. oopy lang
   ;; co-recursive f & g. terminating dummy definitions.
   (letrec ([f (λ (a) (if (> a 0) a (g a 16)))]
            [g (λ (a b) (- (/ (+ a b) 2) (f b)))])
-    (alist/fn->fn `((f . ,f) (g . ,g)))))
+    (alist->fn `((f . ,f) (g . ,g)))))
 `(,(fns 'f 1) ,(fns 'g 4 6)) ; (1 -1)
 ----
 
@@ -643,6 +579,8 @@ pseudo-orders, (candle) -> open, filled, funds
 ----
 
 notation:
+
+i use the usual lisp notation (e.g. `(a b . xs)` has usual meaning) except that (a) (singleton in parens) means homogenous list of a; actual singleton lists are no more useful than their single element alone, unless they're used to distinguish a thing from a thing with a particular condition. thus `(a)` is `(a . ())` i.e. `a` but with a flag. the cdr may as well be anything then; in fact, a boolean (2-⨿), or generally symbol (n-⨿), would be more informative. regardless, this notation represents singleton lists as `(a . ())`. for further example, a homogenous list of singleton lists is `((a . ()))`.
 
 aside from readability, the the statements' order is meaningless. in the last statement, `filled` being on the RHS implies that there's been a change to `positions`, too, as implied by the earlier-mentioned statement `filled -> positions`.
 

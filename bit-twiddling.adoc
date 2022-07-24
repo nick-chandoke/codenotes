@@ -1,5 +1,7 @@
 == bit twiddling!
 
+TODO: discuss C unions
+
 why?
 
 . fun like number theory, which it practically _is_, but in binary
@@ -141,6 +143,7 @@ set nth bit to 1, 0, or complement:
 * # of set substrings: (+ (& x 1) (/ (popcnt (^ x (>> x 1))) 2))
 * next highest number with the same number of set bits: let t = x | (x - 1); nt = ~t in (t + 1) | (((nt & -nt) - 1) >> (bsf(x) + 1)), i.e. let t = trailing(x); nt = ~t in (t + 1) | (lsb(t) - 1)
 * toggle case of ascii character (or set case by anding with 1 or 0): c^32
+* not bit twiddling, but x∈[a,b] is well expressed by a stack grammar: `x { [ >=a ] [ <=b ] } bi and`, or even better syntax in apl: `(≥a∧≤b)x`.
 
 ==== square-and-multiply
 
