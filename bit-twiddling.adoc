@@ -119,6 +119,8 @@ TODO: explore modular arithmetic, number theory, combinatronics
 
 the operation (when (p x) (inc x)) can be expressed x=x+p x when p returns 0 or 1.
 
+in double dash, there's a counter for which checkpoints you've hit. just because you hit checkpoints #1 & #3 does not imply that you've hit #2. thus whether you've hit each checkpoint is an independent boolean; thus a 32-bit word can be used to store this value (assuming that a course be broken into 32 pieces, which is pretty damn reasonable.) thus to check whether someone actually _has_ played the course properly (w/o cheating), just test the word against an n-bits full of 1's.
+
 === what bits can't/don't accomodate
 
 * a type that requires more than a word to encode a single datum of that type, e.g. arbitrary ad-hoc sequences e.g. arbitrary strings

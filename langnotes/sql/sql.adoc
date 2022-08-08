@@ -31,7 +31,15 @@ sql is a bit mysterious:
 
 .sql basics
 
-a table A may have a primary key (unique identifier) column, and may have a column that, in another table B, is a primary key; this column is called a _foreign key_, B is called the _child_ table, and A is called the _referenced_ or _parent_ table. foreign key is its own concept (as opposed to a column that we can `join` on) because it can be used as a constraint in a table's schema, which is basically a type check that we won't modify columns improperly.
+a table A may have a primary key (uniquely identifying set of attributes), and may have a set of attributes that, in another table B, is a primary key; then: this attribute set is called a _foreign key_, B is called the _child_ table, and A is called the _referenced_ or _parent_ table. foreign key is its own concept (as opposed to a column that we can `join` on) because it can be used as a constraint in a table's schema, which is basically a type check that we won't modify columns improperly.
+
+foreign keys' sole use is in rejecting inserts that would violate the pk/fk relationship [constraint], called maintaining _referential integrity_. they add neither functionality nor efficiency. being a verify-only constraint, it should be avoided.
+
+=== language design problems
+
+feast your eyes upon this inelegant horror: `select * from (select c1,c2 from (select d as d1, c as c1 from aapl) join (select d as d2, c as c2 from goog) on d1=d2)`. the problem here is that i want to consider attributes as a list, with regard only to ordinal indices and not names, because i want to consider tables as a list. that sql cannot transpose is a serious limitation! indeed, this lang-specific asymmetry limits the metaprogrammability of sql. this certainly is what makes sql bound to being poor, while the relational db model is good.
+
+another design fault is that there are multiple scoping mechanisms: tables and `as`, at least.
 
 === relational algebra
 
@@ -41,11 +49,11 @@ a table A may have a primary key (unique identifier) column, and may have a colu
 |===================================================
 | relational algebra | common name or implementation
 | tuple              | row
-| attribute          | column (includes type when applicable)
+| attribute          | column (w/type if applicable)
 | relation/selection | table
 |===================================================
 
-* _constraints_ on a table or column [attribute], e.g. `UNIQUE`, `NOT NULL`.
+* _constraints_ on a table or column [attribute], e.g. `UNIQUE`, `NOT NULL`, `FOREIGN KEY`, `PRIMARY KEY`. they're verify-only constraints, not adding functionality, and so should be avoided (except indexes, should those be considered constraints)
 * tuples are unordered, instead being expressed as attribute-tagged unions
 * a tuple's set of attributes is called its _heading_, _domain identifying list_, or when as an argument to projection (see below,) a _projection list_. the heading is a list of indexes, whether ordinal or nominal.
 * a set of tuples sharing a common heading is called a _body_
@@ -61,15 +69,14 @@ TODO: continue from ~/Downloads/pacific75-eval.pdf
 union-compatible:: having the same attribute (column) sets
 
 * link:https://en.wikipedia.org/wiki/Selection_(relational_algebra)[selection (aka _restriction_)] (σ_pred(R)): filter by predicate
-* link:https://en.wikipedia.org/wiki/Projection_(relational_algebra)[projection] (π) of a heading onto a table, π_L(R) := {r[L]: r ∈ R}, is all tuples r of a relation R where the elements of r are restricted to L.
+* link:https://en.wikipedia.org/wiki/Projection_(relational_algebra)[projection] (π) of a heading onto a table, π_L(R) := {r[L]: r ∈ R} is just a subset of R found by restricting to attributes L, which must be a subset of R's original attributes; ior a projection may be a map over R's values, e.g. `select a+2 from R` maps `(+2)` over a ∈ R. only the column space is concerned; the number of rows is unaffected.
 * link:https://en.wikipedia.org/wiki/Rename_(relational_algebra)[rename ρ]: rename an attribute
 * [flattened cartesian] product (×). TODO: test: in sql lhs & rhs tables must have mutually exclusive attribute sets.
 * set difference (aka _relative complement_) (\). requires union-compatiblity and may be defined in terms of union: given relations R & S of equal degree _n_, R \ S = (σ_(r[1] ≠ s[1] ∨ ... ∨ r[n] ≠ s[n])(S)).
 * union (∪). union-compatible.
-* intersection (∩). union-compatible.
 * join
-  * natural (⋈): defined when lhs & rhs share at least one attribute. lhs records with new heading: the union of lhs' & rhs' attribute sets
-  * inner: natural but with repeated columns (attributes are multisets)
+  * natural (⋈): defined when lhs & rhs share exactly one attribute. attribute set is the union of lhs' & rhs' attribute sets. (e.g. join a,b,c and b,c,d = a,b,b,c,c,d)
+  * inner (intersection in relation algebra): natural but without repeated columns (e.g. join a,b,c and b,c,d = a,b,c,d). union-compatible? not in sql! or perhaps this could be said to be a succession of projection then union.
   * outer: flattened cartesian product
   * left or right
 * division: for relations R & S of headings A & B (without repitition) of degrees m & n respectively, the division R[A÷B]S is a subset of π_A'(R), viz {r[A']: r ∈ R ∧ ∀s ∈ S ∃r' ∈ R : r[A'] = r'[A'] ∧ r'[A] = s[B]}. definitions vary when S is null.
@@ -94,24 +101,31 @@ NOTE: *for the love of god, use `BEGIN TRANSACTION` &al*
 [options="header"]
 |==============================================================================
 | sql                 | java 8, math, or scheme
-| `table`             | stream of tuples
-| `select`            | map
-| `distinct`          | distinct
-| `join`              | flatmap
+| `table`             | list of vectors
 | `where` or `having` | filter
 | `group by`          | concatMap (useful for aggregates only)
-| `order by`          | sorted
+| `except`            | \
+| `order by`          | sort
 | `union all`         | concat
+| `union`             | distinct concat
 | `with`              | `letrec`
 | `check`             | guards
-| `join`              | ⋈
-| `cross join`        | cartesian product
-| `inner join`        | intersection (no nulls)
-| `left join`         | all left elements and corresponding right elems or null
-| `right join`        | corresponding left elems or null and all right elements
-| `full join`         | union (may have nulls on either right or left)
-| `execpt`            | set difference
+| `join`              | flatmap [TODO: how?]
+| natural join        | TODO
+| cross join          | cartesian product
+| inner join          | intersection (no nulls)
+| left join           | all left elements and (corresponding right elems or null)
+| right join          | (corresponding left elems or null) and all right elements
+| full join           | union (may have nulls on either right or left)
+| outer join          | TODO
+| `,` (join)          | TODO
+| `collate`           | TODO
+| `escape`            | TODO
+| `exists`            | TODO
+| `frame-spec` grammar  | TODO
 |==============================================================================
+
+TODO: consider (in `expr` grammar): 
 
 ==== syntax
 
@@ -130,7 +144,7 @@ basic operators
 ===== `create table`
 
 * `create table as` still inserts a table into a database. it's used to init a table at declaration time, for convenience.
-* `temp(orary)` tables are accessible in the remaining sql script, but is not persistent; it isn't inserted into the database, and so doesn't exist after the sql script that created it finishes execution.
+* `temp` tables are accessible in the remaining sql script, but is not persistent; it isn't inserted into the database, and so doesn't exist after the sql script that created it finishes execution.
 
 ===== functions (not in sqlite)
 
@@ -145,10 +159,6 @@ go;
 exec foo @param1 = 42, @param2 = "stuff";
 ----
 
-`select` is the main statement of sql; it's where data transformation occurs.
-
-* select distinct
-
 ===== columns
 
 ====== `case`
@@ -160,10 +170,10 @@ determines a column's value. syntax: `case [when <cond> then <value>]+ [else <va
 [source,sql]
 ----
 select customername, city, country from customers
-order by (case when city is null then country else city end);
+order by case when city is null then country else city end
 
 -- or
-select (case when city is null then country else city end) from customers;
+select case when city is null then country else city end from customers
 ----
 
 ====== null
@@ -219,7 +229,11 @@ union tables' rows. valid only for tables of equal column sets. `union` returns 
 create view [<name>] as select ... ; -- the view name is whatever, including spaces, delimited by brackets
 ----
 
-==== `with` (common table expression aka CTE kak subquery refactoring)
+NOTE: `as` is optional for aliasing table names: `tbl as x` is equivalent to `tbl x`.
+
+==== `with` (common table expression (CTE) subquery refactoring)
+
+this is how we do anonymous tables.
 
 TODO: cf normal aliases
 

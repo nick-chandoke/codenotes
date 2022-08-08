@@ -2,6 +2,8 @@
 
 [TODO]
 * concurrency
+* cf joy viz binrec or lacking lambdas. the combination of being stack-oriented _and_ being tacit might be particularly interesting....
+* cf link:https://forth-standard.org/[forth] viz wrt efficiency
 
 continue on page 49 of factor.pdf
 
@@ -77,7 +79,7 @@ continue on page 49 of factor.pdf
 |===========================
 | {}             | array literal
 | []             | quotation (like lisp)
-| '[ ... _ ... ] | threading macro, e.g. `5 '[ _ + ]` is equivalent to `[ 5 + ]`
+| '[ ... _ ... ] | threading macro, e.g. `5 '[ _ + ]` is equivalent to `[ 5 + ]`. requires `fry` library.
 |===========================
 
 ==== word definition

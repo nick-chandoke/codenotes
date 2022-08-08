@@ -1,0 +1,38 @@
+i need a reminder, like on a plaque or something: _being confused about simple code isn't your fault; coders are forced by needless & unintuitive constraints to twist our designs into strange & complex forms. with these tech, coding doesn't happen organically; it must be constantly refactored._ the two main, if not only, troublesome constraints are *scope* and *order*. these are especially present in purely functional style. looping with mutation still requires scoping, but does not suffer the problem in the below fp example. examples of things w/o order: prolog, relational databases (by their support of multiple indexes, and joins (using a table as an index for another table); basiaclly they implicitly identify relations by set-theoretic operations.)
+
+.fp example
+
+mutative version (picolisp):
+
+[source,lisp]
+----
+(setq x 0 y 10 z ())
+(while (< x 10)
+  (if (even? y) (inc x)
+      (do (setq y x)
+          (cons! y z)
+          (setq x (+ 2 x)))))
+; updated x, y, & z are available for use
+(map ((z) (/ (+ x z) y)) z)
+----
+
+purely functional style (racket scheme):
+
+[source,scm]
+----
+; R returns (x y . z) which must be bound,
+; then can be used only within the binding context.
+(match (let R ([x 0] [y 10] [z '()])
+         (cond [(even? y) (R (add1 x) y z)]
+               [(null? z) (list x y)]
+               [else (let ([y x]) (R x y `(,y . ,z)))]))
+ [(list* x y z) (map (λ (z) (/ (+ x z) y)) z)])
+----
+
+TODO: alas, this example does not showcase the real trouble of needing to calculate the complex orientation of constrol flow and scope that can arise in pfp. i need for some things to be modified in one cond clause but not others.... i need, in the mutation version, for each cond clause, only a subset of vars be concerned. the less symmetric the relations, the better mutation is than pfp. this being said, mutation is always most elegant, so it's better said that pfp becomes worse as asymmetry increases; *functions cannot elegantly express asymmetric relations.*
+
+functions' only context—their only relation to anything—is in their parameters and outputs. they cannot read from nor modify an environment; in other words, a function's context is whitelisted. this very obviously competes capability against verbosity; this is the very _feature_ of a function! functions are considered safe _because_ of their incapability or verbosity, that if something is not said explicitly (as a parameter) then it's known to not be modified. *functions are appropriate only when contextless or when asymmetry is low.*
+
+pfp requires everything to be a function, and functions are the only ways to bring something into scope (`let` binds do not _bring_ anything into scope; they only bind functions of things already in scope to identifiers). thus you now need to arrange your control flow and binding statements such that 1. vars are in needed scopes; and 2. vars are taken as parameters and returned by functions that pass to other functions. a showcase variety of this problem is when vars happenstantially sharing common scope (e.g. both being in a loop) must be returned even though it's strange for the loop function to return those data together. however, they all _must_ be returned; else some would be unreachable! in summary, pfp requires that functions' parameters and return values are the only way to pass data among scopes, which can easily become horribly complex.
+
+loops are recursive functions; named let's are practically alternative syntax for recursive lambdas, just as fixed points are. fp requires that all looping be recursion, vars passed to the loop/fn's successive iteration. when only some items are effectively mutated only when only some conditions are met, the purely functional encoding of that must be quite complex. fp is supposed to make code more readable, modular, and refactorable, and perhaps even easier to write. ironically fp is a set of constraints that makes code worse in all of those regards. the only possible advantage of fp is that it can make concurrent code easier. however, semaphores, stm, manual delimitation of mutation (like rust or clojure) or other common concurrency tools are usually far easier alternatives.

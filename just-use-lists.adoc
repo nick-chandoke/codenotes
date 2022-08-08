@@ -1,6 +1,16 @@
 == types? structs? enums? just use lists!
 
+TODO: don't use lists! use reldbs instead! lists can't accomodate multiple indexes, related to storing one datum in multiple places (sections.) this is just an organizational concern; when data permit multiple valid/useful views, lists can accomodate only one!
+
+notation for reading shapes: usual lisp notation (e.g. `(a b . xs)` has usual meaning) except that (a) (singleton in parens) means homogenous list of a; actual singleton lists are no more useful than their single element alone, unless they're used to distinguish a thing from a thing with a particular condition. thus `(a)` is `(a . ())` i.e. `a` but with a flag. the cdr may as well be anything then; in fact, a boolean (2-⨿), or generally symbol (n-⨿), would be more informative. regardless, this notation represents singleton lists as `(a . ())`. for further example, a homogenous list of singleton lists is `((a . ()))`. a→b means [that there exists] some morphism from a to b. it does not mean that there's specifically a _function_ whose _input_ is `a`; it only generally means that `b` is derivable from `a` regardless of how `a` is encoded.
+
 TODO: use `de/aljs` as a premier example, and compare against `json-struct`.
+
+btw alists are natural for associating multiple data objects, whereas hash maps are unnatural. consider associating each x of xs with properties y∈ys & z∈zs. you can have two hash maps, x->y & x->z, or one of x->(y,z). with alists it's the difference between ((x . y)) & ((x . z)); ((x y z)); and xs & ys & zs, which can be used together: `(map (λ (x y z) _) xs ys zs)`. we can afford this last strategy because lists are ordered; we don't particularly need to associate the keys with properties; we can implicitly associate them by sharing common indices.
+
+map `(a -> b)` is an interpretation of association `(a . b)`. maps are nothing special; genearlly consider associations. associations are already ordered; however, their order may be considered in either direction. thus they generalize maps.
+
+lisp is empowered by its ability to group symbols arbitrarily and can eval some of them. this is accomplished by some mechanisms called quasiquotation, interned symbols, apply/unquote, and eval. in practice we don't need eval; instead we can put bind in `letrec` blocks and unquote in qq. generally we can write terse, flexible, powerful programs in any language whose syntax supports recursive structure literals. however, lists are special because they're minimal, and thus can represent any structure. lists are a scoping mechanism, too; see the examples in the oop section.
 
 this article criticizes typing as it's currently used in programming, and suggests using lists instead (favoring _shapes_ instead of [nominal] types). this does not pertain to using computational type-algebraic systems or formal type theory for exploration & study of mathematical structures which i wholeheartedly condone.
 
@@ -82,18 +92,23 @@ now consider this alternative which uses lists of particular shape instead of a 
     [(_ [p e ...+] . rst) #'(if p (begin e ...) (cond-let . rst))]));; combo of assoc & member. also doesn't enforce racket's needlessly restrictive contract on assoc.
 
 ;; returns first list element matching a predicate or tail of first pair whose car matches a predicate.
-;; this works on a mix of alist & list, which is a more useful structure than flat lists or alists.
+;; this works on general lists e.g. (massoc even? '(1 3 (4 5 6) (a . b))) => (4 5 6). using a predicate
+;; returns the whole pair, whereas looking-up by element returns the cdr of the matched list:
+;; (massoc 'a '(1 3 (4 5 6) (a . b))) => 'b. this behavior is chosen because if you're looking-up by predicate,
+;; then you don't know what item may match; however, if you lookup by [equality with] an object, then if the
+;; match succeeds, then having the matched object in the returned list is redundant.
 ;; as this is a mix of alists & lists, i'll call them "a/lists."
 ;; massoc with a/lists is a common. more generally, though, you'd loop over a list [stack], taking n elements where
 ;; n is related to the top of the stack.
-(define (massoc k s)
-  (let ([k (if (procedure? k) k (curry equal? k))])
+(define (massoc k/p s)
+  (let ([k (if (procedure? k/p) k/p (curry equal? k/p))])
     (let lp ([s s])
       (and (pair? s)
            (let ([c (car s)])
-             (or (and (pair? c) (let ([y (k (car c))]) (and y (cdr c))))
-                      (and (k c) c)
-                      (lp (cdr s))))))))
+             (or (if (pair? c)
+                     (and (k (car c)) (if (procedure? k/p) c (cdr c)))
+                     (and (k c) c)) ; k is sensible here only if it's a procedure
+                 (lp (cdr s))))))))
 
 ;; example order conditions:
 ;; '((limit 42.04) (trailing 1%) mark) ; mark is applied to both trailing stop & limit
@@ -144,7 +159,9 @@ the code was made by following a few design rules:
   ** order of arguments is irrelevant. by contrast, `These a b` is not equal to `These b a`. (though `(U Stop Limit)`)
   ** `These a b` does not automatically generalize; we'd need to create a new type for each arity, even though the real structure that we want to encode is, given a set `A`, we want some B ⊆ A : p(B) for some predicate p. however, the above logic generalizes easily and is commutative.
   ** sexps are inherently as extensible as xml; we can add, remove, or modify the lists. we can't do that with structs.
+  ** only symbols in lists are used, not scoped identifiers. therefore there's no need to import a module for its exported identifiers; like hash maps or js objects, we can throw around data. of course the difference between a/lists and hash tables is that they obviously generalize hash tables and lists. whereas hash maps are purely ad-hoc, lists can group things, and support ordering.
   ** lists implicitly describe row types, which allows us types like `{t1, t2, ... | r}` [purescript]; types specify a minimal description rather than a total one. this, especially combined with delaying shape/type checking until each particular place in which a list is used, enables very easy, flexible ad-hoc polymorphism: we can have a shape `(a 3 b 4 c 6)` used in functions `f` & `g` because `f` requires that the list have attributes `a` & `b`. `g` requires them, too, but also optionally supports attribute `c`, which `f` ignores. this is very natural; in reality things are complex, and we allow them to be whatever they are so long as they specify a small whitelist of constraints. in other words, we do not omit things because they satisfy properties that we didn't specify! types not supporting `| r` are effectively like saying "i want a cube," and when you try to give a blue cube, the type checker rejects it, because "blue" wasn't in the type spec; the solution to this in a typed system is to create a new product type of blue and cube—an ad-hoc join that prevents us from using elegant traversals and *structural polymorphism*.
+* rather than alists with lookup by `massoc` (a lookup on the car of an a/list), we can trivially generalize a/lists & massoc to sql databases & sql queries. syntax to pattern match on result sets can make programs efficient, scalable, terse & clear, and abstract over language and sql implementation.
 * rather than using constructors, we use symbols. we can use `limit`, `stop`, and `trailing` without worrying about scope or shadowing. in other words, it's like a lisp-standard simpler alternative to prefab structs in racket.
   ** fields have context-sensitive meaning because they're bound to identifiers at each match rather than once at definition. this is useful because it reflects the truth that data are data, and we then interpret them, but some can permit multiple interpretations.
 * much simpler structure
@@ -161,6 +178,9 @@ the code was made by following a few design rules:
     *** we can use `map`, `member`, &c to transform the "types," and interned symbols can easily be converted to strings, which makes conversion to json simple.
     *** permits using folds over structures. for example, with a product type of numbers `p`, i can `(> (apply min p) n)` for some `n`. this is sensible if `p` represents points on an interval, and we want to see if the whole interval is beyond a boundary.
   ** auto-optimizing: does not require us to be specific e.g. we may start with `A := B C | D E F`, then find that it should be refactored into `X := B C, Y := D E F, A := X | Y`. with lists, because the checking is done only when necessary, we're free to change structures' shapes without needing to refactor.
+* if you want to exploit order, then alists allow that, e.g. matching `(a b . rst)` then looping on rst, where rst may be extra attributes. you can do this with structs, too, by adding an "extra" attribute with type `(Listof Any)`. if you want to exploit grouping, then you can just wrap a collection of things in parenthesis. if you want to group non-contiguous things together, then give them a common attribute (interned symbol) e.g. `(cons '(<> . commutative) '((+ × commutative)))`. this assumes that `(<> . commutative)` is only potentially seen at runtime; we don't need to know more than necessary about, nor require to be of any more particular a form than necessary, the data that we may recieve during runtime. again, a/lists are not as good as a database. a/lists used this way are an implementation of the _fact collecting & querying_ paradigm, which is obviously better suited by a db (or prolog.) however, quasiquotation is an extremely convenient syntax, is available anywhere that any lisp is (everywhere), and a/lists' inefficiencies aren't considerable for small a/lists, which is usually the case for a/lists that represent logical parts of the program (i.e. those that determine branching.)
+
+and what if we want to enforce order e.g. `(limit 2 mark)` is correct but `(limit mark 2)` is not? that is a convention, not functionality. you may make a fn to normalize, but really programmers should just follow the conventions; that's the programmer's responsibility (and it's an easy one, too), not the program's nor the language's.
 
 a/lists can be expressed better without extra delimitation, e.g. `'(a 1 b 2)` instead of `'((a . 1) (b . 2))` or `'((a 1) (b 2))`; or `'(a 1 b (2 3) c 4)`, which is alternative to `'(a 1 (b 2 3) (c 4))`. the only difference among all these is whether we use `cdr` or `cadr`, and which varieties a given lisp's `assoc` supports. not only is the simpler encoding of alists terser, but it sees "alist" an an _interpretation_ of flat lists, encoding the shape in the traversal rather than in the list itself. this is more efficient than building up a list, and it keeps the list simpler, thus allowing it to be used in more contexts, thus retaining higher flexiblity. also consolidate all discussions of encoding form in shape vs traversal.
 
@@ -192,6 +212,95 @@ racket is one of few languages that includes _contracts_: basically type checkin
 types are appropriate when data's shape has little variability and specific (and usually simple, depending on the capability of the type system) constraints. type systems are typically cumbersome, at least for not supporting anonymous types (except typed racket and roc.) more to the point, beyond type systems, structs & enumerations, which may be not typed, but still obviously correspond to product & sum types; when they should be used is determined by precisely the same rules as when their corresponding types should be used.
 
 the alternative is lists. lists are universal because they're the simplest structure defined of [binary] relation & recursion. by the magic of math/order, such a fundamental structure must natural describe all other types. therefore we should ask ourselves, for any type, how that type is described by lists. every type can be described by a set list of particular shape(s). when dealing with structure as simple as lists, we can ask the usual properties—associativity, commutativity, invertability, &c—which we cannot so freely do with types, because types (or enums or structs) cannot be computed, unlike lists. of course, this is not the fault of type systems; it's the fault of how type systems are used/implemented in programming languages. if we're talking about type theory in as a subdiscipline of pure mathematics, then we're afforded all the wonderous algebraic freedom that we're used to in math. type theory and its notation creates a very different experience in math vs cs. still, type theory is no more beautiful than anything else in math; we can simply describe it programmatically by lists instead of "types" [cs], and we can either use formal methods or tests (or check via preprocessors such as macros) as a more capable (and much simpler) alternative to today's type systems.
+
+=== command line parsing example
+
+command line parsing is a good example of generalized list's appropriateness/elegance: consider the 7z cmdline form, which uses both options and actions. the actions are mutually exclusive; we must select exactly one. each of the options is usable with a subset of the actions. the relational model always must work because it's, as suggested, built on _relation_ [grouping], which is a mathematical primitive. so of course we have a map from options to compatible actions, or from actions to compatible options. commonly, using today's/classical presumptions, you'd use a loop to consider each option or action, put it through a parser, and puts its result into state; after all args have been parsed (or a parsing error has occurred), the program terminates or calls some fn on the state. for most languages a command line parsing fn or macro is available. they're all clever (haskell's applicative parse wins this category), but not best. as always, galists are, again as always, the best solution, because they use data only and are nothing more than ordered groups. furthermore *lists are a mix of stack & vector models (e.g. stack- or array-based programming), and can be as efficient when used properly*—namely that they're of the correct shape, i.e. that they use the right encoding. being mutable helps, too.
+
+[source,lisp]
+----
+(de actions '("a" "d" "e" "l" "t" "u" "x"))
+(until (null? v)   ; cond
+       (argv argv) ; bind local argv to argv already in scope
+  ;; match should support extract in the head of the match clause, which either fails the match
+  ;; or returns the extracted part and the complement of the matched list.
+  ;; each of the heads of the match clauses are just lists, and so are parsed by parsers themselves
+  ;; e.g. match against pattern e ∈ s rst ..., which extracts out e & s then loops back to match on
+  ;; rst ....
+  (match argv
+    [(x ∈ actions . _) => a (set! action a) (cdr v)]
+    [(o ∈ options . _)]
+    [else (cdr v)]))
+----
+
+ok, ... _is_ there a better way than looping through argv? i mean, no, we _must_ read-through argv, and argv _is_ a sequence. there's no way to avoid looping through it, though, like in apl or prolog, it can be implicit. furthermore the loop does not need to traverse the sequence strictly in head-to-tail order, and may add to the list in addition to taking from it or leaving it as-is.
+
+*so a parser ``extract``s parts of a galist, thus all programming can be considered as merely extracting from a list then moving the extraction to another location or β-reducing (``eval``ing) it, or generally rearranging lists, just as elementary algebra is just _moving around_ and _re-expressing_ symbols.* even when "actions" (i/o) are just moving the data someplace else, only now it's outside the program (out to a printer, out to a remote machine, out to stdout.)
+
+ok, so link:https://www.scattered-thoughts.net/writing/against-sql[sql apparently sucks ass], but that relational dbs are good. probably best to have some apl-like lang that uses a reldb like sql. it's expert at the only damn thing that programs are: moving, selecting, and inserting data into different locations! one might suggest that sql lacks fn application. but given that all fns are just these (and numeric operations, which sql already supports anyway), an extension or tiny wrapper to make sql support this is trivial. as picolisp has demonstrated, fns _can_ be referenced mere symbols/strings, which can obviously be stored in dbs. rather than _scoping_, we can disambiguate more elegantly, simply, and generally by _context_ (predicate on current program state.) as lisp has shown us, function invocation is just (fn-id . argv) i.e. a fn is just control flow (merely 1. loops and 2. sequences) of 1. select/match/extract, remove, insert/put; and 2. arithmetic (elementary, bitwise, modulo.) asdie from these, the only thing needed to make any program is `goto` and `if` (sometimes fused together e.g. `jle`.)
+
+usually a control flow operator is just a _conditional jump_ operator as the language already implicitly supports sequential control flow simply as the order of programmatic expressions.
+
+so to make a good relational proglang (relproglang) we just need:
+
+. good, terse, syntax (like apl w/lisp's qq)
+. conditional jump (and maybe sequential control flow) operators (fns)—likely one like `cond-let` or other parser
+  .. the map from parsed expression to result will be encoded as a db table. of course, all of the program will be encodeable by a db table. the syntax does not need to reflect this, though (homoiconicity is useless constraint.)
+. the usual needs for a good lang (see the list in the beginning of _best paradigms_)
+
+this is very good news! all sql implementations support tables as _the_ data primitive, arithmetic, and select (incl. w/join), delete, and put. that's all we need! and they're blazing fast, interpreted (sql is interpreted) and so flexible/dynamic without execution speed compromise, distributed, and concurrent. sql does not support metaprogramming, so our lang will need to be totally data and thus support mp, ultimately _supporting a translation_ to sql code.
+
+NOTE: tables are pretty much a/lists or arrays, so rel dbs make a/list and array programming easy. we see that table column sets are fixed like vectors, but rows are variable like lists.
+
+*with a/symmetry being all, all programs are basically `cond` & `loop`. all data encoding is group (list/cons) and all functions are select/extract (which includes remove: extracting a thing then doing nothing with it effectively removes it), put, and arithmetic.*
+
+other cool features of dbs for programming:
+
+* if db is versioned, then backtracking in the program is easy.
+* transactional locks come free
+* if program crashes, it can start from where it left off; just persistently store states at different save points instead of running in-memory.
+
+i wonder how like the relational programming model is to prolog's or apl's.
+
+see link:https://www.sqlite.org/lang_expr.html[sqlite's language spec] for suggests on how to use sql as a proglang.
+
+TODO: see about jdb & kdb as alternatives to sql!
+
+==== relprog example
+
+datetimes! a date table (or list) has shape `(y m d)`. time is `(h m s ms ns)`. datetime = date ∪ time with disambiguation on `m`. if they shared `m` properly as the same concept then we'd `join` on `m`. a variety of disambiguation is discarding labels and using ordinal indices. `select y m d h m s from (y m d)=(2000 1 1)` => (h m s)=∅. we can define `minutes-between`:
+
+----
+;; all fns take a single argument, which may be parsed into multiple args.
+;; the language uses qq for both selecting from and specifying lists/tables/vectors
+;; this qq is sufficient for any pattern matching because  binds & actions can occur anywhere
+;; e.g. (x z=y+1) to mean "select x, y as z + 1 from (x=4,y=5)"
+;; = is the bind operator. binding multiple to single is like apl.
+minutes-between := fold through (365 12 24 60 1) ; TODO
+----
+
+* in sql anonymous tables are done with `with` and `values` e.g. `with t(a,b) as values(1,"x"),(2,"y"),(3,"z") select * from t` is isomorphic with lisp `((((a . 1) (b . "x")) ((a . 2) (b . "y")) ((a . 3) (b . "z"))))` or just `((1 "x") (2 "y") (3 "z"))` with the knowledge that each list in the list is of shape `(a b)`. the nice thing about sql is that we don't need to worry about how the table is encoded, which makes easy refactoring and coupling codes that weren't designed together.
+  ** link:https://www.sqlite.org/lang_select.html#the_values_clause[`values` is specialized `select`]
+* in `select x,y,... from tbl`:
+  ** sees `x,y,...` as being in the same group
+  ** this statement's power is that `tbl` may be the `join` of other tables. so really, efficient `join`/`union` is the major special ability of relational databases; otherwise sql only does map, filter, select attribute by name, and acts on multiple data implicitly; everything is tables in sql, which is basically a list of structs. sql, in allowing for anonymous tables, allows anonymous structs; however, like ordinary structs, it allows defining them in global scope as special objects (i.e. a table in the db's scope rather than in a single transaction's/operation's scope.)
+    *** `tbl` encodes a *context—a delimited group of facts*. an example is `create table c(a1,a2,a3); insert into c values(0,10,11)` corresponds to `(let c ([a1 0] [a1 10] [a1 11]) _)`
+    *** arguably, anonymous structs are a sql special. another sql special is that reorienting any arbitrary part of a relation *implicitly* affects the whole relation. in most proglangs we'd need to explicitly orient binds & operations in a particular order—a common & great pain of current programming methods. sql's data *plurality* (like apl) _with_ its *lack of ordering of columns (b/c they're named)* is great.
+      **** usually we apply an operation over a row set. perhaps yet, though, it may be useful to apply an operation pointwise to two tables? consider `select a+x,b+y,c+z from x,y` would better be written `x+y`. likely there's no reason to structure data this way, though.
+    *** a way of phrasing join is "`y,...` given `x`" where `x,y,...` are attribute names.
+* `select * from t1 join t2 on x` fails b/c `x` ambiguously refers to `t1.x` or `t2.x`; we can do `... join ... on t1.x=t2.x`, but it's better to `select t1.y,t2.y from t1 inner join t2`.
+* `a or b` in sql (i.e. if a's ∅ then b else a): `select * from (select x,... from tbl where p union all values(a,...)) limit 1` to get either a row of `x,...` or `a,...`.
+* `union` concats/appends rows (requires same number of columns)
+* note that `(x ...) (y ...)` is isomorphic with `((x y) ...)` but is notationally shorter.
+* `hours-between` &c are easily defined by `minutes-between` and modulo.
+* i mean, again the definition is just one with explicit a/symmetry. the definition doesn't even seem particular to relational models.
+  ** really this is best done with a fold anyway, which is not a relational thing; folds use elements' ordinal relation to each other to produce a value; the _relation_ is in the ordering and grouping all in the list together.
+* indexing (x@i) generalizes to filter: x@i (rets one element or index out of bounds error) -> x:i=i (ret n). `find` is between them: it searches by predicate but returns one result. it's more efficient if you want only one result. sql, by indexing by primary key or other indexes, makes queries as efficient as they can be: `=` (or more generally `between`) accesses by index; we can have multiple data at the same index and return multiple of them; it's the same as saying "goto index, then keep taking next row while its index equals the query index. any selection by an unindexed predicate can't be efficient.
+  ** an advantage of reldbs is that a thing can be sorted by multiple attributes simultaneously. other langs can handle this easily, too: simply each index is a sorted vector of indices, like how apl's ⍋ does not sort, but returns a permutation array. linked lists (as in lisp or haskell) cannot accomodate multiple indexes with O(1) access.
+* consider x@i∈t (to mean `select x from t where pk=i`) vs x@i. there's no need to have `t` be its own table; if we don't need to scope (i.e. to disambiguate items of one table with those of another), then the table can be implicit. however, generally we want to scope. in reldbs, at least as they're currently done, and should continue to be done, all tables are always in scope. `as` disambiguates; it's a scoping mechanism.
+  ** rather than tables being scoping mechanisms, they can be compression mechanisms: rather than a table with a column representing a category, we can put all those into a table: `insert into t(age,name,sex) values("john",10,"male"),("will",11,"male")` can be combined into a table `male(age,name)` with the same number of rows. TODO: is this a good idea or not? to what extent does it generalize? consider multiple tables each with different attributes. if we're dealing with a well-designed system (flexible) then we should either not have the choice or the choice should not matter, because both encodings can be reencoded into each other.
+
+`(λ (x) (and (date>=? x (car plots)) (date<=? x (cdr plots))))` is of shape ``(λ (x) (apply and (map (λ (a b) (a x (b plots)) `(,date>=? ,date<=?) `(,car ,cdr)))))`` and so refactors into code like `∧ ([date>=? date<=?] x) ([car cdr] plots)`. how can such a notation be general, to avoid defining many combinators? remember `A` [rkt].
 
 === with all things now considered, what exactly i'm proposing
 
@@ -711,7 +820,7 @@ also, the way that `tc` expands, lookup in `G` is done at runtime rather than be
 
 ===== scope
 
-consider, in a lexically scoped language, two modules that need to access a common data type. if defining the type via `struct` then we'd need to define a new module just to store the type (or, if we're lucky, then it'd be appropriate for one of the modules to require tho other) so that both modules can have access to the same type. however, because shapes are merely non-programmatically-specified constraints of lists, each of the two modules can simply use alists.
+consider, in a lexically scoped language, two modules that need to access a common data type. if defining the type via `struct` then we'd need to define a new module just to store the type (or, if we're lucky, then it'd be appropriate for one of the modules to require tho other) so that both modules can have access to the same type. however, because shapes are merely non-programmatically-specified constraints of lists, each of the two modules can simply use alists. in lisp, alists are especially nice because the scope is bound by parentheses, which is homoiconic.
 
 === runtime efficiency [wip]
 
