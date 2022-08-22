@@ -153,7 +153,7 @@ consider `select aapl.c,goog.c from aapl join goog on aapl.d=goog.d`. note how v
 
 there are multiple scoping mechanisms: tables and `as`, at least.
 
-columns in a select statement must be hardcoded. i cannot, for example, say `select (cond col1="x" => col2,col3; col1="y" => col3; ...; else *) from t`
+columns in a select statement must be hardcoded. i cannot, for example, say `select (cond col1="x" => col2,col3; col1="y" => col3; ...; else *) from t`.
 
 there's neither support for naked variables (e.g. `x := 3` not explicitly of a table) nor eponymous tables (or views) e.g. `create table x(x)` (to my knowledge yet.)
 
@@ -343,7 +343,7 @@ all constraints can be added or dropped via `alter table` or can be added in `cr
 
 ===== filters
 
-* `having` is simply `where` that is a boolean of aggregates instead of per row, e.g. `having count(_) > 5`
+* `having` is simply `where` that is a boolean of aggregates instead of per row, e.g. `having count(x) > 5`. using count
 * `where` clause accepts things that eval to bools
   ** <, = &al common equivalence relations and boolean conjunctions
   ** between <lb> and <ub>
@@ -363,10 +363,6 @@ all constraints can be added or dropped via `alter table` or can be added in `cr
 
 ==== table set operations
 
-===== join
-
-inner join on a condition is the union of column sets and intersection of the condition holding true for both tables being joined.
-
 ===== union
 
 union tables' rows. valid only for tables of equal column sets. `union` returns sets; `union all` returns multisets.
@@ -380,7 +376,7 @@ create view [<name>] as select ... ; -- the view name is whatever, including spa
 
 NOTE: `as` is optional for aliasing table names: `tbl as x` is equivalent to `tbl x`.
 
-==== `with` (common table expression (CTE) subquery refactoring)
+==== `with` & recursion (common table expression (CTE) subquery refactoring)
 
 this is how we do local binds.
 
@@ -423,16 +419,43 @@ with recursive t(v) as (
 
 produces a column `v` with five rows of values 1 through 5, effectively equal to haskell `take 5 (Data.List.NonEmpty.unfoldr (\n -> (n, pure $ n + 1)) 1)`. the definition of `t` is unbounded; the bound is in `limit 5`; therefore locally bound tables (at least when bound with `recursive`) are not stricted evaluated before the body of the `select` statement.
 
-.example: select subtree of `t`
+.example: trace paths in a graph
 
 [source,sql]
 ----
-with recursive prev(id, parent) as (
-  select t.id, t.parent from t where t.id = ?
-  union all
-  select t.id, t.parent from t join prev on t.parent = prev.id
-) select * from prev;
+create table x(id integer, prev integer, val integer);
+insert into x values(1,null,20),(2,1,40),(3,2,50),(4,2,100),(5,4,200),(6,3,400),(6,4,300),(7,6,1000);
+select * from x;
+┌────┬──────┬──────┐
+│ id │ prev │ val  │
+├────┼──────┼──────┤
+│ 1  │      │ 20   │
+│ 2  │ 1    │ 40   │
+│ 3  │ 2    │ 50   │
+│ 4  │ 2    │ 100  │
+│ 5  │ 4    │ 200  │
+│ 6  │ 3    │ 400  │
+│ 6  │ 4    │ 300  │
+│ 7  │ 6    │ 1000 │
+└────┴──────┴──────┘
+with recursive y(id,prev,val) as (select * from x where id=7
+                                  union -- union all produces some redundancies, since the graph is a dag
+                                  select x.id,x.prev,x.val from y join x on y.prev=x.id)
+select * from y; -- edge set for nodes reachable from node 7
+┌────┬──────┬──────┐
+│ id │ prev │ val  │
+├────┼──────┼──────┤
+│ 7  │ 6    │ 1000 │
+│ 6  │ 3    │ 400  │
+│ 6  │ 4    │ 300  │
+│ 3  │ 2    │ 50   │
+│ 4  │ 2    │ 100  │
+│ 2  │ 1    │ 40   │
+│ 1  │      │ 20   │
+└────┴──────┴──────┘
 ----
+
+maybe unexpectedly, we select from `x`, not `y`! `[...] select y.id,y.prev,y.val from [..]` is unbounded recursion.
 
 ===== insert
 
@@ -449,11 +472,23 @@ with recursive prev(id, parent) as (
 
 ==== compound examples
 
+.get successive integer 
+
+we get the greatest integer in the table, or if the table is empty, then start with 10.
+
+[source,sql]
+----
+create table x(id integer);
+select case when count(id) > 0 then max(id)+1 else 10 end from x; -- 10
+insert into x values(100);
+select case when count(id) > 0 then max(id)+1 else 10 end from x; -- 101
+----
+
 .select by day
 
 [source,sql]
 ----
-select * from tbl where strftime("%Y-%m-%d",date) == "2022-07-01";
+select * from tbl where strftime("%Y-%m-%d",date) = "2022-07-01";
 ----
 
 `date` may be a datetime or date string.
@@ -790,8 +825,9 @@ select ps from acc order by id desc limit 1;
 
 * we really do use functional style here. we can't use noe `with` clause over both an `update` and a `select` statement. rather than use `update` (a stateful, non-functional style), we can use recursion and nested ``select``s. each row is defined in terms of its predecessor.
 * `acc` is the named tuple of the fold. `printf` (`format` in other sql engines) is used for string concatenation since sqlite has no separate such function.
-* the proper solution binds `x` b/c `select * from c limit 1 union all ...` is invalid syntax
+* the proper solution binds `x` b/c `select * from c limit 1 union all ...` is invalid syntax; we can't use `limit` there, though `where` is fine there
 * i'ven't yet ``explain``ed this query to see its efficiency
+* we can't use aggregate functions in predicates; therefore `where id=max(id)` is not a valid alternative to `order by id desc limit 1`
 
 of course, this fold is more easily done by the aggregate `group_concat`, but this example serves generally, when an aggregate may not be already written for it.
 
