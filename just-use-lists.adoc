@@ -1,12 +1,73 @@
 == types? structs? enums? just use lists!
 
-TODO: don't use lists! use reldbs instead! lists can't accomodate multiple indexes, related to storing one datum in multiple places (sections.) this is just an organizational concern; when data permit multiple valid/useful views, lists can accomodate only one!
+.relations: lisp vs sql
+
+the lisp model: singletons supported but everything may be enclosed in a pair i.e. everything supports grouping: a -> (a). lists are implicitly ordered, equivalent to primary keys in sql.
+
+thus in lisp anything can be joined [grouped] easily with any other things i.e. any things can be cogrouped. this is achievable in sql by giving a common value to a common attribute for multiple rows. lisp supports nested groups (closure on grouping i.e. groups may be grouped) e.g. `((a b) (c) d)`; in sql that's encoded as:
+
+[source,sql]
+----
+create table lists(id integer, value, parent integer, foreign key (parent) references lists(id));
+insert into lists values(1,null,null),(null,a,1),(null,b,1),(2,null,1),(null,c,2),(null,d,1);
+----
+
+groups have non-null `id` and null `value`, the opposite of atoms. this is better stored in two tables: one for groups, the other for atoms. that way `id` could be a primary key and there wouldn't be so many ``null``s floating around your code:
+
+[source,sql]
+----
+create table lists(id integer primary key, parent integer, foreign key (parent) references lists(id));
+create table atoms(value,                  parent integer, foreign key (parent) references lists(id));
+insert into lists values(1,null),(2,1);
+insert into atoms(a,1),(b,1),(c,2),(d,1);
+----
+
+lisp list literals support only trees i.e. each element may belong to only one group. binding a list allows inclusion into multiple groups:
+
+[source,lisp]
+----
+(let (x '(1 6 5)) (cons! x l1) (cons! x l2))
+----
+
+however, lisp's semantics don't make explicit how the memory is managed; is a copy of `x`, or its address, consed onto `l1` & `l2`?
+
+sql generalizes this, allowing an element to belong to multiple groups. this is simply done by insert t(id,val,parent) values(1,a,4),(1,a,5), though this is more cleanly represented two tables: t1(id,val), t2(id,parent) so that you don't need to redundantly specify data. remember that we're basically describing a set of graph edges here. also non-tree graphs' id attribute cannot be `unique`.
+
+* in this model, all graphs are stored in two tables: `groups` & `elements`. they could be stored in one table, but unless we restrict the graph to being a tree, we must redundantly sepecify node values.
+
+''''
+
+tl;dr: use row types, which are reldb tables with variable attributes, isomorphic to lists some of whose elements are pairs. these are indexable by ordinal or label, and may thus be considered as lists or hash tables simultaneously. hash tables emulate this by having a `cdr` key whose value is a list. lists already are row types. mutable lists are a bit easier to use than immutable ones. lists only inefficiently implement useful ops like `join` (cross reference.) ideally use a self-balancing tree, like a b-tree, b+tree, r*-tree, skip list, &c so that putting, getting, and joins are efficient.
+
+even still, stack parsers are better than lists e.g. `((limit . 20) (stop . 40))` is better as `limit 20 stop 40`; i look at car, which is `'limit`, so i know to parse either a fixed number of successive items, or parse until the next expected keyword (here `stop`.) this is easier to parse, faster, cleaner syntax, and flat, which makes traversal only one simple loop. in fact, this is the set vars ... action ... reset vars ... pattern seen in the stack example below.
+
+TODO: discuss how is `a b c d` better than `a (b c) d`. obviously d implies the end of the `b c` clause then that sees the parens as redundant. more importantly though is that it's flat. but what's the difference between `a b c d` and `a ( b c ) d` where parens are seen as delimiting symbols in a flat list, and the lisp list `(a (b c) d)`? how is traversing them different or the same? nesting is bad; it's either appropriate for recursion (which can suck, or be nice in simple cases) or it adds nothing, or we need only one delimiter to delimit clauses.
+
+`a (b c d) (e f) g` iso (`a b c d e f g` with `b : c d -> b` & `e : f -> e`). seeing sql tables as product type constructors whose name is the table name, the syntax `a b c d e f g` along with tables `b` & `e` makes syntax very easy. a new object is created in a given table, and autoincrement integer identifiers [pointers] are created to point to the respective info in the `b` & `e` tables. perhaps a stack lang with sql backend is best. one may put a list on the stack, i suppose, though i'm unsure how appropriate that'd be; however, i'm certain that a list should never contain another list! intrefs are superior to nesting!
+
+[TODO]
+i've criticized reldbs' fixedness of attribute sets. indeed, there's some fixedness, and it can be inelegant, but seeing tables as things having given attribute sets, and especially [using foreign keys to] creating hierarchies (lattices on attribute subset), we can `join` to merge attribute sets e.g. `with x(a,b) as (values(1,2),("x","y")), y(o,b) as (values(6,"y"),(100,2)) select * from x natural join y`'s header is {a,b} ∪ {o,b} = {a,b,o}. indeed, left joins can preserve all rows, giving null values to absent attributes. furthermore, one can always `alter table`.
+
+TODO: an important property of lists, which is not present in tables, is the lack of key. keys are labels, and k/v pairs can be thought of as set/element pairs, e.g. `artist=bôa` means that bôa ∈ artists and that the subset of artists related to this song is `(bôa)`. songs may have multiple artists. commonly music players annoyingly consider artists as strings rather than sets thereof. thus queries like `queue song where {Ashleigh Ball, Shannon Chan-Kent} ⊂ songs.artists` are unsupported. anyway, songs may have uncategorized properties, or even more generally, any given property may simultaneously support multiple classifications (i.e. belong to many sets). however, we should be free to not shoehorn or choose a categorization when there's no need, anyway. for example, consider `((title . "duvet (repuid remix)") (artist . "otosumi") (original-artist . "bôa") breakbeat remix)`. the non-pair tail `(breakbeat remix)` is of two separate uncategorized properties. i should be able to search my music lib for `breakbeat`, which is maybe kinda a genre? remix certainly isn't. in fact, `remix` is a boolean and thus cannot particularly classified; it's its own property. in a table we'd need to encode it as having a `remix` column with boolean value. naturally we can put all unclassified properties into a `cdr` column or something, and give every table such a column, should it ever need to be used. this is a fine encoding, though it uses dummy information: the column name, `cdr`. this encoding is non-penalizing, and tables still retain their advantages over lists: lack of ordering, support of multiple indexes and otherwise fast traversal, &c. to use parsers (`(match (car s) [... ...])`) with tables, we'd need to similarly emulate lists by tables. here we see that the only tables worthy of use must support:
+
+. variable column sets (i.e. row types)
+. optionally named columns; column sets are always considered as g/alists, but all implicitly have ordinal indices, in addition to any label indices. thus they support slices like `[1:3]` and subsets like `{name,age}` (known as _projection_ in relational algebra).
+
+with these supported, parsers are still easy to write for tables, e.g. `([t=mkt∧price∈>20 → price] [t=limit → curprice > limit ? a : b] ... [else ...])`. here, as in sql, `t`, `price`, & `limit` are attributes of the relation being parsed; they're implicitly in the pattern parse clause's scope, in addition to any other common identifiers that may already be in scope. btw a=b is shorthand for a∈{b}, and a>b is shorthand for a∈(b,∞). the expanded versions are generalizations useful in returning result _sets_ (or generally ranges) rather than single elements.
+
+NOTE: as the `cdr` column hints at, whereas cons pairs (of pointers) are enabled to extend only in two dimensions, tables can have an arbitrary number of such pointers. lists can _effectively_ have an arbitrary number of pointers, like a rose tree expressed by lists, but as far as efficient traversal is concerned, that list must still be considered one element at a time, in one order only. tables generally support random & concurrent access.
+
+tables' strict 2-dimensionality is arguably ugly compared to g/alists. suppose that `(x (y p))` & `(x (z d e))` are both valid shapes for a given scenario. we case on caadr to determine how to parse cadr's tail. tables don't have such flexibility; our table would be of shape `(x y p z d e)`. this is not necessarily worse for the programming, but humans have an easier time just looking at the g/alist form...arguably? perhaps i'm just not used to thinking in such terms. g/alist is cleaner, since you see only relevant information in each instance, but in a table, irrelevant attributes would be null. and again, nesting is isomorphic with foreign keys. this is not as elegant in sql as one may desire, but this certainly isn't any fault of reldbs in general.
+
+the relational model is a simpler and more powerful alternative to cons pair shapes. whereas shapes are nice for recursive traversal, relations are better for general traversal; in recursion scope must be tracked, whereas in general traversal everything is in scope regardless of _depth_; recursive structures have depth, but non-recursive ones do not, even if they're isomorphic to recursive counterparts (for example, consider how sql handles json vs how haskell or racket does.) the differn between recursion and non-recursion is nestedness vs flatness. for example of this duality, look at the graph of a power set. clearly the graph is flat yet can be partitioned into levels.
+
+''''
 
 notation for reading shapes: usual lisp notation (e.g. `(a b . xs)` has usual meaning) except that (a) (singleton in parens) means homogenous list of a; actual singleton lists are no more useful than their single element alone, unless they're used to distinguish a thing from a thing with a particular condition. thus `(a)` is `(a . ())` i.e. `a` but with a flag. the cdr may as well be anything then; in fact, a boolean (2-⨿), or generally symbol (n-⨿), would be more informative. regardless, this notation represents singleton lists as `(a . ())`. for further example, a homogenous list of singleton lists is `((a . ()))`. a→b means [that there exists] some morphism from a to b. it does not mean that there's specifically a _function_ whose _input_ is `a`; it only generally means that `b` is derivable from `a` regardless of how `a` is encoded.
 
 TODO: use `de/aljs` as a premier example, and compare against `json-struct`.
 
-btw alists are natural for associating multiple data objects, whereas hash maps are unnatural. consider associating each x of xs with properties y∈ys & z∈zs. you can have two hash maps, x->y & x->z, or one of x->(y,z). with alists it's the difference between ((x . y)) & ((x . z)); ((x y z)); and xs & ys & zs, which can be used together: `(map (λ (x y z) _) xs ys zs)`. we can afford this last strategy because lists are ordered; we don't particularly need to associate the keys with properties; we can implicitly associate them by sharing common indices.
+btw alists are natural for associating multiple data objects, whereas hash maps are unnatural. consider associating each x of xs with properties y∈ys & z∈zs. you can have two hash maps, x->y & x->z, or one of x->(y,z). with alists it's the difference between `((x . y))` & `((x . z))`; `((x y z))`; and xs & ys & zs, which can be used together: `(map (λ (x y z) _) xs ys zs)`. we can afford this last strategy because lists are ordered; we don't particularly need to associate the keys with properties; we can implicitly associate them by sharing common indices. link:https://code.jsoftware.com/wiki/Jd/Overview#Columnar[apparently, though, storing a list per attribute is better than storing a list of records]. TODO: consider this, esp. how it applies to arrays vs lists.
 
 map `(a -> b)` is an interpretation of association `(a . b)`. maps are nothing special; genearlly consider associations. associations are already ordered; however, their order may be considered in either direction. thus they generalize maps.
 
@@ -19,9 +80,9 @@ TODO: this article suggests that sexps are ideal for all code. this is incorrect
 TODO: write examples in apl, POW!ass, or other general form that most exploits symmetry and makes a/symmetry clear. this notation would exploit common information, would be mutable and likely use arrays^*^, would use dynamic or global binding, sensible shortcuts like pil's `@` (which requires dynamic binding). also give solution in prolog. the haskell solution is first, since that's whose faults this article seeks to demonstrate; then the ideal (most reduced notation that exploits common info) is given; then other solutions are given to see how they compare. ^*^also explore & discuss arrays as the natural structure where each array axis corresponds to one of symmetry.
 TODO: when writing factor's version, use factor oop; cf lists & ADTs. in fact, very much attention should be given to lisp vs factor; they're very similar, but factor has easier syntax and is actually totally flexible, which lisp purports to be, but really isn't (except pil.)
 
-.preface
+.types vs shapes & encodings
 
-i used haskell from 2017 through oct 2019, and it was the first real programming language that i'd learned since java, and it totally blew my mind. i still say that it (haskell2010) is an excellent language, yet lisp obviates it. i began learning scheme in feb 2020, and started using typed racket shortly thereafter, until feb 2022, when i decided that types were hardly beneficial overly-restrictive cruft. i'd always wondered how anyone ever got _anything_ done in untyped languages—and i still do, but only as its currently commonly done in practice; in principle, however, using untyped code is much better, when the code [encoding scheme] is simple. furthermore we can exploit common information in a system without types; we're free to work with information instead of trying to partition everything by types, which is hopeless; the types will either be so specific that they're a pain to use, or they'll be simple but lose the granularity to express particular facts. here i discuss types, when they're good, why they usually aren't, what's better, and how this better untyped system is different from common untyped systems like javascript or python. for almost all of my life i've been using typed programming and relying on the typechecker heavily, and using it (in the case of haskell) for considering the mathematical structure of my code, and using type calculus to redesign my code and correct design logical inconsistencies. i say all this so that you understand that i have valued formal math even before discovering haskell (and in fact i found haskell because it was the closest extant language to a theoretical purely-declarative language that i'd drafted over a few years)—that i'm not just someone who thought that it was "easier to get started" with untyped languages such as python just because they make it easier/faster to get code to run correctly in common use cases. to put it lightly, i'm *not* a fan of non-reproducability, unmanaged/emergent state, oop, or not being told the shape/type of the data with which i'm working.
+types are hardly-beneficial overly-restrictive cruft. i wonder how anyone ever gets _anything_ done in untyped languages, but only as its currently commonly done in practice, viz using oop classes and verbose programming (unlike apl.) in principle, using untyped code is much better, when the code [encoding scheme] is simple. furthermore we can exploit common information in a system without types; we're free to work with information instead of trying to partition everything by types, which is hopeless; the types will either be so specific that they're a pain to use, or they'll be simple but lose the granularity to express particular facts. here i discuss types, when they're good, why they usually aren't, what's better, and how this better untyped system is different from common untyped code such as some random javascript or python.
 
 ''''
 
@@ -215,6 +276,8 @@ the alternative is lists. lists are universal because they're the simplest struc
 
 === command line parsing example
 
+TODO: identify x in lists:lisp::tables:x. 1st sketch might be homoiconic, but latter specs shouldn't constrain themselves to being so.
+
 command line parsing is a good example of generalized list's appropriateness/elegance: consider the 7z cmdline form, which uses both options and actions. the actions are mutually exclusive; we must select exactly one. each of the options is usable with a subset of the actions. the relational model always must work because it's, as suggested, built on _relation_ [grouping], which is a mathematical primitive. so of course we have a map from options to compatible actions, or from actions to compatible options. commonly, using today's/classical presumptions, you'd use a loop to consider each option or action, put it through a parser, and puts its result into state; after all args have been parsed (or a parsing error has occurred), the program terminates or calls some fn on the state. for most languages a command line parsing fn or macro is available. they're all clever (haskell's applicative parse wins this category), but not best. as always, galists are, again as always, the best solution, because they use data only and are nothing more than ordered groups. furthermore *lists are a mix of stack & vector models (e.g. stack- or array-based programming), and can be as efficient when used properly*—namely that they're of the correct shape, i.e. that they use the right encoding. being mutable helps, too.
 
 [source,lisp]
@@ -252,7 +315,7 @@ this is very good news! all sql implementations support tables as _the_ data pri
 
 NOTE: tables are pretty much a/lists or arrays, so rel dbs make a/list and array programming easy. we see that table column sets are fixed like vectors, but rows are variable like lists.
 
-*with a/symmetry being all, all programs are basically `cond` & `loop`. all data encoding is group (list/cons) and all functions are select/extract (which includes remove: extracting a thing then doing nothing with it effectively removes it), put, and arithmetic.*
+*with a/symmetry being all, all programs are basically `cond` & `loop`. all data encoding is group (list/cons) and all functions are select/extract (which includes remove: extracting a thing then doing nothing with it effectively removes it), put, and arithmetic.* this is basically a turing machine. yes, we know that turing machines, which only read, write, and change address, are turing complete. this is usually considered impractical, though, like a more extreme version of "all executable code is eventually assembly before it executes." yet indeed databases are useful slight generalizations of turing's machine. the recognition that we're merely moving information profoundly changes our intuition about designing digital information systems.
 
 other cool features of dbs for programming:
 
@@ -264,9 +327,13 @@ i wonder how like the relational programming model is to prolog's or apl's.
 
 see link:https://www.sqlite.org/lang_expr.html[sqlite's language spec] for suggests on how to use sql as a proglang.
 
-TODO: see about jdb & kdb as alternatives to sql!
+TODO: see about jdb & kdb as alternatives to sql.
 
-==== relprog example
+==== relprog
+
+when you think about it, relational databases are just relations/groups, which are isomorphic with graphs, which are the most general data structure; therefore all data should be stored in tables. use whatever implementation is fast. finally, query-based programming is declarative programming, which is the best.
+
+.example
 
 datetimes! a date table (or list) has shape `(y m d)`. time is `(h m s ms ns)`. datetime = date ∪ time with disambiguation on `m`. if they shared `m` properly as the same concept then we'd `join` on `m`. a variety of disambiguation is discarding labels and using ordinal indices. `select y m d h m s from (y m d)=(2000 1 1)` => (h m s)=∅. we can define `minutes-between`:
 
@@ -279,6 +346,8 @@ datetimes! a date table (or list) has shape `(y m d)`. time is `(h m s ms ns)`. 
 minutes-between := fold through (365 12 24 60 1) ; TODO
 ----
 
+* it's nice that when we specify the table [context], its attributes values are referenced only by attribute, and the attribute is in scope. compare this with common oop, wherein you must say `f(object.attr1, object.attr2)`. sql is more like saying `with object: f(attr1, attr2) ... end`, plus it operates over all rows [matching a given predicate] per-each or altogether when using an aggregate function.
+  ** in this way, sql is a sort of limited parse language. its limitation is that if not all of the attributes and tables referenced in the statement are not present, then the statement is malformed, instead of being equivalent to a falsy value which would be able to be in an `or` expression with another statement.
 * in sql anonymous tables are done with `with` and `values` e.g. `with t(a,b) as values(1,"x"),(2,"y"),(3,"z") select * from t` is isomorphic with lisp `((((a . 1) (b . "x")) ((a . 2) (b . "y")) ((a . 3) (b . "z"))))` or just `((1 "x") (2 "y") (3 "z"))` with the knowledge that each list in the list is of shape `(a b)`. the nice thing about sql is that we don't need to worry about how the table is encoded, which makes easy refactoring and coupling codes that weren't designed together.
   ** link:https://www.sqlite.org/lang_select.html#the_values_clause[`values` is specialized `select`]
 * in `select x,y,... from tbl`:
@@ -288,7 +357,6 @@ minutes-between := fold through (365 12 24 60 1) ; TODO
     *** arguably, anonymous structs are a sql special. another sql special is that reorienting any arbitrary part of a relation *implicitly* affects the whole relation. in most proglangs we'd need to explicitly orient binds & operations in a particular order—a common & great pain of current programming methods. sql's data *plurality* (like apl) _with_ its *lack of ordering of columns (b/c they're named)* is great.
       **** usually we apply an operation over a row set. perhaps yet, though, it may be useful to apply an operation pointwise to two tables? consider `select a+x,b+y,c+z from x,y` would better be written `x+y`. likely there's no reason to structure data this way, though.
     *** a way of phrasing join is "`y,...` given `x`" where `x,y,...` are attribute names.
-* `select * from t1 join t2 on x` fails b/c `x` ambiguously refers to `t1.x` or `t2.x`; we can do `... join ... on t1.x=t2.x`, but it's better to `select t1.y,t2.y from t1 inner join t2`.
 * `a or b` in sql (i.e. if a's ∅ then b else a): `select * from (select x,... from tbl where p union all values(a,...)) limit 1` to get either a row of `x,...` or `a,...`.
 * `union` concats/appends rows (requires same number of columns)
 * note that `(x ...) (y ...)` is isomorphic with `((x y) ...)` but is notationally shorter.

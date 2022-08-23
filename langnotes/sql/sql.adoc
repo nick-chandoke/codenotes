@@ -6,6 +6,7 @@
 * what're windows? cf local binds?
 * how to organize/encode data: relations are basically their headers. thus make a table for each shape. whatever data have a common shape belong in the same table.
 * cf j/k db
+* partition this module into relalg, working with data, common exprs (e.g. exists, case), useful compound patterns, and techniques for deriving solutions to given problems
 
 sql is an array-based proglang whose sole data structure—the table—generalizes maps and arrays to matrices any subset of whose columns can be indexed. like APL, a table's cell's value can itself be a table. 1D arrays in sql are represented by single columns. objects [structs] are represented by single rows, and arrays of objects are represented by tables. features:
 
@@ -33,6 +34,8 @@ but appears to lack:
 NOTE: sql is case-insensitive!
 
 === (no) lambdas
+
+TODO: revise this section remembering that views are effectively functions, except on a fixed rather than variable table. also discuss fns as parameterized data.
 
 firstly let's identify what a _lambda_ is. a λ is a relation of inputs and outputs. picolisp's λ syntax makes this obvious: `((arg ...) (body ...))`. it's not even special syntax, really; the pil interpreter knows to process an sexpr as a λ if its first element is a list. the best λ syntax is clojurescript's shorthand: e.g. `(%1 + %2)/%3`, which generalizes apl's dfns syntax; these achieve brevity by identifying arguments by ordinals instead of names. a _function_ is exactly a λ, though commonly in programming (namely in languages not supporting λ's), it refers to a special linguistic construct that is _effectively_ just a λ bound to an identifier. as such, in such languages, _functions_ [programming] are just poor implementations of functions [math] i.e. λ's, where the poorness is by senseless asymmetry of how data are treated viz treating functions differently from other data.
 
@@ -65,6 +68,14 @@ we have now achieved a language model where all data except `eval`, which is the
 
 so how does this relate to sql? sql is made for relations. a fold can be expressed by a fn called `fold` that parses a [probably single-element] table of header `(init,s,op)` where `init` is the initial value, `s` is a relation (probably `select * from t` for some `t`) and `op` is a relation of inputs and outputs, expressed by `select body(arg,...) from t` where `t` contains all the args, where each column name practically is a locally-bound identifier of a function parameter. the only problem is that sql does not support variable `t`! `t` must be an absolute identifier! this is sad. however, at least it identifies the exact fault that makes sql non-composable—the single lack of variability that it'd need to be as capable as any language could be. such functionality can be easily implemented in a small language that merely converts a simple syntax into sql statements. i suggest making a dsl in factor [lang]. the lang would generate nonce identifiers to satisfy sql's requirement that every of its lingustic elements must be named.
 
+.sql metaprogramming example
+
+TODO: given that we can define fns as views, if we permit paramerizing the query, then metaprogramming = non-meta-programming?
+
+pseudocode `def f(a,b,c) := (a+b)/c; f(1,2,3)` is sql `create view f as select (a+b)/c from params; insert into params values(1,2,3); select f`.
+
+there are an infinite number of alternative expressions for defining & invoking functions, but ultimately we must group (fn id, param vec, output expr), and be able to invoke the function. to make regular programming into metaprogramming, simply make the function identifier an ordinary datum, e.g. a string; that way function names can be computed from any data. in lisp this is decently easy via `eval` or macros, and in scheme it's more difficult because of they hygeine constraint. hygeine is a concern only because of scope. because all scopes in sql are tables, which all must be named, accidental shadowing is impossible, so hygeine isn't a concern. furthermore, functions may be identifiable by more than a mere string; they may be stored in a table with arbitrary attributes, and we may filter as per usual (e.g. `select * from fns where name = ? and other_attr = ?`) to disambiguate.
+
 as an ending aside, note that a side-effect of data-only programming is that all computation is delayed, since all computations are only data until explicitly passed to `eval`.
 
 .λ's aren't needed for aggregates in sql
@@ -76,6 +87,10 @@ haskell `map (\x -> x+4) xs` is `select x+4 from xs`, which returns a fresh, unn
 update clauses: _update_ (cf _put_ or _set_) connotes modifying a value already present, which is a fn of the value to be updated. λ's would be especially useful in triggers that update per row! altirnatively it'd be very nice to be able to automatically select a table of rows that caused the trigger!
 
 furthermore, though tangential, association or lack thereof is encoded in such phrases as `x,y` where, if `x` is a single value, then it's associated with all in `y`, akin to `let x = 4 in map (\y -> f x y) y`. the (lack of) association between memebers of different sets (viz {x} and y) implicitly tells how they must be scoped & sequenced. in this case, `x` must be in `y`'s scope when we compute `f` over all in `y`, but `x` is only associated with `y`, not there being a unique association between some `x` with every element of `y`.
+
+.when `join` cannot alternatively express `where` (maybe. this is a tough-to-identify thought that needs investigation)
+
+commonly `select a from t where a=(select b from u)` can be re-expressed as `select a,b from t join u on a=b where p`. but if there's nothing to join on, because one of the queries returns empty,...well then we can still use coalesce or exists maybe?
 
 === what is sql
 
@@ -232,7 +247,7 @@ NOTE: *for the love of god, use `BEGIN TRANSACTION` &al*
 | `join`              | flatmap [TODO: how?]
 | `collate`           | TODO
 | `escape`            | TODO
-| `exists`            | TODO
+| `exists`            | whether argument select query returns non-empty
 | `frame-spec` grammar  | TODO
 |==============================================================================
 
@@ -291,7 +306,7 @@ select * from y left join x using (b);
 * `create table as` still inserts a table into a database. it's used to init a table at declaration time, for convenience.
 * `temp` tables are accessible in the remaining sql script, but is not persistent; it isn't inserted into the database, and so doesn't exist after the sql script that created it finishes execution.
 
-===== functions (not in sqlite)
+===== functions defined in sql (not in sqlite)
 
 [source,sql]
 ----
@@ -484,6 +499,58 @@ insert into x values(100);
 select case when count(id) > 0 then max(id)+1 else 10 end from x; -- 101
 ----
 
+.tic tac toe
+
+this example demonstrates many things about how to reason about relations. to start, the 3×3 grid will not be a table with 3 rows and 3 columns. think about how you'll check for a winner: you'll want to check each of the rows, and each of the columns (and each of the diagonals, too.) to check all of the columns, you'll want to use the same logic for each column, just a different column number. ah, there's one hint: we want column _numbers_; sql does not number columns. columns are fixed and must be addressed by name. rows, on the other hand, are arbitrary in number and are all treated the same. furthermore, we want code that generalizes non-verbosely to higher dimensions, say for _connect four_. x & y should be treated the same; thus we'll use `(x,y)` indices. x's & o's will be stored as -1 and 1 respectively; an empty cell is 0. this makes checking for winners easy: if the absolute value of the sum _s_ of a row, col, or diag is 3, then the winner is `sign(s)`.
+
+[source,sql]
+----
+-- make the grid
+create table grid(x integer, y integer, v integer default 0, primary key (x,y));
+insert into grid(x,y) select * from generate_series(1,3) as x join generate_series(1,3) as y;
+-- assume that player just moved, which updates grid. now check for winner:
+select sum(v) from grid where x=y;   -- one diagonal
+select sum(v) from grid where x=4-y; -- the other diagonal
+select sum(v) from grid where x=1;
+select sum(v) from grid where x=2;
+select sum(v) from grid where x=3;
+select sum(v) from grid where y=1;
+select sum(v) from grid where y=2;
+select sum(v) from grid where y=3;
+----
+
+ugly as sin, eh? clearly we're considering the cartesian product {x,y}×[1,3], so our code should reflect that. `where x=n` is here actually a poor way of referring to the set {(x,y)|x=n}! that set is described properly as a cartesian product in sql:
+
+[source,sql]
+----
+with t(x,y) as (select * from (values(1)) join (select * from generate_series(1,3))) select * from t;
+┌───┬───┐
+│ x │ y │
+├───┼───┤
+│ 1 │ 1 │
+│ 1 │ 2 │
+│ 1 │ 3 │
+└───┴───┘
+----
+
+we could `natural join` that table with grid on `(x,y)`. (btw, expressions like `where (x,y)=(1,2` are valid!) however, this is a perfect use case for `group by` & the `sum` aggregate. the finished code is:
+
+[source,sql]
+----
+create table grid(x integer, y integer, v integer default 0, primary key (x,y));
+insert into grid(x,y) select * from generate_series(1,3) as x join generate_series(1,3) as y;
+-- check diagonals
+select sum(v) from grid where x=y;
+select sum(v) from grid where x=4-y;
+-- check rows & columns
+select * from grid group by x having abs(sum(v))=3; -- rows for which sum({(x,y)|x=n})=3
+select * from grid group by y having abs(sum(v))=3; -- rows for which sum({(x,y)|y=n})=3
+----
+
+so there you go: checking for winners in tic tac toe simply by 4 queries. maybe it can be syntactically shorter, but this is a good encoding of the game's rules: you win if you cross any row, column, or diagonal.
+
+we see that `group by` partitions by equality, which is analagous to the set of (sets each one of whose axes' value is fixed.)
+
 .select by day
 
 [source,sql]
@@ -500,50 +567,25 @@ select * from tbl where strftime("%Y-%m-%d",date) = "2022-07-01";
 with x(start,end,high,low,open,vol)
   as (select strftime("%Y-%m-%d",min(datetime)), max(datetime), max(high), min(low), open, sum(vol)
   from AAPL where datetime between datetime("2010-01-04 09:30") and datetime("2010-01-04 16:00"))
-select start,high,low,open,vol,close from x join (select close from AAPL where datetime = (select end from x limit 1));
+select start,high,low,open,vol,close from x join (select close from AAPL where datetime = (select end from x));
 ----
+
+in a common proglang this would be like:
+
+----
+let t = {AAPL | datetime ∈ ("2010-01-04 09:30", "2010-01-04 16:00")}
+    end = max(t.datetime)
+    close = t[end].datetime
+ in (start,high,low,open,vol,close)
+----
+
+the `join` is not done as a cartesian product, but instead should be interpreted as putting the `close` at `end` into the `select` clause's scope. `x` is a local binding. if i'm using sql from another proglang, then alternatively i could have stored `x` as its own table (a non-local binding) then done `select start,...vol from x` in one query and `select close from AAPL where datetime = (select end from x)` in another.
+
+`open` needs neither aggregate nor other special calculation because for any data selected among aggregates, the first encountered value is used in practice, though according to sqlite's documentation (§2.4 of the `SELECT` docs), "each non-aggregate expression in the result-set is evaluated once for an arbitrarily selected row." if this turned-out to be a problem in practice, then we'd need to endow it with similar logic as we used for `close`.
 
 NOTE: the datetime format requires leading zeroes for all values, e.g. day, hour, &al.
 
 .resample 1m candles into day candles (multiple days)
-
-first i'll introduce the `group by` clause. the following query means "for each day between 2010-01-01 & 2010-02-01, return the sum of the opening prices for each candle of the normal trading hours (9:30~16:00)
-
-[source,sql]
-----
-select strftime("%Y-%m-%d",datetime),sum(open) from x_AAPL
-where datetime between datetime("2010-01-01") and datetime("2010-02-01")
-      and time(datetime) between time("09:30") and time("15:59")
-group by strftime("%d",datetime);
-----
-
-returns
-
-----
-2010-01-04|11908.9899
-2010-01-05|11960.1763
-2010-01-06|11879.4352
-2010-01-07|11718.1006
-2010-01-08|11755.9473
-2010-01-11|11693.4767
-2010-01-12|11591.5434
-2010-01-13|11593.0865
-2010-01-14|11680.2651
-2010-01-15|11571.2879
-2010-01-19|11881.8933
-2010-01-20|11759.3202
-2010-01-21|11634.9784
-2010-01-22|11329.9219
-2010-01-25|11303.598
-2010-01-26|11639.715
-2010-01-27|11412.125
-2010-01-28|11161.6593
-2010-01-29|10877.7678
-----
-
-summing the opens is nonsense, but it demonstrates `group by`; i chose it b/c if i were to sum the volumes, you wouldn't be able to tell how sum was applied.
-
-next we combine this query with the one from the prior example:
 
 [source,sql]
 ----
@@ -581,17 +623,6 @@ returns
 2010-01-27|30.0829|28.5044|29.5471|29.71|417601177
 2010-01-28|29.3571|28.3857|29.2714|28.4714|281731401
 2010-01-29|28.8857|27.1786|28.7243|27.4457|300374774
-----
-
-leaving me successful but wanting to master joins—namely when outer or cross or w/e joins are appropriate.
-
-TODO: is using `exists` better?
-
-[source,sql]
-----
-SELECT SupplierName
-FROM Suppliers
-WHERE EXISTS (SELECT ProductName FROM Products WHERE Products.SupplierID = Suppliers.supplierID AND Price <= 22);
 ----
 
 === implementation-specific
