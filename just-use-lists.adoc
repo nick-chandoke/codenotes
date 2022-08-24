@@ -35,6 +35,15 @@ sql generalizes this, allowing an element to belong to multiple groups. this is 
 
 * in this model, all graphs are stored in two tables: `groups` & `elements`. they could be stored in one table, but unless we restrict the graph to being a tree, we must redundantly sepecify node values.
 
+to parameterize e.g. `(a b)` into `(a (b arg1 arg2 ...))`:
+
+. `create table b(id integer primary key autoincrement,b,arg1,arg2,...)`
+. `create table t(a,b)` becomes `create table t(a,b integer, foreign (b) references b(id))`
+. for efficiency & convenience, `create view last_b_id as select case when count(id) > 0 then max(id) else 1 end from b`
+. instead of `insert into t values(a,b)`, do `insert into b values(null,b,arg1,arg2,...); insert into t select * from (values(a)),(select * from last_b_id);`
+  .. or, if your sql engine supports the `returning` clause in arbitrary places, perhaps `insert into t select * from (values(a)),(insert into b values(null,b,arg1,arg2,...) returning id)` would work. sqlite supports the `returning` clause *only in top-level* `delete`, `insert`, or `update` statements, so i can't test this.
+. finally, get both by `select * from t join b on t.b=b.id`. see sql notes for traversing whole tree branches recursively from a given node.
+
 ''''
 
 tl;dr: use row types, which are reldb tables with variable attributes, isomorphic to lists some of whose elements are pairs. these are indexable by ordinal or label, and may thus be considered as lists or hash tables simultaneously. hash tables emulate this by having a `cdr` key whose value is a list. lists already are row types. mutable lists are a bit easier to use than immutable ones. lists only inefficiently implement useful ops like `join` (cross reference.) ideally use a self-balancing tree, like a b-tree, b+tree, r*-tree, skip list, &c so that putting, getting, and joins are efficient.

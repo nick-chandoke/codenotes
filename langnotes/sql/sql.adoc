@@ -162,6 +162,11 @@ select * from y_full; -- (1,2,3,20)
 
 you may name the view 'y' & the underlying table _y, or you may name the view e.g. y_full & the underlying one 'y'. consider that you cannot delete, insert, nor update a view; those must be done to the actual table.
 
+=== antipatterns & revisions
+
+* the association/mapping `(k . (v1 v2))` should be stored as two records in sql: `create table map(k,v); insert into map values(a,b),(a,c)` 
+* do not move from one table `a` to another `b` by `insert into a ... where p; delete from b where p`; instead, store all in one table `t`, and have an attribute that designates whether a row would belong to `a` or `b`; then filter on that to effectively get virtual subtables `a` & `b` from `t`.
+
 === language design problems (inelegance & inability)
 
 consider `select aapl.c,goog.c from aapl join goog on aapl.d=goog.d`. note how verbose this would become if i were to consider an arbitrary number of tables, despite that being a simple idea. the problem is that columns are not row types; they're less flexible. furthermore, that sql cannot transpose is a serious limitation! indeed, this lang-specific asymmetry limits the metaprogrammability of sql. this certainly is what makes sql bound to being poor, while the relational db model is good.
@@ -434,7 +439,9 @@ with recursive t(v) as (
 
 produces a column `v` with five rows of values 1 through 5, effectively equal to haskell `take 5 (Data.List.NonEmpty.unfoldr (\n -> (n, pure $ n + 1)) 1)`. the definition of `t` is unbounded; the bound is in `limit 5`; therefore locally bound tables (at least when bound with `recursive`) are not stricted evaluated before the body of the `select` statement.
 
-.example: trace paths in a graph
+.example: trace predecessors/ancestors
+
+this works for a tree, or more generally a dag.
 
 [source,sql]
 ----
@@ -453,24 +460,43 @@ select * from x;
 │ 6  │ 4    │ 300  │
 │ 7  │ 6    │ 1000 │
 └────┴──────┴──────┘
-with recursive y(id,prev,val) as (select * from x where id=7
+with recursive y(id,prev,val) as (select * from x where id=4
                                   union -- union all produces some redundancies, since the graph is a dag
+                                        -- rather than a mere tree
                                   select x.id,x.prev,x.val from y join x on y.prev=x.id)
-select * from y; -- edge set for nodes reachable from node 7
-┌────┬──────┬──────┐
-│ id │ prev │ val  │
-├────┼──────┼──────┤
-│ 7  │ 6    │ 1000 │
-│ 6  │ 3    │ 400  │
-│ 6  │ 4    │ 300  │
-│ 3  │ 2    │ 50   │
-│ 4  │ 2    │ 100  │
-│ 2  │ 1    │ 40   │
-│ 1  │      │ 20   │
-└────┴──────┴──────┘
+select * from y;
+┌────┬──────┬─────┐
+│ id │ prev │ val │
+├────┼──────┼─────┤
+│ 4  │ 2    │ 100 │
+│ 2  │ 1    │ 40  │
+│ 1  │      │ 20  │
+└────┴──────┴─────┘
 ----
 
 maybe unexpectedly, we select from `x`, not `y`! `[...] select y.id,y.prev,y.val from [..]` is unbounded recursion.
+
+.example: trace successors/descendants
+
+this works for a tree, or more generally a dag.
+
+for descendants instead of ancestors, simply swap `y.prev=x.id` with `x.prev=y.id`:
+
+[source,sql]
+----
+with recursive y(id,prev,val) as (select * from x where id=4
+                                  union
+                                  select x.id,x.prev,x.val from y join x on y.id=x.prev)
+select * from y;
+┌────┬──────┬──────┐
+│ id │ prev │ val  │
+├────┼──────┼──────┤
+│ 4  │ 2    │ 100  │
+│ 5  │ 4    │ 200  │
+│ 6  │ 4    │ 300  │
+│ 7  │ 6    │ 1000 │
+└────┴──────┴──────┘
+----
 
 ===== insert
 
