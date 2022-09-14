@@ -1,41 +1,68 @@
-== types? structs? enums? just use lists!
+== types? structs? enums? just use relations!
 
-.relations: lisp vs sql
+all orderly (i.e. non-chaotic) things permit orderings. linear sequence is nothing special; all orderly things can be traversed in whole or part in all/any ways that satisfy some predicate about how the traversal must be (including which elements it traverses or whether it loops &c).
 
-the lisp model: singletons supported but everything may be enclosed in a pair i.e. everything supports grouping: a -> (a). lists are implicitly ordered, equivalent to primary keys in sql.
+TODO: identify data isomorphisms; encode data in least-data isomorphism i.e. by the scheme that requires the fewest bits to express. e.g. lisp encoding is superior to graph encoding for describing trees.
 
-thus in lisp anything can be joined [grouped] easily with any other things i.e. any things can be cogrouped. this is achievable in sql by giving a common value to a common attribute for multiple rows. lisp supports nested groups (closure on grouping i.e. groups may be grouped) e.g. `((a b) (c) d)`; in sql that's encoded as:
+=== lisp, sql, and arrays
 
+all data structures / relations are expressible as graphs. graph is the most general structure. a graph is exactly just a set of edges [relations]—i.e. a sql table/relation. we can say that an edge is `(id1,id2)` which may be directed or not. both ids refer to vertices, which have unique identifiers and associated values [attributes]:
+
+the inclusion model is the same as the graph under the direction scheme that a⊂A/a∈A is depicted as either of duples (A,a) or (a,A), corresponding to edges A→a or a→A. the firefox browser has a badly redundant combination of tags and hierarchy. why should i create a bookmark folder called "food" when i can just as easily add the bookmark with the "food" tag? the likely answer reflects amazingly poor design: that, if you use tags only, then you'd need to add all tags in a hierarchy, e.g. if i had a folder called `food` and a subfolder thereof called `juicers`, then i'd need to tag all new bookmarks as with both `food` and `juicers`. the obvious solution to avoid this redundant drudgery is to define implication rules as a dag: `juicers` => `food` so that if one searches for `food` then all bookmarks about food, including juicers, are returned; and when `juicers` is searched then only juicer-specific bookmarks are returned. finally, a good bookmark queryer & viewer is needed; as always, languages are fully-capable, arbitrarily flexible devices; sql is good and standard, and so should be used, though other good query langs would be good.
+
+.graph encoding
 [source,sql]
 ----
-create table lists(id integer, value, parent integer, foreign key (parent) references lists(id));
-insert into lists values(1,null,null),(null,a,1),(null,b,1),(2,null,1),(null,c,2),(null,d,1);
+create table vertices(id,v1,v2,...);
+create table edges(dom integer references vertices(id), cod integer references vertices(id));
 ----
 
-groups have non-null `id` and null `value`, the opposite of atoms. this is better stored in two tables: one for groups, the other for atoms. that way `id` could be a primary key and there wouldn't be so many ``null``s floating around your code:
+lisp lists can describe trees but not dags i.e. no value can directly belong to multiple lists. suppose that we want to encode the dag `(a,b),(b,c),(a,c)`: ``(let (c val) `(a (b ,c) ,c))``. `c` is one definite object with one address. is a child of both the `a` and `b`. you can say that this makes `c` have two different parents. technically this works, but how practical is it? your traversal would need to track all nodes (in a map from node id to set of parents) to see if they appear elsewhere! traversing this example dag, we'd track all nodes and their parents, and by the end of it, we'd've identified `(c -> (b a); b -> (a); a -> ())`. this is very clumsy in a fuctional language. linked list is a pure data structure, and here its limitation shows; we need pointers in order to traverse graphs encoded as linked lists reasonably well.
 
+whereas the graph encoding explicitly relates vertices, thus possibly implicitly describing hierarchies, the _lisp encoding_ explicitly describes in terms of groups:
+
+.lisp/subset encoding
 [source,sql]
 ----
-create table lists(id integer primary key, parent integer, foreign key (parent) references lists(id));
-create table atoms(value,                  parent integer, foreign key (parent) references lists(id));
-insert into lists values(1,null),(2,1);
+create table groups(id integer primary key, parent integer, foreign key (parent) references lists(id));
+create table atoms(value,                   parent integer, foreign key (parent) references lists(id));
+insert into groups values(1,null),(2,1);
 insert into atoms(a,1),(b,1),(c,2),(d,1);
 ----
 
-lisp list literals support only trees i.e. each element may belong to only one group. binding a list allows inclusion into multiple groups:
+encodes `((a b) (c) d)`. in the graph encoding this would be:
 
-[source,lisp]
+[source,sql]
 ----
-(let (x '(1 6 5)) (cons! x l1) (cons! x l2))
+insert into vertices values(-1,null),(-2,null),(1,a),(2,b),(3,c),(4,d); -- groups are stored alongside atoms, or can be seen as atoms (viz ∅). positive ids are for atoms, and negative for groups.
+insert into edges values(-1,1),(-1,2),(-1,-2),(-2,3),(-1,4);
 ----
 
-however, lisp's semantics don't make explicit how the memory is managed; is a copy of `x`, or its address, consed onto `l1` & `l2`?
+the grouping (a,b,d ∈ 1) is encoded as graph {-1→a,-1→b,-1→d}, which is codeed in the table as (-1,1),(-1,2),(-1,4), where 1, 2, & 4 are the ``id``s of a, b, & d respectively.
 
-sql generalizes this, allowing an element to belong to multiple groups. this is simply done by insert t(id,val,parent) values(1,a,4),(1,a,5), though this is more cleanly represented two tables: t1(id,val), t2(id,parent) so that you don't need to redundantly specify data. remember that we're basically describing a set of graph edges here. also non-tree graphs' id attribute cannot be `unique`.
+as you'd expect, the graph encoding is more elegant for graphs, and the lisp encoding is more elegant for subsets. lisp literal syntax is ideal for describing trees.
 
-* in this model, all graphs are stored in two tables: `groups` & `elements`. they could be stored in one table, but unless we restrict the graph to being a tree, we must redundantly sepecify node values.
+really, there are multiple interpretations of `(a b)`:
 
-to parameterize e.g. `(a b)` into `(a (b arg1 arg2 ...))`:
+* `a` is parameterized by `b`, and more data may be appended to increase `a`'s parameter set/list
+* the optionally ordered pair/group of `a` & `b`
+* `a` → `b` → `()` (traversal/sequence/stack interpretation)
+* the result of `(cons a (cons b '()))`, which means that the data encountered form the sequence (`()`, `b`, `a`)
+
+TODO: hypergraphs generalize both lisp and graph encodings. how can i express this as a sql table?
+
+.array/table encoding
+
+this encoding is the one commonly assumed in array programming: each array/table has a fixed set of attributes as columns. the attributes are static; attribute sets are not first-class. this contrasts the lisp encoding, in which attributes are stored dynamically as values; there the only fixed attributes are of the `groups` & `atoms` tables, which describe the _language's_ design, not the _program's_. the header:
+
+* can be modified statically by programmatic statements
+* cannot change in each iteration of a loop (that'd require that they be first-class)
+* must be known before any select or insert statement; the statement can statically be known to be valid or not wrt attributes that they reference
+* must be uniformly shaped; no row can have a different attribute set than another
+
+==== attribute parameterization
+
+in lisp, `(a b)` can be parameterized on `b`: `(a (b arg1 arg2 ...))`. to parameterize `b`:
 
 . `create table b(id integer primary key autoincrement,b,arg1,arg2,...)`
 . `create table t(a,b)` becomes `create table t(a,b integer, foreign (b) references b(id))`
@@ -43,6 +70,47 @@ to parameterize e.g. `(a b)` into `(a (b arg1 arg2 ...))`:
 . instead of `insert into t values(a,b)`, do `insert into b values(null,b,arg1,arg2,...); insert into t select * from (values(a)),(select * from last_b_id);`
   .. or, if your sql engine supports the `returning` clause in arbitrary places, perhaps `insert into t select * from (values(a)),(insert into b values(null,b,arg1,arg2,...) returning id)` would work. sqlite supports the `returning` clause *only in top-level* `delete`, `insert`, or `update` statements, so i can't test this.
 . finally, get both by `select * from t join b on t.b=b.id`. see sql notes for traversing whole tree branches recursively from a given node.
+
+`(k . (v1 v2))` should be stored as two records in sql where v1 & v2 are foreign keys to some other table: `create table map(k,v); insert into map values(a,b),(a,c)`.
+
+''''
+
+EVERYTHING BELOW MUST BE REVISED WITH REGARD TO THE ABOVE.
+
+lack of scope is nice, but so is lack of sequencing or completing control flow. scope & control flow usually are enforced simultaneously per a language spec. consider
+
+----
+(f y
+   (let ([x (get-x)])
+     (if (p x)
+         (begin branch1 ...)
+         (begin branch2 ...))))
+----
+
+. if we, later in coding the application logic, find that `y` depends on `(p x)`, then we must refactor by including <whatever scope `y` is in> in a `let`, which we merge with the original `let`, into a single `let*`:
+
+----
+(let* ([x (get-x)]
+       [p (p x)])
+  (f (if p y 0)
+     (if p
+         (begin branch1 ...)
+         (begin branch2 ...))))
+----
+
+, equivalently:
+
+----
+(let* ([x (get-x)]
+       [p (p x)])
+  (if p
+      (f y (begin branch1 ...))
+      (f 0 (begin branch2 ...))))
+----
+
+now, which of the two expressions should we choose? is the latter version any neater? if `y` and the branching didn't both depend exactly on `p`, then the latter expression would not be valid e.g. had `y` depended on `(and p (even? y))` instead of just `p`. choice is a pain: if all choices are equivalently good, then the ability to choose is redundant; or if one choice is best, then why should we be able to choose any other? finally, there's the _need to choose_. choice (another word for `cond`) is asymmetric; thus the ability to choose 1. is sensible only if choices are non-isomorphic; 2. is not as good as symmetric design—one in which we would not be choosing. that a language be specified such that the choice of arrangement of expressions is significant is a horrible and needless constraint, one which almost certainly will see the programmer _re_arranging their expressions! dependency graphs are the solution. make the graph by specifying `y`'s definition, which implicitly says what `p` depends on—what must be in scope, and what must be computed before other things, here namely that both branches depend not on each other but both on `y`, `p`, and `x`. of course, with such a declarative system, we'd often need to avoid shadowing; this is solved by using named scopes [sql tables] or `as` (see sql notes); or by using combinators. it's much easier to put or delete an edge in a list of edges than to rearrange nested expressions! in fact, much of the developer's effort is wasted in manual expression dependency mapping! we need dependency resolvers for code expressions at least as much as we do for package management!
+
+if one is forced [by a language] to use scoped binds, then it seems best to put a bind clause in the most top-level scope available, as that will most reduce potential refactoring. ultimately that means that everything should be global! recall that global variables' presumed danger is that a subroutine A may modify a global variable used by another subroutine B when B hasn't accomodated such mutation. in a purely functional language (i.e. all vars are immutable) with shadowing, however, global vars are no more dangerous than local vars. of course, one can still do this in an impure language by simply deciding to never mutate globals, and by marking globals by naming them according to a known scheme.
 
 ''''
 
@@ -53,9 +121,6 @@ even still, stack parsers are better than lists e.g. `((limit . 20) (stop . 40))
 TODO: discuss how is `a b c d` better than `a (b c) d`. obviously d implies the end of the `b c` clause then that sees the parens as redundant. more importantly though is that it's flat. but what's the difference between `a b c d` and `a ( b c ) d` where parens are seen as delimiting symbols in a flat list, and the lisp list `(a (b c) d)`? how is traversing them different or the same? nesting is bad; it's either appropriate for recursion (which can suck, or be nice in simple cases) or it adds nothing, or we need only one delimiter to delimit clauses.
 
 `a (b c d) (e f) g` iso (`a b c d e f g` with `b : c d -> b` & `e : f -> e`). seeing sql tables as product type constructors whose name is the table name, the syntax `a b c d e f g` along with tables `b` & `e` makes syntax very easy. a new object is created in a given table, and autoincrement integer identifiers [pointers] are created to point to the respective info in the `b` & `e` tables. perhaps a stack lang with sql backend is best. one may put a list on the stack, i suppose, though i'm unsure how appropriate that'd be; however, i'm certain that a list should never contain another list! intrefs are superior to nesting!
-
-[TODO]
-i've criticized reldbs' fixedness of attribute sets. indeed, there's some fixedness, and it can be inelegant, but seeing tables as things having given attribute sets, and especially [using foreign keys to] creating hierarchies (lattices on attribute subset), we can `join` to merge attribute sets e.g. `with x(a,b) as (values(1,2),("x","y")), y(o,b) as (values(6,"y"),(100,2)) select * from x natural join y`'s header is {a,b} ∪ {o,b} = {a,b,o}. indeed, left joins can preserve all rows, giving null values to absent attributes. furthermore, one can always `alter table`.
 
 TODO: an important property of lists, which is not present in tables, is the lack of key. keys are labels, and k/v pairs can be thought of as set/element pairs, e.g. `artist=bôa` means that bôa ∈ artists and that the subset of artists related to this song is `(bôa)`. songs may have multiple artists. commonly music players annoyingly consider artists as strings rather than sets thereof. thus queries like `queue song where {Ashleigh Ball, Shannon Chan-Kent} ⊂ songs.artists` are unsupported. anyway, songs may have uncategorized properties, or even more generally, any given property may simultaneously support multiple classifications (i.e. belong to many sets). however, we should be free to not shoehorn or choose a categorization when there's no need, anyway. for example, consider `((title . "duvet (repuid remix)") (artist . "otosumi") (original-artist . "bôa") breakbeat remix)`. the non-pair tail `(breakbeat remix)` is of two separate uncategorized properties. i should be able to search my music lib for `breakbeat`, which is maybe kinda a genre? remix certainly isn't. in fact, `remix` is a boolean and thus cannot particularly classified; it's its own property. in a table we'd need to encode it as having a `remix` column with boolean value. naturally we can put all unclassified properties into a `cdr` column or something, and give every table such a column, should it ever need to be used. this is a fine encoding, though it uses dummy information: the column name, `cdr`. this encoding is non-penalizing, and tables still retain their advantages over lists: lack of ordering, support of multiple indexes and otherwise fast traversal, &c. to use parsers (`(match (car s) [... ...])`) with tables, we'd need to similarly emulate lists by tables. here we see that the only tables worthy of use must support:
 

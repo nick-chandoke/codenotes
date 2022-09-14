@@ -1,4 +1,6 @@
-== bit twiddling!
+== bit twiddling, and encoding
+
+using an enum/number enforces mutual exclusivity. consider `(or a b)`; the first non-falsy is chosen; however, `a ∧ b` may be true. if you want to help ensure that `a xor b` is true, then have a single number called. why integers? most types work; we need for all elements of the type to be unique. integers are a good choice because they obey that property, and are machine words, and support bit twiddling. the point of this pattern is doing `case x v1: ...; v2 ...; ...` instead of `cond`, since `x` must have exactly one value, whereas `cond` statements, while more general (i.e. supporting general predicates instead of mere equality), must be carefully ordered, and may be not mutually exclusive.
 
 TODO: discuss C unions
 
@@ -51,6 +53,8 @@ by this expression, polynomials naturally support addition and subtraction. for 
 what about marshalling between languages? no need to convert array types or throw-around pointers to allocated memory! just pass some few ints—trivially easy in any marshalling system.
 
 lastly, decimals occur only when dealing with continuous things. most non-scientific computing is discrete. besides, for scientific computing you'll probably use a gpu which handles floats extremely well.
+
+decimals are also a useful grouping mechanism: we can select unique elements from a group of uids {1, 2, 3.1, 3.2, 4.1, 4.2} by using equality, or we can select groups whose elements have a common floor: {1, 2, {3.1, 3.2}, {4.1, 4.2}}. this is achieved by using a mix of integers and floats, or could be done using all-floats. remember, though: floats' precision can be relied on only when values are static! it's fine to use uids as long as they are never mutated; floating point mutation can break equality. for example, 1.1 + 1.0 may equal 2.1 or it may not; never assume that it will! you may keep it simple by encoding as fixed-point decimals or some other scheme partitionable into two discrete integers. generally this scheme is a tree structure: {3.1.0, 3.1.1, 3.2, 4} corresponds to sexp ((3 (1 (0) (1)) (2)) (4)). the sexp encoding is more compressed.
 
 ==== efficiency vs/and simplicity
 

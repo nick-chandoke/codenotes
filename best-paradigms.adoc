@@ -33,6 +33,8 @@ the following are considered harmful:
 | lists                                  | relational databases
 |=======================================================================================================
 
+languages are bullshit. they're all doing the same thing: putting or (re)moving data from one place from/or/to another. the only thing making them different is 1. their scoping model; 2. any builtin support for some structures [data patterns]; 3. how they sequence operations. oop classes, sql tables, lambdas (especially closures), lua tables, lisp lists, arrays, &c are all grouping & scoping mechanisms, some relative to other scopes (e.g. oop objects), and some indexed by identifier and/or ordinal. regarding ordering actions, most languages are so unsophisticated that they do exactly and only explicitly what you instruct; the statements cannot be confidently assumed to be optimized, and they're expecuted in the exact manner and order in which they're syntactically specified, unlike solver/strategy-based languages like sql or prolog. pure languages like scheme or haskell do not execute exactly as their code reads, but the programmer must know their simple evaluation strategies in order to write effecient code; one cannot write whatever code they wish and still have it be fast, so these languages effectively do exactly as the programmer says; only the syntax does not describe what one would naïvely think.
+
 for a language to be good, it must satisfy some qualities:
 
 . no needless constraint(s) e.g. need to use classes, or overy-particular scoping systems, or referential transparency, or module system (see `eval` below)
@@ -72,6 +74,10 @@ the developer should not care to understand or be able to trace/visualize each s
 data used in the condition of a loop must support at least one axiom, even if that axiom is mere equality. if the loop is traversing a structure, then that structure must have at least one axiom: that it's constructed by repeated application of some closed operation. usually the inverse thereof is used to traverse the structure. typical loops are application of a fn f to some x where such application tends toward a y : f(y) = y; y is a fixed point of f. for imprecise data (e.g. floats) we can check whether f(y) ≈ y i.e. |f(y) - y| < δ. fixed points are usually the base case / exit condition. loops can break before then, though, if a condition is found to be violated, which means that we discovered _during_ the loop that its input was inappropriate. such checks are sensible only if we can't validate in O(1) before looping.
 
 .todo/discuss
+* i like for fn seq `× z +` (like stack lang) to compose as \x y -> x × y + z
+* set theoretic binds, e.g. {x(t):t>1} or {x(t):t∈{1,-1,0}}. sql does this already (kinda) with `select x(t) from tbl`. most langs accomodate this by `for` loops (e.g. racket's use of sequences in its `for` for). HOWEVER! `for` loops are a sequential/nested (i.e. they've a definite unique location in the AST) whereas sets are not! furthermore {x(t):t>1} is an abstract structure (idea), not a data structure! it's calculable. it's not an operation, and so has not a measure of strictness, since it's not an evaluation, though many possible _considerations_ exist of it. anyway, sets aren't scoped! like prolog, sets are predicates calculated by logical implication of others; sets are predicates, and the whole system is just a collection of constraints/facts that're reconciled. ∃ or ∀ determines whether we're searching for one or traversing all of a set; these complete the control flow operators, having already considered manually-specified facts which naturally imply `cond` selection and structures to be traversed. here ∅ is interperable as void, ⊥, or any empty structure. sets free programmers from concern about _how_ relations are encoded (again, e.g. `(((x . y)) ((x . z)))` vs `((x . (y z)))`). the best encoding is never known in advance, and is trivial for a computer to calculate as it's just a constraint problem like graphviz' graph layout or determining a lattice of sets under subset.
+  ** set notation is agnostic of language, data structure/model, encoding, or code organization (scope, whether of a module, method, object, or binding clause). sets specify exactly the program spec w/o implemenation-specific details.
+  ** programmer should specify graph as edge set; program should find path therethrough to answer query. this is what prolog does, recognizing that lattice is a specific variety of graph. in fact, unreachable nodes are then obvious and tell the programmer what facts remain to be exactly specified. these graphs are a bit more nuanced, though: edges are labeled by transforms: subsets (which can implement removal by discarding subset) or injections. really, though, an injection is just statement of a relation. a:b injects a into b, and can be phrased as b->b∪{(i,a)} where `i` is an auto-incrementing implicit index. even if indices are non-continuous, they can be traversed in order by sorting by index before traversing. a:b means the relation/fact of a being in b. you may think of it as a being in the table b, but tables are appropriately symmetric & flexible if they may contain other tables, though this may be better technically encoded as all tables being flat, and hierarchies (which may be general graphs, not just DAGs) encoded by tables referencing other tables like how foreign keys or joins do; it's basically, instead of a∈B or A⊂B, `insert into x(val,contained_by) values(a,b)`. it's like c pointers, except that being a pointer or not isn't anything special; a thing is merely _effectively_ a pointer if it can be joined by that value with another table. another example is the nested lists `(a (b c) d e)` encoded flatly as `(de B '(b c)) '(a B d e)`, which can be made flat by splice-unquoting `B`. this decoupling 1. is simpler to implement; 2. allows things to be containd by many things simultaneously, 3. sees containment as an arbitrary binary relation. relations permit traversals or transforms. the _inclusion_ relation can encode control flow. joins can be visualized like `(a b (c) d e)` to join `(a b c)` with `(c d e)`. it can be interpreted literally as lisp.
 * what can we learn from T9 digit keypad input method? see how it saves keystrokes and, when ambiguous (as tokens usually are) provides the most likely value first (default) but allows quick selection of subsequently probable values; this combination of *compressed-and-ambiguous lookup token* and *quick disambiguation* makes input very efficient! (similar to probabilistic data structures.) can you imagine programming on a feature phone?
 * code should be structural. e.g. using `x` instead of `w` & `s` in `(command-line #:once-each [("-w" "--warn") x (set! warn-thres x)] [("-s" "--sleep") x (set! sleep-thres x)])`. the programmer is not served by `w` & `s` more than by `x`. really the commonality ``(λ (s) `((map string-append '("-" "--") `(,(string-ref s 0) ,s)) x (set! (string-append s "-thres") x)))`` should be factored, but of course, for a quick hack, it's fewer keystrokes (though more text) to use the unfactored version.
 * quasiquotation is a perfect example of good syntax: it's notation for structure. the parameterization of qq is good: just use `,` and `,@`/`~`.
@@ -82,7 +88,7 @@ data used in the condition of a loop must support at least one axiom, even if th
     *** this is a good example of using quoting to express ideas instead of merely providing a sequence of instructions
 * no language can account for what the developer wants to do, nor how to do it. thus a "language" should support only those things that _must_ be present in all programs, namely relation, β-reduction, and i/o. hmm. looks like there's no language there. yup. languages suck. no, not that all languages _yet_ suck; language itself is a bad idea!
 * keep language & documentation separate! if a linguistic construct does not affect the behavior of the program, then it belongs in docs, not lang.
-* lisp is only as nice & flexible/dynamic as lispers say when the lisp does not discern between symbols and identifiers, and uses only alists as a scoping mechanism. no variables: only symbols. no structs: only alists. no scoping: only lists. pil does this; it does not distinguish between symbols and identifiers. however, there must still be a way to define items in the list in terms of other items bound in the same list (effectively `let*` & `letrec`); perhaps this means using vectors instead of lists. again, though, i _never_ have used `letrec`, so who really cares? either way, btw, we'd want our structure to be mutable since that's efficient and gives more options, and mutation is usually expected in a proglang, and we want to use data as an _alternative_ to language, so it must have the same capabilities, e.g. support of mutual recursion or efficient mutation of vars.
+* lisp is only as nice & flexible/dynamic as lispers say when the lisp does not discern between symbols and identifiers, and uses only alists as a scoping mechanism. no identifiers, only symbols. no structs, only alists. all scoping done by data structure bounds. pil does this; it does not distinguish between symbols and identifiers. however, there must still be a way to define items in the list in terms of other items bound in the same list (effectively `let*` & `letrec`); perhaps this means using vectors instead of lists.
   ** the ideal language uses lists (or other structure(s)) as its only way of storing data, there being no _language_: only manipulators of these structures.
   ** `(A data ... | fns ...)` (abstraction over factor's `cleave`, `spread`, and `napply`, where one is chosen by whether #data or #fns == 1 or #data == #fns) works on lists and accomplishes both ad-hoc and symmetric relations: #fn == 1 or #data == 1 => `map` [over axis] which is symmetric over given axis; and #data = #fns => 1:1 ad-hoc map between data & fns e.g. `(A ((3 16) @ add1) @ add1 /) => '(5 1/17)`.
     *** otherwise there're other methods for associating parts of data with facts, e.g. naming symbols by a (set of) convention(s) so that the name reflects some way to interpret or use the data. obviously all methods must _somehow_ relate things a/symmetrically, but beyond that there're arguably infinitely many ways to express that.
@@ -93,6 +99,7 @@ data used in the condition of a loop must support at least one axiom, even if th
   ** this is what makes hooks awesome. there's no particular place in code that you need to insert a hook; you specify anywhere a relation between the hook and a routine.
 * any expression not ultimately used in a value passed to an action (e.g. print) is useless
 * we see lexical scoping become amazingly awkward or verbose when the user [of some fns] isn't the chooser. for example, say that the entry point chooses an implementation of an ad-hoc polymorphic object by a cmdline arg. that choice must be communicated to the user of the choice. usually this is accomplished by passing it as a fn arg. (blocks of code are pamatererized by `let` blocks, btw.) dynamic binding provides a solution, but lexical scoping can still hamper its flexibility, depending on the system (e.g. in picolisp i can define `x` in main and any code run thereafter can use it, whereas in racket i'd need to define `x` as a parameter (dynbind) in a module, then have both main and other modules import it, and have main set its value): namely you may still need to partitioned your modules properly so that the requirement graph is a tree. for example, the cmdline arg `test | backend1 | backend2` chooses a dry or normal run through a program; the dry run implementation sees each abstract fn defined as a print statement. each of the backends implements actual instructions. all choices must be in the user's scope. they need be also in the chooser's scope only if the chooser passes them rather than something that represents them, such as an interned symbol or a string, e.g. `(use "backend2")` in the chooser; in `use`'s scope there's a map from string to actual fn collection. ad-hoc poly is always simply implementable by the shape `((id ((id fn))))`. still, it's nicest to have the fns be directly accessible, as though they'd been defined in the same scope that uses them instead of needing to use `send` [racket] or `assoc`.
+  ** pil's symbol/identifier model is very apt: it enables purely non-functional programming (by binding values to all the identifiers used in a function to be called) but also supports the function syntax, which is terser than defining each symbol, and associates a scope with the bound identifiers. for example, `(de f (x) (+ x 2)) (f 3)` is equivalent to `(de f () (+ x 2)) (let (x 3) (f))`.
   ** modules' general scoping problem is easily demonstrated by that f & g can be corecursive but only when they're defined in the same module. seems like modules supporting parameters could fix this issue, but generally being constrained is the issue, which in this case is done by modules not being first-class, and therefore largely asymmetric with all other code.
   ** NB. i mean _context_ to mean a generalization of _scope_ from a delimited section of a program to the whole state of a program or other set of predicates.
   ** with modules scoping there're no truly global vars; they're all scoped by their defining module
@@ -282,10 +289,6 @@ except that that doesn't actually happen in picolisp since link;https://software
     *** theorem provers (e.g. agda,) type checkers (e.g. haskell,) or logical deduction systems (e.g. datalog) could use them as part of a reïfication engine.
 * generally every binding syntax has its own associated scoping rule, even if many use the same rules. for example, the `for` (&al loop) syntaxes in algol languages bind where the scope is the loop body.
 * lexical scoping is more natural to function composition (applicative style;) dynamic scoping is more natural to mutation.
-* racket's _parameters_ are dynamically bound but lexically scoped. they're better than state for a few technical reasons:
-  ** regardless of how control flow exits `parameterize` form, parameters return to their values before the `parameterize` form (like `bracket` in haskell)
-  ** tco
-  ** parameterization is only for the current thread
 
 ===== wise use
 
@@ -513,6 +516,18 @@ TODO: complete this section
 
 _state_ is program data whose values aren't defined at runtime. for polymorphic programs this can include the program structure.
 
+state is a fact of programming, as suggested by "a program's state." state is easy if you "manage" it intelligently. considering programs as [hyper]graphs (of modules, statements, or whatever all), we can add edges between any hyperedges or vertices and states or state morphisms. thus as we traverse the program, state is modified appropriately. common morphisms are `const`, e.g. in
+
+[source,lisp]
+----
+(let ([x 3]) ; morphism (const 3)
+  (let ([x (+ x 1)]) ; morphism (+1)
+    (writeln x)) ; 4
+  (writeln x)) ; 3
+----
+
+each `let` form applies the stated morphism when its scope is entered. rules like scope nesting can be higher-order morphisms.
+
 .state's problem: state shared among continuations
 
 the commonly-mentioned "problem with state" is really multiple continuations (as defined in racket reference §1) accessing a *common state*, where the state change is supposed to affect only a proper subset of those continuations, but instead affects a superset of that subset. solutions are:
@@ -553,14 +568,14 @@ f :: Int -> String -> String -> IO ()
 g :: Int -> String -> String -> Int -> String -> String -> (Int, String, String)
 ----
 
-quick aside: fun fact! `curry` in haskell is like `apply` in lisp! consider how currying is implicit in haskell, as `eval` is implicit in lisp, and haskell tuples are lisp lists/pairs. `curry` is binary and `apply` n-ary, though.
+quick aside: fun fact! `curry` in haskell is like `apply` in lisp! consider how currying is implicit in haskell, as `eval` is implicit in lisp, and haskell tuples are lisp lists/pairs. `curry` is binary and `apply` n-ary, though, since `curry` works on duples, and `apply` on lists.
 
 [source,scm]
 ----
 ;; typed racket
 (: f (-> (-> Int String String) Void))
 (: g (-> Int String String Int String String (List Int String String)))
-(f 0 "tom" "cook") or (apply f '(0 "tom" "cook"))
+(f 0 "tom" "nook") or (apply f '(0 "tom" "nook"))
 ----
 
 aside over. now then, this is obviously horrible, especially to refactor. clearly the triple describes a person and should be grouped:
@@ -1706,9 +1721,9 @@ verdict: sequences (lazy lists) and vectors defined by index functions to elemet
 * how commonly do structures sizes change? why?
 * when (and how often) do we know the shape of our data when we initialize it?
 
-=== array-based tacit languages (abtl)
+=== array-based languages
 
-j, apl, burlesque, bqn. sql is array-based but not tacit.
+j, apl, burlesque, bqn, sql.
 
 NB. linux comes with apl keymap: us,apl, dyalog variant, option grp:lswitch.
 
@@ -1721,11 +1736,11 @@ advantages:
 * polymorphic
 * algebraic (viz boolean and [modular] integer rings)
 * suggestive. they're small but *particular* languages.
-* instead of defining polymorphism or kwargs, abtl uses idioms, which can be modified inline as different functionality is desired.
+* instead of defining polymorphism or kwargs, array langs uses idioms, which can be modified inline as different functionality is desired.
   ** relieves burden of designing collections of functions modularly, which usually entails careful forethought about polymorphism, default values, and when functions should be split into multiple smaller functions.
   ** an example is apl's grade operators: they break a sort operation into multiple parts, so that one may easily choose only part of a sorting operation, or the whole thing, without any appreciable difference in effort.
 
-=== abtl algebra (WIP)
+=== array langs algebra (WIP)
 
 * reshaping uses modular arithmetic
 * rather than have a set of structures, we have rows of vectors; each row is a point, and each column a feature.
@@ -1733,7 +1748,7 @@ advantages:
 * (in apl at least) _rank_ differs from _depth_: a matrix (array of arrays) has depth 1 but rank 2. "The length of the shape of an array is equal to its rank. Therefore, we can find the rank of an array with ⍴⍴—the shape of the shape. Since a scalar is rank 0 (i.e it has no dimensions) the shape of a scalar has length 0 and is an empty vector: ⍬"
 * scalar operations are applied to all points without changing shape
 * if α f ω, if α or ω is scalar, then f is applied to all elements of ω or α (this is called _scalar extension_). if both are arrays of the same shape, then f is applied pointwise. _incompatible_ shapes raise an error: if shapes differ, then the smaller shape is repeated until it's the same size as the larger array (in t.racket's `math/array` this is called _broadcasting_). this makes expressions like `1 2 3+(3 2 1) (¯1 ¯2 ¯3) ((44 71 11) 1 (32 0.5) )` valid. this example's β-reduction is `(4 3 2) (1 0 ¯1) ((47 74 14) 4 (35 3.5) )`; `1+` is mapped over `(3 2 1)`, `2+` is mapped over `(¯1 ¯2 ¯3)`, and `3+` is mapped over `((44 71 11) 1 (32 0.5))`.
-  ** this expression is invalid in t.racket's `math/array` (error "expected rectangular data"). however, for arrays of the same shape, broadcasting is obvious: `(array+ (array [1 2 3]) (array [[3 2 1] [-1 -2 -3] [44 71 11]]))` => `(array [[4 4 4] [0 0 0] [45 73 14]])`. see §6.3.1 _broadcasting rules_ for complete spec. i haven't understood the rules technically enough to want to try to find an array representation that accomplishes the same result as the abtl (viz apl) version.
+  ** this expression is invalid in t.racket's `math/array` (error "expected rectangular data"). however, for arrays of the same shape, broadcasting is obvious: `(array+ (array [1 2 3]) (array [[3 2 1] [-1 -2 -3] [44 71 11]]))` => `(array [[4 4 4] [0 0 0] [45 73 14]])`. see §6.3.1 _broadcasting rules_ for complete spec. i haven't understood the rules technically enough to want to try to find an array representation that accomplishes the same result as the array langs (viz apl) version.
 
 again, arrays should be sparse. just as sets may be represented by a predicate adjoined with some ad-hoc enumeration of elements, so can an array. consider the identity matrix; it's defined as [xᵢᵢ=1;0] (shorthand for [xᵢⱼ=i==j]). this is a fn (i,j) → {0,1}. I₄+[xᵢ₂=3;0]=[(j==2?3:0)+i==j]] which is encoded by the exact same bits regardless of size. this is a shape-invariant sparse array. all mostly-symmetric arrays should be mere fns from index to value.
 
@@ -1829,7 +1844,6 @@ we begin by comparing the two. to compare, they should be normalized, which mean
 
 . in the list case, the state is as a loop var, whereas in the sequence case it's hidden in a closure
 . instead of `null?` the sequence version uses `(not (more?))`
-. 
 
 but that's not an enlightened description; it's a plain one—one that sees only what the code is, not what the program is. we aren't reversing some hacky code, here; this is code whose purpose we already know. we can reason about its intent rather than its machinery. it's a function that we can reimplement any way we want so long as it fulfills its purpose. a description of it in cs terms:
 
@@ -1873,3 +1887,5 @@ TODO: likewise investigate justine's other code
 * avoids syscalls
 
 ==== cosmopolitan
+
+TODO

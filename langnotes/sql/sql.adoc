@@ -1,12 +1,13 @@
 == sql
 
-"a wrt b" is sql `select a from x join y on x.a like y.b`. cartesian product is like join w/ union; left join is like join w/intersection. "a wrt b" means "the subset of a that's related to b, and return a & b."
+"a wrt b" is sql `select a from x join y on x.a like y.b`. cartesian product is like join w/union; left join is like join w/intersection. "a wrt b" means "the subset of a that's related to b, and return a & b."
 
 [TODO]
 * what're windows? cf local binds?
 * how to organize/encode data: relations are basically their headers. thus make a table for each shape. whatever data have a common shape belong in the same table.
 * cf j/k db
 * partition this module into relalg, working with data, common exprs (e.g. exists, case), useful compound patterns, and techniques for deriving solutions to given problems
+* does sql have any short-circuiting mechanisms?
 
 sql is an array-based proglang whose sole data structure—the table—generalizes maps and arrays to matrices any subset of whose columns can be indexed. like APL, a table's cell's value can itself be a table. 1D arrays in sql are represented by single columns. objects [structs] are represented by single rows, and arrays of objects are represented by tables. features:
 
@@ -21,7 +22,7 @@ sql is an array-based proglang whose sole data structure—the table—generaliz
 * set-theoretic operations—a very unique feature for arrays!
 * extremely efficient; much easier to reason about performance than using linked lists, hash maps, arrays, etc
 * link:https://www.sqlite.org/json1.html[native JSON support] (introduced in the SQL 2016 standard)
-* null propogation
+* null propogation (e.g. `select 45/null` returns `(null)`)
 * declarative
   ** query-based
   ** reactive programming via triggers
@@ -33,18 +34,21 @@ but appears to lack:
 
 NOTE: sql is case-insensitive!
 
+* though tables' attribute sets are mostly fixed (though they can be updated by `alter table`), creating new tables on the fly is easy: just use `select` to get a subset of attributes or `join` to adjoin!
+* it's appropriate that sql forces everything to be in tables; that's symmetric treatment of singletons & collections. however, a table that implicitly stores global variables like lua's `_G` would be nice.
+
 === (no) lambdas
 
 TODO: revise this section remembering that views are effectively functions, except on a fixed rather than variable table. also discuss fns as parameterized data.
 
-firstly let's identify what a _lambda_ is. a λ is a relation of inputs and outputs. picolisp's λ syntax makes this obvious: `((arg ...) (body ...))`. it's not even special syntax, really; the pil interpreter knows to process an sexpr as a λ if its first element is a list. the best λ syntax is clojurescript's shorthand: e.g. `(%1 + %2)/%3`, which generalizes apl's dfns syntax; these achieve brevity by identifying arguments by ordinals instead of names. a _function_ is exactly a λ, though commonly in programming (namely in languages not supporting λ's), it refers to a special linguistic construct that is _effectively_ just a λ bound to an identifier. as such, in such languages, _functions_ [programming] are just poor implementations of functions [math] i.e. λ's, where the poorness is by senseless asymmetry of how data are treated viz treating functions differently from other data.
+firstly let's identify what a _lambda_ is. a λ is a relation of inputs and outputs. picolisp's λ syntax makes this obvious: `((arg ...) (body ...))`. it's not even special syntax, really; the pil interpreter knows to process an sexpr as a λ if its first element is a list. the best λ syntax (without regard to function composition viz apl trains &c) is clojurescript's shorthand: e.g. `(%1 + %2)/%3`, which generalizes apl's dfns syntax to multiple parameters; these achieve brevity by identifying arguments by ordinals instead of names. a _function_ is exactly a λ, though commonly in programming (namely in languages not supporting λ's), it refers to a special linguistic construct that is _effectively_ just a λ bound to an identifier. as such, in such languages, _functions_ [programming] are just poor implementations of functions [math] i.e. λ's, where the poorness is by senseless asymmetry of how data are treated viz treating functions differently from other data.
 
 fns' advantage is their variability: the locations of both their args and output vary with each invocation, and may even be unnamed (in the cases of an input being a literal or the output of another fn.) thus fns achieve composability. purely tacit langs like joy are purely function based, and thus every arbitrary substring of these programs is a valid function (cf concatenative langs, generally for which any substring of a program is a valid program, but not necessarily a function.) fns can be also seen as a scoping mechanism: `f(a,b)` is seen as variables `a` & `b`, whose meaning is relative to each invocation of `f`. this can be encoded in sql as a table `f(a,b,e)` where each invocation of `f` is a row, and `e` is the location where the output should go. `a`, `b`, and `e` may each be literal values or addresses. this has the side effect of making computation lazy by implicit memoization (namely when `e` is not an address, and it's just stored right there in the table.)
 
-usually λ is an asymmetric linguistic primitive; once a λ is created, it cannot be modified, and no operations exist on it aside from β-reduction by application of provided inputs (which is always at invocation time in strict-eval langs.) this is needless restriction. we _just_ said that λ's are merely relations of inputs & outputs. so why not express them as such?
+usually λ is an asymmetric linguistic primitive; once a λ is created, it cannot be modified, and no operations exist on it aside from β-reduction by application of provided inputs (which is always at invocation time in strict-eval langs.) aside: apl is one of few languages that actually supports truly first-class functions [verbs] which support modification [by adverbs]. this is needless restriction. we _just_ said that λ's are merely relations of inputs & outputs. so why not express them as such?
 
 * picolisp does this; once a λ is defined, it does not become a black box; it remains exactly the list of 2 lists that it ever was. see _fexprs_ in pil docs.
-* some functional langs support this via currying: a binary function is converted into a unary function of a pair of data
+* some functional langs use currying as an isomorphism of a list: (a -> b -> c) -> (a,b) -> c, which corresponds to (a b c) = (a . (b . (c . ())))
 
 we've now restructured λ's as some `eval`-type fn on a relation [of data]. so let's talk about `eval`.
 
@@ -58,7 +62,7 @@ we've now restructured λ's as some `eval`-type fn on a relation [of data]. so l
 
 thus enabling one to express the full λ-calculus, which basically means function _composition_. it does not entail function _modification_!
 
-now try to imagine _first-class_ data: you can declare the data, and you can pass them to functions; no mutation. that's  purely-functional programming. so how is it that even non-pure functional programming retains the same non-mutation limitation, but only for functions instead of other data?
+now try to imagine _first-class_ data: you can declare the data, and you can pass them to functions—no mutation—that's purely-functional programming. so how is it that even non-pure functional programming retains the same non-mutation limitation, but only for functions instead of other data?
 
 this restriction is not necessary. we can have functions and mutation. again, functions are only relations; let's express them as such, and not in some special linguistic, asymmetric way. the only way to do that is for literally _everything_ to be mere relations. in the usual dictonomy of "data and code", this means all data and no code.
 
@@ -74,7 +78,7 @@ TODO: given that we can define fns as views, if we permit paramerizing the query
 
 pseudocode `def f(a,b,c) := (a+b)/c; f(1,2,3)` is sql `create view f as select (a+b)/c from params; insert into params values(1,2,3); select f`.
 
-there are an infinite number of alternative expressions for defining & invoking functions, but ultimately we must group (fn id, param vec, output expr), and be able to invoke the function. to make regular programming into metaprogramming, simply make the function identifier an ordinary datum, e.g. a string; that way function names can be computed from any data. in lisp this is decently easy via `eval` or macros, and in scheme it's more difficult because of they hygeine constraint. hygeine is a concern only because of scope. because all scopes in sql are tables, which all must be named, accidental shadowing is impossible, so hygeine isn't a concern. furthermore, functions may be identifiable by more than a mere string; they may be stored in a table with arbitrary attributes, and we may filter as per usual (e.g. `select * from fns where name = ? and other_attr = ?`) to disambiguate.
+there are an infinite number of alternative expressions for defining & invoking functions, but ultimately we must group (fn id, param vec, output expr), and be able to invoke the function. to make regular programming into metaprogramming, simply make the function identifier an ordinary datum, e.g. a string; that way function names (and table and column names too) can be computed from any data. in fact, for full metaprogrammability _every_ _semantic_ (not necessarily _syntactic_) element must be computable. in lisp this is decently easy via `eval` or macros, and in scheme it's more difficult because of they hygeine constraint. hygeine is a concern only because of scope. because all scopes in sql are tables, which all must be named, accidental shadowing is impossible, so hygeine isn't a concern. furthermore, functions may be identifiable by more than a mere string; they may be stored in a table with arbitrary attributes, and we may filter as per usual (e.g. `select * from fns where name = ? and other_attr = ?`) to disambiguate.
 
 as an ending aside, note that a side-effect of data-only programming is that all computation is delayed, since all computations are only data until explicitly passed to `eval`.
 
@@ -102,7 +106,10 @@ sql is a bit mysterious:
 
 === sql basics
 
-a table A may have a primary key (uniquely identifying set of attributes), and may have a set of attributes that, in another table B, is a primary key; then: this attribute set is called a _foreign key_, B is called the _child_ table, and A is called the _referenced_ or _parent_ table. foreign key is its own concept (as opposed to a column that we can `join` on) because it can be used as a constraint in a table's schema, which is basically a type check that we won't modify columns improperly.
+a table A may have a primary key (uniquely identifying set of attributes), and may have a set of attributes that, in another table B, is a primary key; then: this attribute set is called a _foreign key_, B is called the _child_ table, and A is called the _referenced_ or _parent_ table. foreign key is its own concept (as opposed to a column that we can `join` on) because it can be used as a constraint in a table's schema, which enforces only proper now insertions & updates.
+
+[NOTE]
+primary keys are strange; they enforce uniqueness of each row. however, a row, like any single thing, generalizes to a group of things, which could be encoded as multiple rows sharing a common key.
 
 the beauty of sql is that you don't need to care how you store data; all relations are equally flexible and easy to use. your queries are easy and practically the same regardless of whether you store `x` as an attribute in table `y`, or `y` as an attribute in table `x`.
 
@@ -162,20 +169,166 @@ select * from y_full; -- (1,2,3,20)
 
 you may name the view 'y' & the underlying table _y, or you may name the view e.g. y_full & the underlying one 'y'. consider that you cannot delete, insert, nor update a view; those must be done to the actual table.
 
-=== antipatterns & revisions
+=== design
 
-* the association/mapping `(k . (v1 v2))` should be stored as two records in sql: `create table map(k,v); insert into map values(a,b),(a,c)` 
+match data's logic's invariants with sql invariants e.g. attribute sets, sql column or table constraints. all symmetric data belong in rows, sql's only symmetric aspect.
+
+=== [anti]patterns
+
+==== encoding schemes (relational algebra)
+
+* if you want to store a one-to-some map, e.g. parent -> {child1,child2,...}, then you can (but should not) use a `dependent` attribute. the attribute has multiple values, which may be encoded by multiple rows, e.g. `insert into t(...,dependent) values(...,1),(...,2),...`, but that's quite redundant. a more efficient encoding is to use `parent` instead of `dependent`: `insert into t(...,parent) values(...,1),(...,1),...`. this method inserts each of the parent and all its dependents only once, and all of the dependents' `parent` attributes are the same. in the `dependent` version, all of the parent's attributes except for `dependent` must be redundantly specified per each dependent!
+* using `like` is dubious. using `regex` is almost cetainly bad; you probably want a db designed specifically for text searching.
+* the semantic meaning of an attribute can depend on other attributes e.g. in `person(age integer,alive boolean)`, if `alive` then `age` means number of days alive; else it means number of days since death. furthermore, any of a row's attributes may be used or not depending on its other attributes' values.
+* compress information as much as possible e.g. Y-M-D as just days since some arbitrary start date; that means that dates require only one column. the type `A or B` where A & B are both natural numbers can be encoded as a single integer whose sign determines whether A or B.
 * do not move from one table `a` to another `b` by `insert into a ... where p; delete from b where p`; instead, store all in one table `t`, and have an attribute that designates whether a row would belong to `a` or `b`; then filter on that to effectively get virtual subtables `a` & `b` from `t`.
+* consider encoding schemes' supported partitioning schemes e.g. integer primary key can be generalized to indexed reals. reals can be partitioned by floor.
+* unless uniqueness is required by some algebraic properties of your data, then feel free to see rows in a table as elements of a [multi]set. elements can be grouped [partitioned] by attributes (general prodicate, not just equality), which generalizes "thing at index" to "things with a given property", and set-theoretic operations can be performed for all predicates, and all predicates can be defined of multiple attributes [columns]
+* to delete w/cascade a la foreign key w/o the relation technically being implemented as a foreign key, which would be sensible if the parent table referenced a table whose keys were non-unique, hence all of the referenced table's rows of a common predicate would be deleted:
+  ** solution 1: `after delete` trigger
+  ** solution 2: in sqlite (and maybe other sqls) by using `returning` (non-standand sql), though the returned value is not available as a sql expression; it's usable only by a client program e.g. `(let (rid (sql "delete from parent where id=? returning fk" pid)) (sql "delete from referenced where id=?" rid))`
+  ** `on delete cascade` cascades when the *parent* (the referenced table, the one with [that must have] the primary key) row is deleted, not the child! e.g. with `create table a(a primary key, v); create table b(a references a(a) on delete cascade)` means that deleting one of `a`'s rows will implicitly delete one of `b`'s, but not _vice versa_; for the inverted case, you'll need a trigger; however, if you're considering that, you may want to reconsider how you're structuring your data; you should be able to use foreign key cascades. particularly, remember that it's better to have a `parent` attribute rather than `children`. using this design will help you better decide whether either of your tables should have a primary key. remember that foreign keys are one-to-many relationships; many in `b` may have common foreign keys; deleting their corresponding row in `a` will delete all those corresponding in `b`.
+
+===== TODO's
+
+* how can we encode logical constraints as sql constraints or relations? common constraints are types, lengths, [recursive] predicates
+
+==== sensible querying
+
+sensible means elegant, which implies efficient.
+
+* using a `distinct` query whose result attribute set contains an attribute having a primary key is redundant
+* `distinct` means inefficiency in the form of pruning a query; we've asked for data, then discarded some of it—so why did we ask for it, then?! good schema & query design sees that `distinct` should not be used often.
+* `having` should be used for aggregates only
+* refactor nested queries, _(top-level,nested)_, into a flat one with join.
+  ** this is ostensibly possible generally when _nested_ is:
+    *** `from` one table (i.e. _correlated_)
+    *** used in an `any`, `all`, or `exists` predicate
+  ** if the query planner can determine that uncorrelated subquery returns at least one row, then the query planner should flatten.
+  ** example: refactor `select x from t1 where x = (select y from t2 where p)` into `select x from t1 join t2 where x = y and p`
+* if multiplicity is inconsiderable, then use `union all` instead of `union` because it's faster
+
+==== semantics (sql)
+
+* booleans should always be encoded as a `boolean` type, if that's unfortunately what your sql engine uses; else 0 or 1. never use `null` or `not null` to encode booleans; it's simply incorrect no matter how you measure it.
+* prefer fixed precision (often called `numeric` or `decimal sql`) instead of `float` or `real`. if your engine doesn't support that, then you can emulate it by a table with `num` and `den` columns; or just use fixed-point numerals.
+* ``select``ing a mix of grouped or aggregate with non-grouped/aggregate data is handled differently by each sql engine. it's best to not mix; refactor queries into all-aggregate/grouped or all-not.
+  ** sqlite, perhaps among others, calls non-aggregate columns among aggregates _bare_ columns
+  ** in sqlite at least, bare columns' values are deterministic if only one of `max` or `min` aggregate functions is selected
+  ** see §2.[4,5] of sqlite docs for `select`
+* because sql table identifiers are not first-class (i.e. we cannot, in sql, programmatically generate a table name then reference it i.e. table names must be literal syntax rather than expressions), the only way to keep lisp-grade flexibility [dynamicism] is to use the lisp encoding or something that does not require creation, modification, or reference of a dynamic identifier.
+
+in the following query, `a` is not a bare column because it is in the `group by` clause, so `a`'s value is properly determined in the result set:
+
+[source,sql]
+----
+sqlite> create table x(a,b);
+sqlite> insert into x values("x",1),("x",2),("y",34),("y",65);
+sqlite> select a,sum(b) from x group by a;
+┌───┬────────┐
+│ a │ sum(b) │
+├───┼────────┤
+│ x │ 3      │
+│ y │ 99     │
+└───┴────────┘
+----
+
+according to sqlite v3.39's `select` docs, §2.4, `group by` associates each row with a group. `select a,f(b) from t group by e` where `e` is an expression that uses [only?] `a`, should be a common idiom. idk how `select` behaves if `e` uses multiple column ids. 
+
+==== using sql engines efficiently
+
+* query attributes' order should match a compound index's. not sure if this applies to ordering only in `order by` or if it's important in the selection attributes, or elsewhere,...? or for which engines this is a concern. furthermore, i saw an example whose order was opposite the index, so what's that about?
+* except in `count(*)`, the asterisk form is inefficient and its abstraction can cause problems when schemata are modified
+* as tables become large, `exists` becomes faster than `distinct`. refactor `select distinct * from t1,t2 where t1.x=t2.y` into `select * from t1 where exists (select 0 from t2 where x=y)`. 0 is a dummy value; we use `exists` to determine whether its argument query is empty, and we _must_ `select` _something_, so we choose a dummy value.
+* `having` forces the query planner to not use indexes. refactor `select x,y from t group by z having w` into `select x,y from t where w group by z`
+* `in` is more efficient (b/c it uses indexes) than `or` *when the `in` list contains only constants*. e.g. `x=1 or x=2` is better as `x in (1,2)`
+
+==== recepies / particular use cases
+
+* a ⊂ b (i.e. all a are in b) is said as `a in b`
+* x ∈ a ∧ x ∈ b (i.e. at least one of a's elements is in b) is rephrased into x ∈ a ∩ b, which is `x in a intersect b` in sql
+* use views to act as recursively-defined tables by defining the view in terms of `with recursive ... select ...`
+* rather than store filepaths, store their contents as blobs; this way deleting an item from the db actually deletes the file, as one would probably expect.
+
+===== TODO's
+
+* how to (especially efficiently) produce a shuffle of a table?
+* suppose i've a table `t(a,b,c,...)`, and i want to effectively `with x(x) as (select * from t where p) select sum(a)/x,sum(b)/x,sum(c)/x,... from t`; how to do this for arbitrary number of `a,b,c`, and how to effectively do `(apply / '(sums union all x))`?
+  ** we'd need to store a,b,c,... in rows....
+
+==== attributes with multiple values (wip)
+
+NOTE: developing this example is halted until i thoroughly study relational algebra, and take a course in sql from a seasoned professional. also consider the dependents/parent fact stated above.
+
+not all tables are rectangular. sometimes we want to store tables within other tables i.e. have attributes each with multiple values. to effectively do this, we store, in each row, a _pointer_ to another table's row, which will contain multiple data for that attribute. for this example, we'll consider the song _Gold Digger_, which two artists—Kanye West and Jamie Foxx—which sits in a table `songs(title,artist,album)`
+
+one non-solution is storing artist as a string e.g. `"Kanye West feat. Jamie Foxx"` or `"Kanye West, Jamie Foxx"`, then searching on `artist like "Kanye West" and artist like "Jamie Foxx"`. this fails because `like` may match an inappropriate substring, e.g. i search for "James" (the artist who sang the 1990's hit, _Laid_) but also get songs by James Blunt, since `"James" like "James Blunt"`. the solution would be to use `=`, but that obviously fails.
+
+we need a solution that properly stores multiple data as multiple data—namely rows. thus `artist` would be a foreign key to an `artsts` table and there'd be, for every song, one row per artist, e.g. `insert into songs(title,artist,album) ("Gold Digger",1,1),("Gold Digger",2,1)` which reference `(1,"Kanye West"),(2,"Jamie Foxx")` in `artists`. the full code follows:
+
+[source,sql]
+----
+create table songs(id integer primary key, title);
+create table albums(id integer primary key, album);
+create table artists(id integer primary key, artist);
+create table lib(title integer references songs(id), artist integer references artists(id), album references albums(id));
+insert into artists values(1,"Kanye West")       , (2,"Jamie Foxx"), (3,"James"),        (4,"James Blunt");
+insert into albums  values(1,"Late Registration"), (2,"The 90's")  , (3,"Back to Bedlam");
+insert into songs   values(1,"Gold Digger")      , (2,"Laid")      , (3,"Billy");
+insert into lib(title,artist,album) values(1,1,1),(1,2,1),(2,3,2),(3,4,3);
+select songs.title,artists.artist,albums.album from lib join songs on lib.title=songs.id
+                                                        join artists on lib.artist=artists.id
+                                                        join albums on lib.album=albums.id;
+┌─────────────┬─────────────┬───────────────────┐
+│    title    │    name     │       title       │
+├─────────────┼─────────────┼───────────────────┤
+│ Gold Digger │ Kanye West  │ Late Registration │
+│ Gold Digger │ Jamie Foxx  │ Late Registration │
+│ Laid        │ James       │ The 90's          │
+│ Billy       │ James Blunt │ Back to Bedlam    │
+└─────────────┴─────────────┴───────────────────┘
+select songs.title,artists.artist,albums.album from lib join songs on lib.title=songs.id
+                                                        join artists on lib.artist=artists.id
+                                                        join albums on lib.album=albums.id
+                                               where artists.artist="Kanye West" or artists.artist="Jamie Foxx";
+-- NEXT: vary the recursive query to produce #(("Gold Digger", "Kanye West, Jamie Foxx", "Late Registration"))
+with recursive
+  x(id,ps) as (select id+1,value from c where id=1),
+  acc(id,ps) as (select * from x
+                 union all
+                 select id+1,printf("%s %s",ps,value)
+                 from acc natural join (select * from c where id>1))
+select ps from acc order by id desc limit 1;
+----
+
+. we need to store each song as having its own `id` because it's possible, though unlikely, that two artists that did a song together also each did two different songs of the same name on different albums. actually, even crazier: for a few (artist,album)s in my library, there are two different songs of the same name.
+
+.no need to organize data
+
+if you've having trouble organizing your table schemata, you can always use a simple but inefficient encoding in one table. considering the last example differently: say that you want a music db, and you first suppose that artists have albums, and albums have songs; thus your songs should foreign key ref an album, and likewise an album should ref an artist. simple. oh, wait, though; some songs have no albums, and some albums (or songs) have multiple artists. rather than worry about how to "solve this problem," just `create table songs(name string, artist string, album string)` without worrying about foreign keys. any song can now support multiple artists by using multiple rows e.g. `insert into songs values("Gold Digger","Kanye West","Late Registration"),("Gold Digger","Jamie Foxx","Late Registration")`. this encoding is less efficient, but simple, and works; it's therefore useful for encoding data while you're sill developing your database. obviously we can make this more efficient just by making `album` an `integer` which is a foreign key to a table `albums(id,name string)`.
+
+.alternative: lisp encoding
+
+[source,sql]
+----
+-- general lisp encoding tables: lists & atoms
+create table lists(id integer primary key, parent integer, foreign key (parent) references lists(id));
+create table atoms(value,                  parent integer, foreign key (parent) references lists(id));
+
+-- song-specific stuff. by lisp alists, this would be (songs . ((name album)))
+create table songs(name string, artist string, album string, foreign key (album) references albums(name));
+insert into lists values(1,null),(2,1);
+insert into atoms(a,1),(b,1),(c,2),(d,1);
+---- 
+
+NOTE: lisp encoding cannot accomodate multiple indexes.
 
 === language design problems (inelegance & inability)
 
-consider `select aapl.c,goog.c from aapl join goog on aapl.d=goog.d`. note how verbose this would become if i were to consider an arbitrary number of tables, despite that being a simple idea. the problem is that columns are not row types; they're less flexible. furthermore, that sql cannot transpose is a serious limitation! indeed, this lang-specific asymmetry limits the metaprogrammability of sql. this certainly is what makes sql bound to being poor, while the relational db model is good.
+consider `select aapl.c,goog.c from aapl join goog using d`. note how verbose this would become if i were to consider an arbitrary number of tables, despite that being a simple idea. the problem is that columns are not row types; they're less flexible. furthermore, that sql cannot transpose is a serious limitation! indeed, this lang-specific asymmetry limits the metaprogrammability of sql. this certainly is what makes sql bound to being poor, while the relational db model is good.
 
-there are multiple scoping mechanisms: tables and `as`, at least.
-
-columns in a select statement must be hardcoded. i cannot, for example, say `select (cond col1="x" => col2,col3; col1="y" => col3; ...; else *) from t`.
-
-there's neither support for naked variables (e.g. `x := 3` not explicitly of a table) nor eponymous tables (or views) e.g. `create table x(x)` (to my knowledge yet.)
+* columns in a select statement must be hardcoded. i cannot, for example, say `select (cond col1="x" => col2,col3; col1="y" => col3; ...; else *) from t`.
+* there's neither support for naked variables (e.g. `x := 3` not explicitly of a table) nor eponymous tables (or views) e.g. `create table x(x)` (to my knowledge yet.)
 
 === relational algebra
 
@@ -217,7 +370,7 @@ union-compatible:: having the same attribute (column) sets
   * left or right
 * division: for relations R & S of headings A & B (without repitition) of degrees m & n respectively, the division R[A÷B]S is a subset of π_A'(R), viz {r[A']: r ∈ R ∧ ∀s ∈ S ∃r' ∈ R : r[A'] = r'[A'] ∧ r'[A] = s[B]}. definitions vary when S is null.
 
-the _theta join_ is a non-primitive operation: x θ y = σ_pred(x ⋈ y), expressed in sql as `select _ from _ join _ on <cond>;`
+the _theta join_ is a non-primitive operation: x θ y = σ_pred(x ⋈ y), expressed in sql as `select attrs from x natural join y where pred;`
 
 the relational algebra is closed under all these operations.
 
@@ -227,6 +380,8 @@ NOTE: *for the love of god, use `BEGIN TRANSACTION` &al*
 
 ==== semantics
 
+* as per sqlite's graphical grammar description for `expr`, `column-value` is a valid `expr`.
+* sqlite stores table schemata as strings rather than as tables (despite the style of `pragma table_info(t)`'s output); this is a design oversight that must be dealt with in a hacky way (see the `alter table` docs)
 * both `0` is falsy in sqlite. anything other than null is truthy. null is neither truthy nor falsy; `select x from t where x` will select truthy `x`; `... not x` will select where `x=0`. in neither case will null x's be returned.
 * when a sqlite db can be opened read-only, we can still create and modify temporary tables
 * everything is a table (multiset of tuples whose positions may be bound to, in a given conext, a name) viz the results of statements, which can be enclosed in parens, e.g. `select * from (select * from mytbl) t`
@@ -235,12 +390,12 @@ NOTE: *for the love of god, use `BEGIN TRANSACTION` &al*
     * this is apparently equivalent to `select * from (select 1 as a from dual union all; select 2 as a from dual union all; select 3 as a from dual) t`
   * _rows_ have no special meaning; they're just singleton tables. all operations are over tables.
     * generally all operations are on the entire table
-* if both args to `/` are integers, then `/` is integer division. `cast(expr to real)/cast(expr to real)` to ensure floating point division.
+* if both args to `/` are integers, then `/` is integer division. `cast(expr as real)/cast(expr as real)` to ensure floating point division. however, it's best to use rational arithmetic (`numeric` or `decimal sql` types, if supported) or fixed point arithmetic, instead of floating point.
 
 [options="header"]
 |==============================================================================
 | sql                 | java 8, math, or scheme
-| `table`             | list of vectors
+| table               | list of vectors
 | `where` & `having`  | filter
 | `group by`          | concatMap (useful for aggregates only)
 | `except`            | \
@@ -250,7 +405,7 @@ NOTE: *for the love of god, use `BEGIN TRANSACTION` &al*
 | `with`              | `letrec`
 | `check`             | guards
 | `join`              | flatmap [TODO: how?]
-| `collate`           | TODO
+| `collate`           | specifies sort fn to be used by `order by`. may be specified in column spec or `expr` grammar
 | `escape`            | TODO
 | `exists`            | whether argument select query returns non-empty
 | `frame-spec` grammar  | TODO
@@ -274,6 +429,7 @@ all joins are refinements of cartesian product. `join` (or comma) is cartesian p
 -- kinda odd that we can't just do create tablet(a1,...) as (values...)
 create table x as with x(a,b) as (values(1,2),("x","y")) select * from x;
 create table y as with x(o,b) as (values(6,"y"),(100,2),(101,"B")) select * from x;
+-- it's honestly probably nicer to instead use separate create table & insert statements
 select * from x left join y using (b);
 ┌───┬───┬─────┐
 │ a │ b │  o  │
@@ -291,6 +447,8 @@ select * from y left join x using (b);
 └─────┴───┴───┘
 ----
 
+in `a left join b`, all of `a`'s rows are present, but some of their corresponding `b` attributes may be null, namely when there _are no_ corresponding `b` attributes.
+
 ==== syntax
 
 `table.attr` disambiguates when `attr` is shared by multiple tables; otherwise attr is resolved against the table of the `from` clause.
@@ -304,6 +462,7 @@ select * from y left join x using (b);
 | &=         | bitwise and assignment
 | ^-=        | bitwise or assignment
 | \|*=       | bitwise xor assignment
+| \|\|       | strcat (casts both args to strings if needed)
 |======================================================================
 
 ===== `create table`
@@ -311,7 +470,7 @@ select * from y left join x using (b);
 * `create table as` still inserts a table into a database. it's used to init a table at declaration time, for convenience.
 * `temp` tables are accessible in the remaining sql script, but is not persistent; it isn't inserted into the database, and so doesn't exist after the sql script that created it finishes execution.
 
-===== functions defined in sql (not in sqlite)
+===== user-defined functions (not supported by sqlite)
 
 [source,sql]
 ----
@@ -350,6 +509,7 @@ should be called `any`, but oh, well. `exists <select-stmt>` checks whether the 
 * ifnull(<col>,<val>)
 * isnull(<col>) -- returns bool. called nvl on oracle.
 * coalesce(<col>) -- 1st non-null value in a list. generalizes `ifnull` to accept multiple values each of which may be null (though it'd be expected that at least one isn't)
+  ** it's common to supply a default literal value as the last arg. this guarantees prevention of null propogation
 
 ====== constraints
 
@@ -385,16 +545,7 @@ all constraints can be added or dropped via `alter table` or can be added in `cr
 
 ===== union
 
-union tables' rows. valid only for tables of equal column sets. `union` returns sets; `union all` returns multisets.
-
-==== views (named, non-parameterized select functions)
-
-[source,sql]
-----
-create view [<name>] as select ... ; -- the view name is whatever, including spaces, delimited by brackets
-----
-
-NOTE: `as` is optional for aliasing table names: `tbl as x` is equivalent to `tbl x`.
+union tables' rows. valid only for tables of equal column sets. `union` returns sets; `union all` returns multisets and preserves order like ++.
 
 ==== `with` & recursion (common table expression (CTE) subquery refactoring)
 
@@ -511,7 +662,38 @@ select * from y;
 * <create | drop> db
 * <create | drop> table
 
-==== compound examples
+==== compound or miscellaneous/general examples
+
+.units
+
+[source,sql]
+----
+create table to_mg(oz,g);
+insert into to_mg values(28349.5,1000);
+select 3*g,12*oz from to_mg;
+
+----
+
+this sees using a table as a simple ad-hoc relation. obviously the symmetry constraint here restricts the table from holding expressions beyond mere literal values. such functionality would require first-class λ's or `eval` (see sql metaprogrammability section.)
+
+.merge with default value
+
+[source,sql]
+----
+create table x(id,y);
+create table y(id,z);
+insert into x values(0,1),(1,20);
+insert into y values(1,10),(20,40);
+insert into x values(10,100);
+select y,case when z is null then 2000 else z end as z from x left join y on x.y=y.id;
+┌─────┬──────┐
+│  y  │  z   │
+├─────┼──────┤
+│ 1   │ 10   │
+│ 20  │ 40   │
+│ 100 │ 2000 │
+└─────┴──────┘
+----
 
 .get successive integer 
 
@@ -742,7 +924,7 @@ it's likely in your best interest to add csvs as tables into a db, then use sql 
 .describe a table
 
 |===
-| sqlite | `pragma table_info(tableName);` (don't quote the table name)
+| sqlite | `pragma table_info(tableName)` //NOTE: no effect if tableName ∉ db
 | mysql  | `describe tableName`
 |===
 

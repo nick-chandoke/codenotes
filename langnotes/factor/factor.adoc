@@ -52,6 +52,7 @@ continue on page 49 of factor.pdf
 === env
 
 * `USE: <lib>` imports a lib. `USING: <lib> ... ;` imports many.
+  ** *put space between last lib and `;`*
 * see `QUALIFIED:`, `FROM:`, `EXCLUDE:`, AND `RENAME:`, too.
 * `IN:` defines a module
 

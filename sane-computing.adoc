@@ -1,5 +1,7 @@
 == sane computing
 
+TODO: check-out link:https://fossil-scm.org/home/doc/trunk/www/index.wiki[fossil], a vcs bespoke for sqlite, that uses a sqlite db instead of `.git/`
+
 see also _sane os_, _best paradigms_, and _just use lists_. this document discusses the user's experince with using a computer—common tasks like writing & reading information, configuring their system, communication among code, guarding themselves against incorrect operations, recovering from accidents, communicating with other machines, extending the functionality of one's machine, &c.
 
 this document expects all users to program, but for programming to be no more difficult than the problem that the program aims to solve i.e. the programming itself is trivially simple, and in fact quite fun, since it should use notation much superior to natural language, and is beautiful. anything else is inadmissable.
