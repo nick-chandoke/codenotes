@@ -7,7 +7,7 @@
 * how to organize/encode data: relations are basically their headers. thus make a table for each shape. whatever data have a common shape belong in the same table.
 * cf j/k db
 * partition this module into relalg, working with data, common exprs (e.g. exists, case), useful compound patterns, and techniques for deriving solutions to given problems
-* does sql have any short-circuiting mechanisms?
+* does sql have any short-circuiting mechanisms? `case` has certain evaluation order but is not short-circuiting; if one branch is taken, there's no guarantee that the other branches' predicates aren't evaluated.
 
 sql is an array-based proglang whose sole data structure—the table—generalizes maps and arrays to matrices any subset of whose columns can be indexed. like APL, a table's cell's value can itself be a table. 1D arrays in sql are represented by single columns. objects [structs] are represented by single rows, and arrays of objects are represented by tables. features:
 
@@ -79,6 +79,8 @@ TODO: given that we can define fns as views, if we permit paramerizing the query
 pseudocode `def f(a,b,c) := (a+b)/c; f(1,2,3)` is sql `create view f as select (a+b)/c from params; insert into params values(1,2,3); select f`.
 
 there are an infinite number of alternative expressions for defining & invoking functions, but ultimately we must group (fn id, param vec, output expr), and be able to invoke the function. to make regular programming into metaprogramming, simply make the function identifier an ordinary datum, e.g. a string; that way function names (and table and column names too) can be computed from any data. in fact, for full metaprogrammability _every_ _semantic_ (not necessarily _syntactic_) element must be computable. in lisp this is decently easy via `eval` or macros, and in scheme it's more difficult because of they hygeine constraint. hygeine is a concern only because of scope. because all scopes in sql are tables, which all must be named, accidental shadowing is impossible, so hygeine isn't a concern. furthermore, functions may be identifiable by more than a mere string; they may be stored in a table with arbitrary attributes, and we may filter as per usual (e.g. `select * from fns where name = ? and other_attr = ?`) to disambiguate.
+
+NOTE: scoping is a concern in sql queries, e.g. how a table alias (by `as`) is usable in a `where` clause. also, subqueries have access to outer queries identifiers.
 
 as an ending aside, note that a side-effect of data-only programming is that all computation is delayed, since all computations are only data until explicitly passed to `eval`.
 
@@ -178,6 +180,11 @@ match data's logic's invariants with sql invariants e.g. attribute sets, sql col
 ==== encoding schemes (relational algebra)
 
 * if you want to store a one-to-some map, e.g. parent -> {child1,child2,...}, then you can (but should not) use a `dependent` attribute. the attribute has multiple values, which may be encoded by multiple rows, e.g. `insert into t(...,dependent) values(...,1),(...,2),...`, but that's quite redundant. a more efficient encoding is to use `parent` instead of `dependent`: `insert into t(...,parent) values(...,1),(...,1),...`. this method inserts each of the parent and all its dependents only once, and all of the dependents' `parent` attributes are the same. in the `dependent` version, all of the parent's attributes except for `dependent` must be redundantly specified per each dependent!
+  ** this doesn't generalize to multiple "parents" (tables referencing the "child" table), as that'd mean adding to the referenced table a column per referencing table.
+  ** consider `s(id)` & `t(id,s references s(id))`. this is redundant; we can leverage the fact that `t` already has an `id`. this is the parent pattern again; if we were to describe this as JSON, then type `t` would contain subobject of type `s`. in sql it's better to have subset `s` reference superset `t`: `t(id)` & `s(t references t(id))`, which uses only one `id`. i use `references` (foreign keys) here when the referenced attribute is a primary key. if it isn't a primary key or even isn't unique, then we can still `join` on it and use triggers instead of trigger-like foreign key constraints such as `on delete [...]`.
+    *** one fewer attribute upon which we'd join means one fewer index, too.
+    *** this makes insertion order a bit more intuitive: rather than needing to insert the subsets firstly so that the superset can reference them, we insert the superset firstly, then the subsets secondly.
+    *** this scheme is not possible if the superset may have a value other than a foreign key, e.g. `t(s)` where `s<0` is just a number, but `s>0` is a foreign key. the closest way to use the subset-references-superset encoding with this schema is for the subset to have an attribute for the superset's value, e.g. `t:{s:<int|{a:int,b:string}>}` (adt `T = S Int | AB Int String`) as `t(s)` & `s(id,s integer,a integer,b string)` constrained to `s is null or (a is null and b is null)`. the former version would require joining on a `case` clause, which would not use indexes, whereas the latter would join on `id` which, if indexed, would make for a much more efficient [left] join; the `case` would be deferred to after the join, performed on the joined table.
 * using `like` is dubious. using `regex` is almost cetainly bad; you probably want a db designed specifically for text searching.
 * the semantic meaning of an attribute can depend on other attributes e.g. in `person(age integer,alive boolean)`, if `alive` then `age` means number of days alive; else it means number of days since death. furthermore, any of a row's attributes may be used or not depending on its other attributes' values.
 * compress information as much as possible e.g. Y-M-D as just days since some arbitrary start date; that means that dates require only one column. the type `A or B` where A & B are both natural numbers can be encoded as a single integer whose sign determines whether A or B.
@@ -197,6 +204,42 @@ match data's logic's invariants with sql invariants e.g. attribute sets, sql col
 
 sensible means elegant, which implies efficient.
 
+* prefer join over subqueries e.g. `select a,(select b from t2 where a=b)) from t1`, or subqueries in a `case` clause; and prefer `in` over `=`, as these support multiple values
+  ** the subquery-to-join refactoring pattern is `select (select x from t2 where p) from t1` becomes `select x from t1 join t2 where p`. if `x` & `y` don't have common predicate `p`, e.g. there's a unique `y` identified by `p`, but no `x` satisfies `p`, then use a left join and append `or x is null` to `p`; this new predicate will see the _rows_ for which it holds be returned, then from those rows either `x` or `y` will be chosen, and both will be available; `y` is always available, but `x` may be `null`. either way, the important thing is that the _row_ is in the result set.
+
+.example: use join rather than subqueries
+[source,sql]
+----
+select * from x;
+┌───┬───┐
+│ a │ b │
+├───┼───┤
+│ 1 │ 2 │
+│ 3 │ 4 │
+│ 5 │ 6 │
+│ 7 │ 5 │
+└───┴───┘
+select * from y;
+┌───┬────┐
+│ b │ c  │
+├───┼────┤
+│ 2 │ 20 │
+│ 5 │ 50 │
+└───┴────┘
+select a,b,case when c is not null then c else 20 end as 'c or 20' from x join y using (b);
+┌───┬───┬─────────┐
+│ a │ b │ c or 20 │
+├───┼───┼─────────┤
+│ 1 │ 2 │ 20      │
+│ 7 │ 5 │ 50      │
+└───┴───┴─────────┘
+----
+
+then use `where` to select a particular row. another possible condition is, instead of `c is not null`, `c>0` where `c<0` denotes an element of a sum type but `c>0` denotes that `c` is a product type, which in sql is encoded as a datum upon which we can join with a table of named tuples.
+
+''''
+
+* suppose that table `t(x)` has one row and table `s(y)` has many rows. if you want to x+sum(y), do `select min(x)+sum(y) from t join s` (or use `max` instead of `min`); `x` will be `count(y)` duplicate rows, but to avoid bare columns, we select one of `x`'s rows, and only `min` and `max` select one row without regard to other rows.
 * using a `distinct` query whose result attribute set contains an attribute having a primary key is redundant
 * `distinct` means inefficiency in the form of pruning a query; we've asked for data, then discarded some of it—so why did we ask for it, then?! good schema & query design sees that `distinct` should not be used often.
 * `having` should be used for aggregates only
@@ -207,16 +250,23 @@ sensible means elegant, which implies efficient.
   ** if the query planner can determine that uncorrelated subquery returns at least one row, then the query planner should flatten.
   ** example: refactor `select x from t1 where x = (select y from t2 where p)` into `select x from t1 join t2 where x = y and p`
 * if multiplicity is inconsiderable, then use `union all` instead of `union` because it's faster
+* use indexes in `where` &al clauses. e.g. if `a` is indexed, `where f(a)=b` will not use the index! you'd need to have indexed `f(a)`. predicates like `between`, comparison operators, and `like` use indexes. some functions like `min` & `max` should use indexes, too.
+* aliasing all tables and using qualified attributes is safer than not; it ensures that you don't accidentally use a wrong attribute that happens to be in scope from another table; if you were to use a qualified attribute name, then you'd get an error saying that that table does not have said attribute.
+* `where` is evaluated after joins; if your join lacks results, consider moving your `where` predicate into the join clause
+* `[not] in` is fine if you're using literals, but if its arg is a subquery, that's an antipattern; use `except` or left join with `where is [not] null` instead.
 
 ==== semantics (sql)
 
 * booleans should always be encoded as a `boolean` type, if that's unfortunately what your sql engine uses; else 0 or 1. never use `null` or `not null` to encode booleans; it's simply incorrect no matter how you measure it.
 * prefer fixed precision (often called `numeric` or `decimal sql`) instead of `float` or `real`. if your engine doesn't support that, then you can emulate it by a table with `num` and `den` columns; or just use fixed-point numerals.
+  ** at least in sqlite, `floor` retains a real if any real was part of the return expression; if the expression was composed entirely of integers then `floor` is redundant and returns an integer.
 * ``select``ing a mix of grouped or aggregate with non-grouped/aggregate data is handled differently by each sql engine. it's best to not mix; refactor queries into all-aggregate/grouped or all-not.
   ** sqlite, perhaps among others, calls non-aggregate columns among aggregates _bare_ columns
   ** in sqlite at least, bare columns' values are deterministic if only one of `max` or `min` aggregate functions is selected
   ** see §2.[4,5] of sqlite docs for `select`
 * because sql table identifiers are not first-class (i.e. we cannot, in sql, programmatically generate a table name then reference it i.e. table names must be literal syntax rather than expressions), the only way to keep lisp-grade flexibility [dynamicism] is to use the lisp encoding or something that does not require creation, modification, or reference of a dynamic identifier.
+* `x not in (select a from t)` may return ∅ if the `select` returns a set containing `null`; the whole query would translate to `x not in (b,...,null)`, which is equivalent to `not(x=b or x=... or x=null)`. in 3-valued logic, which sql uses, `x=null` is an expression involving `null`, so the whole expression evaluates to `null`. the solution is to use `exists`, which uses 2-valued logic. other solutions are `except`, `where x is not null`, or, if your sql engine supports it, `left outer join`
+* predicate evaluation order is nondeterministic e.g. in `isint(a) and a > 0` may fail with "can't apply > 0 to string" since that may be evaluated before `isint`. cte's are not a solution; they suffer from the same non-deterministic evaluation order. `case` is a solution because it has definite evaluation order.
 
 in the following query, `a` is not a bare column because it is in the `group by` clause, so `a`'s value is properly determined in the result set:
 
@@ -242,6 +292,7 @@ according to sqlite v3.39's `select` docs, §2.4, `group by` associates each row
 * as tables become large, `exists` becomes faster than `distinct`. refactor `select distinct * from t1,t2 where t1.x=t2.y` into `select * from t1 where exists (select 0 from t2 where x=y)`. 0 is a dummy value; we use `exists` to determine whether its argument query is empty, and we _must_ `select` _something_, so we choose a dummy value.
 * `having` forces the query planner to not use indexes. refactor `select x,y from t group by z having w` into `select x,y from t where w group by z`
 * `in` is more efficient (b/c it uses indexes) than `or` *when the `in` list contains only constants*. e.g. `x=1 or x=2` is better as `x in (1,2)`
+* columns that you'll join should be indexed
 
 ==== recepies / particular use cases
 
@@ -418,7 +469,8 @@ TODO: consider (in `expr` grammar):
 all joins are refinements of cartesian product. `join` (or comma) is cartesian product. `join on <pred>` filters cartesian product to those matching `pred`. `join using attrs ...` is shorthand for `join on t1.attr=t2.attr ...`. `natural join` is shorthand for `join using X` where `X` is the intersection of tables' attributes.
 
 * `inner` & `cross` are redundant; just say `join`. however, as a non-standard sqlite feature, `cross` prevents query optimizer from reordering input tables.
-* `outer` applies only to `left`, `full`, and `right` joins. `outer` is redundant.
+  ** `cross` join means "cross product" as in cartesian product
+* `outer` applies only to `left`, `full`, and `right` joins. idk what `outer` is.
   ** `inner` is inapplicable to `left`, `full`, and `right` joins. 
 * `left` join is just `join` unless an `on` or `using` clause is provided.
 * `full` & `right` are currently unsupported in sqlite; at least `right` is redundant: `x right join y <join-clause>` = `y left join x <join-clause>`

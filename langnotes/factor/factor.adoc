@@ -4,22 +4,29 @@
 * concurrency
 * cf joy viz binrec or lacking lambdas. the combination of being stack-oriented _and_ being tacit might be particularly interesting....
 * cf link:https://forth-standard.org/[forth] viz wrt efficiency
+* what is god's name does _quotation's stack effect does not match call site_ mean?
 
 continue on page 49 of factor.pdf
 
 === design
 
-* like scheme ([non-pure] functional, code is data (quote & eval, custom syntaxes)) but:
+==== language
+
+* constrained design is generally bad (viz here using the stack—a quite constrained data structure). however, constraint is useful when we don't need to go outside the constraints anyway. in this way factor provides a simple model (stack) for the common cases but allows a simple arg-binding syntax for when that's more elegant.
+* cf apl: good: metaprogrammable; bad: typed, verbose
+* not an array lang. lang features plurality. however, at least it uses virtual sequences, i.e. functions from index to element.
+* stack, no neither functional nor stateful
+* syntax macros are called _parsing words_. the `syntax` vocabulary contains many.
+* extremely good [syntax] macros! an ideal mix of rebol & lisp macros.
   ** backslash is needed to refer to a fn without execution e.g. `\ drop` pushes `drop`; `drop` alone would execute it. `\ drop` is different from `[ drop ]`.
-  ** no parens!
   ** quotations are sequences
-  ** easily examine the whole program state in the debugger
-  ** can pass around macros like any other data
-  ** good, _flexible_ (somewhat implicit by generic words, mixin classes & instances) oop support (like cl)
-    *** this is how we do ad-hoc relations. this makes encoding ad-hoc polymorphism easy, so we can have haskell-like concision but without haskell's restrictions.
-      **** programs are often prolog-like: small facts (except here fns) that are used like a vocabulary; more code re-use than big, specialized chunks of code.
-  ** stack instead of applicative
-* NB. named local binds is implemented as a factor macro (so they're expanded before runtime). same for square and curly brackets, quote marks, and colon for fndefs. (meta-circular)
+  ** the following are is implemented as factor macros, so they're expanded before runtime: named local binds, square and curly brackets, quote marks, and colon for fndefs. (meta-circular)
+* like lisp, factor is a data-based lang. however, factor [stack] is simple enough that we can easily examine the whole program state in the debugger!
+  ** debugging steps through ops and shows the stack at each op
+* can pass around macros like any other data; unlike in lisp, macros are first-class data.
+* good, _flexible_ (somewhat implicit by generic words, mixin classes & instances) oop support (like cl)
+  ** this is how we do ad-hoc relations. this makes encoding ad-hoc polymorphism easy, so we can have haskell-like concision but without haskell's restrictions.
+    *** programs are often prolog-like: small facts (except here fns) that are used like a vocabulary; more code re-use than big, specialized chunks of code.
 * code is compiled on the fly into highly optimized single static assignment (SSA IR). such a simple lang supports extreme optimization.
   ** use `optimized.` (instead of `.`) to see optimization details of some code
 * extremely good ide: simple, debugger/stepper, inline docs (all local), quickly see everywhere that any word is used, and any word's definition
@@ -29,25 +36,33 @@ continue on page 49 of factor.pdf
 * λ syntax is `::`
 * good unicode support
 * supports dynamic scope!
-* debugging steps through ops and shows the stack at each op
 * postfix; read left to right, e.g. `2 even? [ "OK" ] [ "Cosmic rays detected" ] if` for `2|2 ? "OK" : "Cosmic ..."`
   ** pipeline [unix cmd pipe] design
-* design influenced by forth, joy, cat, oop, metaprogramming
-* like lisp, factor is made for dynamicism: scripting, macros, and repl.
 * like haskell, data are just nullary functions
   ** all syntactic objects are simply called _words_
 * all control flow is `if` branching or recursion
   ** both branches of `if` must have the same stack effects
   ** factor guarantees tail-call optimization!
 * excepting row-polymorphic combinators and macros, all words must accept and output a fixed number of words
-* latently typed
-* has static stack checking in addition to dynamic type checking
-* program is words pushed to the stack from left to right, which is naturally also function composition (like other stack langs)
+* latently typed w/dynamic checking, static stack effect checking
 * modules are called _vocabularies_
   ** for maximum flexibility & interactivity, even private identifiers are usable in greater contexts if explicitly referenced
   ** like java public classes, each vocabulary must be defined in a file of the same name
 * factor is oop, but all methods are generic
-* uses _virtual sequences_, i.e. functions from index to element
+
+==== implementation
+
+* the `tools.deploy` vocab allows compiling to native executables which neither require factor to be installed on host nor expose source code!
+
+==== other considerations
+
+* the documentation is usually _astounding_, except that it _never_ features examples. some vocabs have only the technical, auto-generated docs.
+  ** includes word definitions as source code
+* the listener (repl) is super-capable and integrated well with the docs
+* there are _many_ libs builtin (see factor handbook > libraries > vocabular index), and *they're all documented offline in the docs*
+* the docs are updated realtime as vocabs are loaded
+* ffi w/lua
+* has python bindings
 
 === env
 
@@ -56,12 +71,74 @@ continue on page 49 of factor.pdf
 * see `QUALIFIED:`, `FROM:`, `EXCLUDE:`, AND `RENAME:`, too.
 * `IN:` defines a module
 
+=== exploring code & learning factor
+
+NOTE: _ciif_ := "code in input field"
+
+* `#concatenative` on irc.freenode.net
+* start with the factor repl's `help` menu item
+  ** see _developer tools_
+  ** see _all tips of the day_ (factor handbook > developer tools > help system > tips of the day)
+* read the factor source code
+* ^i: see the stack effect of ciif
+* ^w: step through ciif
+* ^t: time execution of ciif 
+* `apropos` e.g. `"group" apropos` (equivalent to searching in the factor handbook [help] search box)
+* familiarize yourself with word naming conventions (handbook > the language > conventions § word naming conventions)
+* `:error` gives most recent error. `:c` to see its callstack
+
 === semantics
 
 * pushing quotations does not use memory
+* `f` is the false value; all others are truthy
+  ** `t` is the canonical truthy value
+
+==== vs picolisp
+
+factor rivals picolisp for simplicity and flexibility. both use implicit state, except that factor's state is usually stored on the stack, and pil's in appropriate variables. both use basic data structures and are equally _flexible_, yet factor is technically a bit more _capable_ since it allows syntax macros like sbuf" hi " instead of `(sbuf "hi")`, which must be an sexp. that's hardly a difference, though. everything in factor is a word and everything in pil is a symbol. both langs use loop primitives instead of manual recursion. pil hasn't generics; _everything_ is lists.
+
+factor is easier to learn than pil, namely because:
+
+* pil's documentation isn't nearly as easy to navigate
+* the pil repl isn't nearly as helpful as factor's
+* pil is far more likely to unceremoniously produce unexpected behavior instead of halting with a helpful error, as factor usually does.
+* pil's handling of symbols (internal, transient, &c) is uncommon and complex or not obvious, nor easily explained, at least by the official docs
+
+having not used factor nor pil considerably much, it still seems clear that pil is smaller (comes with fewer primitives), simpler (again, everything is only lists & `eval`), and even more powerful (more easily (in fewer & terser syntax objects) implements tailored, flexible systems) than factor, enabled by pil's use of arbitrary numbers of variables & implicit state changes rather than having only one variable (the stack). also factor is designed for unix-like oses, and makes system calls easy.
+
+factor's syntax is _maybe_ easier to refactor than pil's, but pil code is terser, which makes it easy to see all at once, and it's indexed by parens, making selecting (e.g. `<a-)>` or `m` in kakoune) logical chunks of code easy. refactoring pil code would be generally more complicated if state is much involved; however, usually state is confined appropriately, e.g. in a loop or control flow expressions like `(while (read) (println @))`. in pil it's trivial to statefully modify any number of stacks (i.e. lists), making is strictly more powerful than factor. given that pil is terser and simpler, and no slower to execute, it is strictly superior to factor. to write maintainable, refactorable, efficient pil programs, the developer must have mastered programming; pil's flexibility permits ugly, buggy programs. factor's limitation limits the number of ways that a program can (or is likely to) be written; thus any developer is likely to write fast, refactorable, idiomatic code; the factor language does not easily support slow, buggy, or messy code.
+
+thus factor is preferable over pil when you want to:
+
+* quickly throw together a script or small program, ensuring before runtime that it works rather than dealing with runtime errors whenever they happen to occur
+* execute code on windows or *nix, especially without requiring the host to have factor installed
+* use a lib function that's conveniently already available in factor, e.g. `math.vectors` or `twitter`
+* enjoy variety of different semantics, syntax, and sensation of reasoning by these, which is mentally & spiratually theraputic
+* force a perspective [basis for reasoning & interpretation] change, enabling you to muse about different code designs
+
+=== special builtins
+
+these are contrasted with non-special builtins; these builtins are not useful in writing programs, but are used to examine programs or otherwise concern the vm or language itself.
+
+* `call`: lisp's `apply` e.g. `[ 2 + ] 4 swap call` produces `6`. in the `kernel` vocab.
+* `curry` e.g. `2 [ + ] curry` produces `[ 2 + ]`
+* of the `prettyprint` vocab:
+  ** `.`: pop & print
+  ** `.s`: print stack
+* `clear`: clear stack
+
+[options="header"]
+|=================================
+| word or syntax | meaning
+| : [...] ;      | define new word (literally `:` sets factor in compile mode until `;`
+| --             | stack effects
+| :: [...] ;     | `:` but either stack effect symbols are locally bound vars or are bound by `val :> id` clauses before the body. requires importing `locals` vocab.
+|=================================
 
 === the repl (the _listener_)
 
+* supports tab completion
+* supports ^p & ^n but not up & down arrows
 * runs as a gui rather than cli program
 * is a client that connects to a repl server
 * tracks the stack for you, which makes easy both working with state and debugging
@@ -69,14 +146,19 @@ continue on page 49 of factor.pdf
 
 === syntax
 
-[source,factor]
-----
-! starts comments
-----
+the only true syntax of the language itself, rather than a syntax implemented in factor itself, is that words are whitespace-delimited. defining words is a user-definable syntax, as are definition suffixes like `flushable`; consider the definition `: pp ( a -- ) . ; flushable`. here we're pushing each word to the stack. `:`, `(`, `--`, `)`, `;` are all just words. after `;` is pushed & evaluated, a definition is left atop the stack. that definition is an argument to `flushable`. one beautiful benefit of such uniform design is that the documentation for _all_ parts of the factor language is uniform and equally accessible by simply clicking on the word in the help docs.
 
-* spaces are required adjacent to delimiters; otherwise, like lisp, they're seen as part of an identifier
-  ** this isn't generally true; that's just how these delimiters were implemented. delimiters are factor macros.
+furthermore factor beats lisp(s except picolisp and possibly some other uncommon, simple lisps) at its own game: factor actually does not distinguish between code & data; all language objects are _words_, which are just strings associated with properties. the only truly core parts of the language are hashtables, tuples, and other primitive data structures. this means that the language is not at its core a language, but instead a simple system of data manipulations i.e. creating & re/moving data and elementary arithmetic; the only other unique aspect of the language that makes it factor is the implicit & simple fact of how the stack is evaluated, viz β-reduction, and its static stack effect checking.
 
+NOTE: primitive words are marked by featuring the `PRIMITIVE:` word in their definitions e.g. `datastack-for` in `kernel.private` vocab.
+
+the _continuation implementation details_ page is very refreshingly overtly simple: "a continuation is simply a tuple holding the contents of the five stacks: [... each of which] can be read and written." no black box. no trepidation about internal complexity, and certainly no external complexity. maybe i've been scarred by racket's docs on continuations, but i know that all languages besides factor that i've encountered have even attempted to be so clean.
+
+* `!` starts single-line comments
+* there is no built-in syntax except that there must be spaces between syntax objects. all delimiters and even strings are [reader] macros.
+* local binds: `[| m n | m n + ]` binds m & n to next-to-top and top stack elems respectively, then uses them to push m+n.
+
+.common delimiter syntaxes
 |===========================
 | {}             | array literal
 | []             | quotation (like lisp)
@@ -149,13 +231,17 @@ three types of classes:
 
 primitive & tuple classes use >> & << (but not derived ones?)
 
-=== common fns ("words")
+=== common words
 
-.s:: print stack
-.:: pop & print that which was popped
-clear:: clear stack
-drop:: pop
-nip:: remove 2nd stack item
+* `drop`: pop
+* `nip`: remove 2nd stack item
+* `nth`: elem at index or error
+* `?nth`: elem at index or `f`
+* `prefix`, `suffix`: adjoin at head or tail
+* `insert-nth`: insert at provided index, moving latter elements rightward by one index
+* `prepend`, `append`: concatenate 2 topmost sequences
+* `concat`: concatenate elements of a sequence of sequences
+* `join`: intercalate then concat
 
 ==== stack shuffle
 
@@ -194,29 +280,31 @@ bi & tri combinators are a bit more convenient: they eliminate braces or a numbe
 
 ==== control flow
 
+.branches
 |==================================================
 | when   | ... x q -> ... ! side effect q run if x
 | unless | negation of when
 | if     | ... x q u -> ... ! run q if x else run u
 | when*  | ... x q -> ... x ! when but leaves x
+| smart-when* | TODO
 |==================================================
 
 ==== common higher-order fns & loops
 
 * `each`, `map`, `reduce` (fold), `replicate` (scan), `accumulate` (pushes (scan w/o last elem) and (fold's last elem))
-* `x f g produce` scans g over x until not f. while is same but fold rather than scan.
+* `x f g produce` scans g over x until not f.
+  ** `while` is same but fold rather than scan.
+* `while` is a general loop construct. cf apl's ⍣
 
-==== unique to factor
+.filter evens
+[source,factor]
+----
+{ 1 2 3 4 } [ 2 mod 0 = ] filter
+----
 
-[options="header"]
-|=================================
-| word or syntax | meaning
-| : [...] ;      | define new word (literally `:` sets factor in compile mode until `;`
-| --             | stack effects
-| :: [...] ;     | `:` but either stack effect symbols are locally bound vars or are bound by `val :> id` clauses before the body. requires importing `locals` vocab.
-|=================================
+we see that effectively each item in the list is inserted before filter's predicate; then the predicate is applied. thus we get e.g. `1 2 mod 0 =`.
 
-* `[| m n | m n + ]` binds m & n to 2nd and top stack elems, then uses them to push m+n.
+`'[ _ 2 mod 0 = ]` with the `fry` vocabulary tries to do `{ 1 2 3 4 } 2 mod 0 =`.
 
 .mutable vars example
 [source,factor]
@@ -264,6 +352,10 @@ each example here is a 1-liner
 [1,b] product # not even defined as its own function b/c it doesn't need to be; it's not recursive
 ----
 
+=== common designs/patterns
+
+* `x y f g bi` = `g (f x y) y`
+
 === caveats
 
 * `print` doesn't accept numbers (generic word `string-lines` does not define a method for the fixnum class)
@@ -271,3 +363,40 @@ each example here is a 1-liner
 === libs
 
 * for graphics, use cairo; it has bindings to factor
+* see factor documentation > libraries. mah gawd it feel good seeing such a wealth of functionality in one big listing!
+
+=== os
+
+==== subprocesses (`unix.process` vocab)
+
+tl;dr: e.g. `USING: vectors unix.process ; { "echo" "hi" } >vector exec-args-with-path`.
+
+TODO: ask eduardo cavazos (dharmatech in #concatenative) how to use. though perhaps i should check the manpages (§2) for wait, fork, execv &al—online, since nixos doesn't have those (what the fuck?)
+
+i got the following to work:
+
+[source,factor]
+----
+USING: vectors unix.process prettyprint ;
+"/nix/store/ajpn5689vqhczp2mpwmkygrg636wrm8s-system-path/bin/echo" { "echo" "hello" } >vector exec .
+----
+
+god only knows why, despite giving the expected output—a line that says hello—it prints that the stack's head is -1. btw this must be executed in the terminal, not in the listener, since the listener does not capture stdout from forked procs.
+
+i looked at the `underlying>>` docs (since that class was mentioned in an error when i tried the above without `>vector`) then tried some of its instances until i found one that didn't mention any low-level stuff like c-ptr: `sbuf`. `sbuf` was weird, though: it seemed a string rather than a vector of strings. then i found `vector` and yay it worked.
+
+if you use `exec` then you must specify the path to the executable yet still specify its name in the argv's 0th position. also, it appears that only the directory of the path is used, since `"touch"` works instead of `"echo"` just fine, even though we get the ever-dreaded "Quotation's stack effect does not match call site" error if we specify only a directory path.
+
+`exec-args` removes this redundancy:
+
+[source,factor]
+----
+factor -e='USING: prettyprint vectors unix.process ; { "/nix/store/ajpn5689vqhczp2mpwmkygrg636wrm8s-system-path/bin/echo" "hello" } >vector exec-args .'
+----
+
+prints `hello` as expected, but unexpectedly `.` has no effect; no exit code is output. in fact, i may specify the dot any number of times and there's no error of stack underflow; it's just completely ineffectful!
+
+`exec-args-with-path` allows us to specify `"echo"` instead of its pathname. again, putting `.` or `.s` at the end does not a god-damn thing.
+
+==== filesystem
+

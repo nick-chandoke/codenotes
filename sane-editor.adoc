@@ -1,6 +1,6 @@
 == sane data editing
 
-we have extremely good text editors, but no data editors! a data editor is one of the three components of sane computing, the other two being data soup (unordered or implicitly ordered, queryable data) and a good notation/language for expressing data.
+we have extremely good _text_ editors, but no _data_ editors! a data editor is one of the three components of sane computing, the other two being data soup (unordered or implicitly ordered, queryable data) and a good notation/language for expressing data.
 
 the data editor uses (data/structure, views, ops).
 
@@ -8,7 +8,7 @@ the usability/interface could almost certainly benefit from video game ux. indee
 
 it's time to *clearly delimit selection vs editing/creation* where selection has a limited number of choices, supports auto-complete; and creation is general. think of this: in a program, would would you have any non-string fn accept a string as input? no, obviously you'd accept useful structures and accept a structure of args (typically a list or dict) where the args are delimited by syntax. and your search algorithm would traverse a data structure in fewest moves, right? you'd design the structure to support optimal traversals? so why can't i search optimally through a list of valid command lines in fewest keystrokes? why blantantly go against good design for the *single most used, incapable, and _yet_ most capable, method of computer interaction*? anyone nowadays designing anything like the terminal would hopefully be fired! and for the _love of god_, the solution is _not_ to _add_ anything to the terminal! that won't fix it! the terminal is _built_ on horrible _design_—not _implementation_, *_design_*:
 
-* its unit is the character rather than semantic or syntax object. e.g. the command line supports moving cursor to end or start of line, word, or character, but does not recognize `"candy apple"` as a single syntax object; thus i can do alt+backspace to delete a word, but there's no command to delete the prior syntax object (here a string). another sensible actions would be to swap syntax objects.
+* its unit is the character rather than semantic or syntax object. e.g. the command line supports moving cursor to end or start of line, word, or character, but does not recognize `"candy apple"` as a single syntax object; thus i can do alt+backspace to delete a word, but there's no command to delete the prior syntax object (here a string). other sensible actions: swap syntax objects; delete flag argument; delete one set of a flag & its args altogether.
   ** obviously we must be able to edit syntax objects, which may mean jumping into them, which requires, for textual editing, moving the cursor to arbitrary characters. this, however, is editing, not selection.
 * need to know what to type already. new users have no clue. adept users aren't given any; it's expected that they'll _figure out_ how to do anything. the only help we have is autocomplete, which:
   ** is often incorrect e.g. `7z <tab>` autocompleting with filepaths, despite that its 1st arg must be a command of regex `/[adeltux]/`
@@ -17,5 +17,6 @@ it's time to *clearly delimit selection vs editing/creation* where selection has
   ** is strange to code
 * even when graphics are supported, the graphics are flowed in-text; there's no direct rendering mechanism, so what's the point of graphics? it's a gimmick.
 * unlike emacs, the syntax (and autocomplete) for commands is not stored anywhere semantically; a user must read a man page, assume that it's correct (which is only usually is), then type out a command with the possible help of autocomplete, assuming that _that too_ is correct. how about just encoding the syntax into the actual command line parsing code, which is then reflected in the documentation (like `command-line` in racket)?
+* it's insane that every program must write its own command line parser! ripgrep (`rg`) supports `-g <pat>` to match only certain filepaths. does it support `! -g <pat>`, though? `find` does. `not` is obviously a basic primitive. the need for anything, especially something _so basic_, to need to be implemented for every program is absolute insanity. you don't need to do that for any scripting language; all scripts in a scripting lang can be loaded in the repl and...whaddya know!? they all have access to the language's syntax and semantics (without each script needing to implement its own) and basic primitives! _wow!_
 
 an example of something obviously easy yet flexible and undone: upon executing the command line `dothing arg1 arg2 arg3`, the program would highlight arg1 while it's operating on it, then highlight arg2, and so on. the text is already there and parsed-out by whitespace delimitation.

@@ -1,8 +1,14 @@
 == sane computing
 
-TODO: check-out link:https://fossil-scm.org/home/doc/trunk/www/index.wiki[fossil], a vcs bespoke for sqlite, that uses a sqlite db instead of `.git/`
+TODO: check-out link:https://fossil-scm.org/home/doc/trunk/www/index.wiki[fossil], a vcs bespoke for sqlite, that uses a sqlite db instead of `.git/`. cf *dragonfly bsd*'s _hammer_ filesystem (viz b/c it has historic records & mirroring [redundancy] (cf RAID).) remember, though, that any filesystem based on lies (viz disk cylinders) is undesirable. i ideally want no disk partitions and no filesystem, but instead, a datasystem (i.e. a database, though not necessarily a tabular one.)
 
-see also _sane os_, _best paradigms_, and _just use lists_. this document discusses the user's experince with using a computer—common tasks like writing & reading information, configuring their system, communication among code, guarding themselves against incorrect operations, recovering from accidents, communicating with other machines, extending the functionality of one's machine, &c.
+NOTE: i use _data_ and _information_ interchangably.
+
+remember that much like how we want code and not programs, and a database instead of filesystem, we want a distributed os. the pattern here is to avoid (really _defer_) partitioning or other constraint as much as possible. dragonfly bsd seems to be quite good in the respect of being distributed over hardware.
+
+users usually prefer fuzzy search rather than regex.
+
+see also _best paradigms_ and _just use lists_. this document discusses the user's experince with using a computer—common tasks like writing & reading information, configuring their system, communication among code, guarding themselves against incorrect operations, recovering from accidents, communicating with other machines, extending the functionality of one's machine, &c.
 
 this document expects all users to program, but for programming to be no more difficult than the problem that the program aims to solve i.e. the programming itself is trivially simple, and in fact quite fun, since it should use notation much superior to natural language, and is beautiful. anything else is inadmissable.
 
@@ -21,8 +27,9 @@ living, organic, self-sustaining, self-repairing, context [environment]-sensitiv
 * no thing's constraint should affect other things' constraints, unless a constrained group of things is considered, in which case some subset of those things must modify their constraints in order to satisfy the group's constraint.
 * _better than web_ paradigm: rather than http, requests are db queries & responses are some form readable by the db. the *data viewer* program can present & manipulate these responses just as it does of any data.
 * code should be able to be paused. this may happen manually or when an error occurs. a paused program should be 1. manipulable while running, and 2. writable to persistant media; then resumable from either (1) or (2).
-* "data soup" (implicit definition): specify things without regard to order, then allow any order(s) to be calculated. examples:
+* "data soup" (implicit definition): specify things without regard to order, then allow any order(s) to be calculated. metaphorically, prefer identifying/selecting data by pulling out from a pile rather than selecting a cubby hole; in a pile there's just stuff (mass noun) rather than things (countable noun) and delimitation (subset selection) is done on-demand, not on-creation. examples:
   ** a la prolog, specify states (by predicate, even if that predicate is equality with an arbitrary nominal label, "λx. label(x) = such-and-such-state") and maps from states to successor states
+  ** efficiently have multiple files as views of data; we may have many items in a database, and a file that is a function of them all e.g. the data are a set of facts; a (not _the_) file of them is generated on-demand: the facts are sequenced as bullet points in asciidoc format, a corresponding table of contents is generated, then the whole document is converted into html then displayed, all on-the-fly without writing to disk. any number of views may be defined, and they all reference common data, so that nothing must be stored redundantly, and knowledge may be had in any amount, focused on any particular subject, arranged for any particular audience.
   ** hooks are implicit definition: rather than insert an operation at a particular point of execution / control flow in a program, a hook specifies a relation between a (named) point (generally 1+ point(s) satisfying a predicate) of execution context and some function. the hooks of a given execution context usually run in indeterminate order, btw.
   ** put into dbs instead of into a file. for files, you must seek to the correct place (assuming that only one exists) to insert the data; dbs have no such restriction.
 * messaging (async communication among code) is good e.g. π-calculus or racket's thread mailboxes. in fact, generally concurrent systems are best: they're parallel and generalize to being distributed over multiple machines, but most importantly concurrent programs that work tend to have better designs than non-concurrent programs.
@@ -41,6 +48,12 @@ living, organic, self-sustaining, self-repairing, context [environment]-sensitiv
 * no _pipes_; pipes (at least as currently used) support only linear pipelines of byte streams.
 * rows are parsable as collections of distinct attributes
 * can modify more efficiently than files? but databases are stored as files on filesystems; TODO: how can dbs more efficiently reshape themselves than filesystems or files (e.g. editing a csv file, which is a [linear] blob instead of a tree or rope)?
+* supports data soup (see above) instead of files & filepaths. there are more appropriate, elegant, and powerful organization schemes than *linear strings* of data (the contents of any single file) *partitioned into separate chunks* (so no file can share data with other files) whose *names are mandatory* (which leads to inappropriate, misleading, or nonsense names, since some things are anonymous, like how lambdas are more appropriate than named functions; or multiple files are all equally deserving of one name) (and part of the name is dually a _location_; what the hell is that about?) organized in a *tree* structure (which is less capable than a dag or even more generally, a graph). the last constraint is relaxed by hard & soft links, but these are obvious addendums to the scheme and are therefore awkward, forcing us to consider, generally for any filesystem object, whether it's a link, hard or soft, and whether to follow it or not, and whether to delete the linked file or unlink.
+  ** the fact that filesystem paths are dually the separate concepts of location and name causes trouble for globs, making globs potentially unsafe. it also forces us to deal with, for _every single program & function that deals with the filesystem_, recursion, and whether an object is a directory, file, or link. we see this as all programs supporting an optional _recursive descent_ option. it also causes nonsense trouble that shows inconsistency in the filesystem design, such as being unable to write to file at a filepath whose basename is a directory that does not already exist. furthermore, at no fault of the filesystem, but of the developer who wrote the error message, we get the most idiotic & misleading description of this possible: "no such file or directory." that one is simply inexcusable, especially considering that that idiocy has been around for 40 years across multiple forks of unix-like operating systems.
+  ** no filesystem that i know of supports arbitrary/extensible file metadata. that's why still in 2022, `grep` and `find` are our best tools for querying the filesystem. that's ass.
+  ** the sole index that filesystems have is filepath. how about indexing by _data_? if you're lucky enough that your data is simple enough to be organizable by a tree, with data being neatly chunkable where each chunk can be described by a unique name, then good for you; otherwise what'll you do? your best strategy is to adopt naming conventions so that you can find common subsets of files easily e.g. regex `/([a-z]+)([0-9]+).(.+)/` corresponding to 1. a name, 2. a uuid, 3. the file type (and if you want something to be of multiple types, then you'd better ensure that your type string can be matched against multiple regexes, e.g. extension `.media.mp4` matches `/*.mp4/` and `/*.media(.[a-z0-9]+)?/`); this allows you to select media generally or mp4's specifically. massively modifying filenames to support arbitrary predicates does not generalize well! in fact, even this specific example fails: it matches a hidden file called `.media`! as any decent sql user says, regex is an inefficient and error-prone way of selecting data! it's far superior to have each separate attribute stored separately. btw, separateness of data is ok in a sql db because selecting functions of arbitrary subsets is easy, so any data boundaries can be as easily ignored as `cat *`. indeed, any general-use, non-extensible system that doesn't support overlapping predicates is doomed to be a pain, requiring the user to twist their arms just to enable themselves to make the system technically succeed, but painfully so.
+  ** in my experience, it's much more a pain to work with filesystem apis than sql
+* implicative tags (tags plus implication rules) implement subset hierarchies e.g. tagging raviolli as `pasta`, when rule `pasta => food` is defined, makes raviolli match searches for each of both `food` and `pasta`.
 
 ==== tech currently nearest to the ideal
 
@@ -171,3 +184,75 @@ these wares follow the description of sane computing: simple, serverized or main
 * language server protocol (lsp)
 * link:https://w3c.github.io/webdriver/[webdriver]
 * link:https://nyxt.atlas.engineer/article/technical-design.org[nyxt] (uses xml-rpc to bridge controller (nyxt/lisp) & view (webkit))
+
+== sane "os"
+
+TODO: experiment with / use porteus linux, then discuss its design here
+
+unlike _sane computing_, this document deals with code that interfaces with & manages hardware including persistent and volatile memory, graphics cards, drivers, &c. that's what an os is: code that:
+
+. the motherboard firmware (namely uefi) or bootloader runs
+. runs other code
+. allows direct access to hardware or device drivers at varying layers of abstraction
+
+operating systems are not necessary. in fact, they're harmful because they're useless, and anything useless that's enforced is just cruft that you need to navigate around—needless constraint. instead, just have code that is intended to make the system run without the user running the code explicitly—so-called _system code/software/programming_. at some point, though, there must be a _resident monitor_: code that loops infinitely, either running itself or running other code then returning to the infinite loop. after all, we don't want to power-on our computers, let it run a program, then the program's done and the system shuts-down!
+
+oses typically:
+
+* come with libs, but that's not necessary; we should just use external libs, just as we use external programs.
+* run "programs." a _program_ is just code that arbitrarily considers one of its functions as being special; that function is called the _entry point_.
+  ** programs commonly accept arguments, just like functions, except that unlike functions their arguments must all be strings—a useless limitation.
+* describe ways of "managing" programs. this is hardly necessary; no code needs to be managed by other code. in fact, i _want_ to be able to directly interface with hw! that's _simple_ and easy: just write & read bytes.
+
+what an os should be: some code that sends & recieves data from hw, and practically, acts as an abstraction [virtualization] layer to certain hw (e.g. primary and/or secondary memory, physical threads)
+
+given current *nix-inspired designs, the most sane ffi/ipc is either:
+
+. running an external program then reading its output (from stream or other data store)
+. directly using a shared object (in picolisp, since all other langs' ffi's are needlessly not simple/plain)
+. for bytecode of a lang X, writing a small program (or program that writes a program) in X that accepts module/library name/path, function name, and function args, and outputs the result to stdout; then reading from that stdout
+
+.questions
+
+* what's with different oses? the machine code is particular to instruction sets, not oses, right? and all os libs are just code that can run on a given architecture, right?
+  ** e.g. any c program compiled for x86 should run on any x86 chip regardless of os, right? why not? how are machine code blobs loaded into the cpu?
+* is there considerable benefit to _programs_ (meaning _a blob of machine code_) instead of running it dynamically à la picolisp?
+* look at minix again; iirc it gives programs direct access to hw but is fault-tolerant.
+
+.langs that compile to machine code
+
+really, how beneficial is compiling to machine code? i mean obviously machine code is all that actually runs; so basically what varieties of vm are sufficiently efficient, especially for code that we can pause and edit its state then resume it, which is ideal? compare rust, which is extremely optimized but non-dynamic, and picolisp or a stack machine. on modern hw, especially when using matrices to exploit gpus as a main vector of computation, what's a good optimization/hackability tradeoff?
+
+_TODO: see lisps.adoc
+
+=== writing a sane os
+
+see link:https://www.youtube.com/user/Computerphile[computerphile] for vids on low-level computing.
+
+the contending implementation langs:
+
+* scheme48
+  ** failing that, chicken
+* pil
+* link:ulisp.com[ulisp] (μλ)
+* link:http://ferret-lang.org/[ferret] (see link:https://nakkaya.com/2016/06/10/ferret-a-hard-real-time-clojure-for-lisp-machines/[this example project])
+* cl (with one of these compilers: embedded common lisp, clozure, sbcl)
+* link:cons.io[gerbil scheme]
+* nim
+* go
+* asm
+* d
+* spark ada
+
+c didn't make the list because, despite being low-level and simple, it lacks macros, has highly redundant and non-tacit syntax without a macro system capable enough to feasably overcome, and most considerably, relies on compilers to find & link libraries—a task that shouldn't be problematic, but also should be done automatically; neither of these is actually happening, though.
+
+qualifications of the chosen lang:
+
+* system lang
+  ** efficient
+  ** direct hw access
+  ** good semantics & syntax
+    *** hacky (no restrictions; no data types, memory access restrictions, purity, overly-restrictive scoping, &c)
+    *** tacit
+
+compiling should be done only where appropriate (hot-loading machine code would be better) and _linking_ should be considered very uncommonly; rather than have static vs dynamic linking, just have dynamic, and version control everything and/or allow multiple copies of things. linking static libs is not practically better than compiling the lib's source along with other code into one executable; though more efficient, such an efficiency gain is unconsiderable for good, terse code compiling on modern hardware. if linking is to be done, then it should appear to the programmer as simple as importing a racket or lua library. most certainly, at least, having link:http://www.yolinux.com/TUTORIALS/LibraryArchives-StaticAndDynamic.html[separate `.a` and `.so`] types is outright tomfoolery; code is code, and may be either embedded into an executable or dynamically loaded.
