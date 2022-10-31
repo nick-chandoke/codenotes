@@ -1,0 +1,93 @@
+== read this summary before reading any other notes
+
+progress has moved quickly, and how splendidly so, yet so notes are mixes of outdated and recent wisdom, and have greatly redundant content; reading through them all is imprudent. instead, here's a summary so that you know what's important; after reading that you may glance through some notes.
+
+=== summary of leading wisdom (as of oct 31 2022)
+
+.topics
+
+* reductionism vs universalism [done]
+* encodings [done]
+* languages as traversals over structure [wip]
+* the nonsense & truth of metaprogrammability [stub?]
+* stateful servers, not "alloc-do-free" (reductionist) programs [stub?]
+  ** related: programs should be modifiable & debuggable as they run, never crashing, but halting then returning execution to an earlier point. being a server naturally generalizes to the erlang model.
+
+.wisdom one-liners
+
+* avoid constraints that aren't directly implied by the target program spec
+  ** avoid names unless used to identify singleton objects. 
+  ** use sets instead of sequences unless data's order is useful information. sequences relate elements by proximity or by some function of index & value.
+  ** stack is preferable over applicative, but relational or logical is preferable over stack. relational is a set whereas stack is a sequence, so stack is more constrained. applicative is more constrained than stack b/c it distinguishes between inputs & outputs e.g. `/mod + *` in an app/funclang is horrible. also the stack model is tacit, eschewing arbitrary symbols.
+* avoid _explicit_ recursion. don't nest structure, though recursive notation as syntactic sugar is fine.
+* don't scope ever, for the love of god don't do it. please.
+
+`just-use-lists.adoc` is deprecated. it was to favor sexps over structs, which is correct, but inferior to relations, which are less constrained than lists. if extra constraint is desired, then programmer-specified predicates should _imply_ it rather than the programmer try to calculate & specify the structure themselves.
+
+==== reductionism vs universalism
+
+_expounded in `declarative-stack-func-models.adoc`._
+
+i'm studying 3 models in two categories:
+
+* reductionist
+  ** applicative
+  ** stack
+  ** declarative (not necessarily)
+* implicative
+  ** logical (a superset of declarative)
+
+.definitions
+
+_reductionist_ means that a program reduces input to output. declarative programs are constraint solvers; they don't partition data into inputs & outputs. these programs are collections of predicates [facts]. effectively whatever is constrained to a datum literal is an input, and the output is the least-constrained solution space that meets the set of constraints that define the program, which may be optionally intersected with a "query" constraint. the query is not special and no different from the rest of the program which it queries. it's just another constraint. the term exists because it's common for a set of facts to be kept alone as a set of knowledge, upon which many queries can be predicated.
+
+the reason that applicative & stack are necessarily reductionist is that they're defined by a structure to traverse (ast or stack) *and* the traversal is predefined: both β-reductions of the current continuation at the bottom level of tree or top of stack. ast langs are depth-first traversals of structures rooted (for the stack, _rooting_ means that the stack is guaranteed empty there) at main, after top-level statements have been processed.
+
+.interpretations
+
+i prefer to think of reductionist programs as paths through an unknown graph, and declarative programs as an infinitely sized undirected graph; queries identify path(s) through the graph. an undirected edge is equal to a bidirectional edge; in the declarative model, defining a relation can be interpreted as simultaneously defining a morphism and its dual. for example, the `xor` relation:
+
+[source,prolog]
+----
+xor(0,0,0).
+xor(0,1,1).
+xor(1,0,1).
+xor(1,1,0).
+% example query: ?- xor(a, 1, not a) :- xor(a, 1, c) = {a=0,c=1 ; a=1,c=0}. a & c are implicitly universally qualified
+----
+
+[source,sql]
+----
+create table xor(a integer, b integer, c integer);
+insert into xor values(0,0,0),(0,1,1),(1,0,1),(1,1,0);
+-- example query: select a,b from xor where b=1 and c is not a -- returns {(0,1),(1,0)}
+----
+
+we see that "outputs" _determine_ [imply] "inputs" and vice versa. in fact, being ternary, there's no implicit/natural partition into inputs & outputs. in fact, even if we partition into Z × Z → Z, `xor` is commutative! we cannot generally distinguish one input from another. constraining any subset of attributes constrains the other two, and _instantiating_ (the ultimate variety of _specification_ (meaning _to endow with a predicate_)) any two [to a literal datum] specifies the other attribute.
+
+NOTE: sql uses relations (of literal data), not logical variables & constraints! it cannot e.g. optimize away a predicate that's guaranteed to be false. perhaps prolog cannot, either; i'm unsure. perhaps that's what an sat/smt solver would do that prolog does not. regardless, being declarative does not imply being logical! indeed, sql is reductionist & declarative! its queries are traversals of data which will eventually halt for non-virtual tables (tables literally represented by data literals) but _will_ traverse tables, making sql little more than an efficient search/filter on b-trees. sql variables are not abstract symbols; they're syntax that symbolizes to column of literal data, just like a variable in apl symbolizes an array of literal data, or how a symbol in a non-array lang symbolizes a literal datum. the xor example didn't feature general horn clauses of abstract symbols e.g `ancestor(X,Z) :- parent(X,Z) ancestor(Y,Z).`. at least hypothetically prolog could reduce traversals e.g. `0*sum(λx. (x + 1))` to `0` without traversal whereas sql, per its design, not necessarily reflective of codd's relational algebra, would traverse a table, accumulating a result table of increments, then toss it to return a table with a single 0 cell. prolog uses predicates whereas sql uses sets. they're isomorphic algebras, but predicates are a much more efficient encoding, enabling things like `x`, which, being an unbound [unconstrained] symbol, refers to the entire universe of values, which is obviously not expressable in a strict-eval lang. such sets are expressable only by predicates, so we may as well use predicates directly. their algebras are both rings anyway; what more could we care to know?
+
+.in practice
+
+programs are abstract, constrained systems. as a programmer, your sole job is to identify constraints i.e. identify the logically consistent program most similar to the spec given by you or a client. relation ≡ constraint. the simplest constraint on things is for them to belong to a common set. in the relational/declarative models, sets are named e.g. sql table names or prolog predicate names. more complex relations are relations of relations. programs are relations just as mathematical expressions are relations of arbitrary existentially or universally qualified symbols e.g. `∀a b c. a+b/c` where `+` & `/` are not qualified but are still arbitrary; their definition is given by predicates [axioms] that they must match, much like how AND & OR in boolean algebra are defined over existentially and/or universally qualified symbols. btw, as a prolog predicate, `a+b/c` is `/(a,b,o). +(a,b,o). /(+(a,b,x),c,y)` where all but `x` & `y` are specified; the output will be `{x=?,y=?}`. obviously similar to sexps. in sql it'd be `create table add(a,b,x); create table div(c,d,y); select y from div where c = (select x from add where a = $1 and b = $2) and d = $3;`, except that `add` & `div` must be virtual tables, since they contain an infinite number of values (this can be done in sql or c.) any programming beyond that is merely identifying convenient encodings for given relations.
+
+=== encodings & languages as traversals over structure
+
+structure contains the same information as encoding and is a synonym with _relation_ (isomorphic with _predicates_) & _form_. an encoding's efficiency is its lack of redundancy. for example, 2 is an efficient encoding of {x | x ≥ 2}, encodings require interpretation; thus they're syntax. *this is true regardless of whether the encoding is textual or else.* thus _syntax_ is a nonsense; it has no certain meaning more specific than _encoding_. ultimately all data encode some _structure_ and can be _interpreted into some idea_. *the structure is intrinsic whereas the interpretation is subjective.* as `bit-twiddling.adoc` describes, encodings permitting multiple interpretations can be extremely elegant, terse, & efficient.
+
+additional structure can be added for efficiency; generality and specificity are mutually exclusive, and generality generally implies less efficient traversals because more possibilities must be considered so more computation does to deciding/determining. for example, _given that_ we want to sum elements of a set, a list is a more efficient encoding (both textually and literally in memory) than a graph since the graph can express data more general than a list. especially in a language like lisp which is designed to traverse lists, a list is most efficient since it's natural to lisp's evaluation model. these are easy assertions because the sum of a list is no less efficient to calculate (at least on a single thread) than the sum of a set.
+
+TODO: programs as general traversal: a loop & state.
+
+=== the nonsense & truth of metaprogrammability
+
+as mentioned in the prior section (on encodings):
+
+. all is information, encoding, data, related thusly: data is encoded information.
+. syntax is nonsense
+
+if syntax is nonsense, then so are _macros_—syntax endomorphisms. without syntax, there is no distinction between "code & data"; all is data[1], and _code_ is a synonym for _syntax_, so there's no code; again, their definition's fallacy is that there exists a certain property that specifies syntax beyond other data, but truly that does not exist. so rather than "code," reason about __en__coded data/information, which may _represent_ relations [with other information].
+
+''''
+
+[1] proof: by definition, all is information. information, being abstract, must be represented physically to exist physically. by definition, data & encoding are the matter & form that represent information. however, there may be encodings with abstract data, which may implicitly refer to sets of literal data.

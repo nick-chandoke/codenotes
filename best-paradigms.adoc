@@ -1,36 +1,55 @@
 == best paradigms
 
-engrave this everywhere: _all programs are cond, loop, group, select, extract, put._ `fold` is loop, `map` is applying a fn to a group. extract can remove from a list. _loop_ is sequential evaluation of programmatic expressions supporting conditional jump.
+_a discussion of bad, ubiquitous programming practices, and their superiors. this document serves to help one recognize then unlearn bad practices._
+
+all programs are: cond (asymmetric exception), loop (when considering program as state machine), group, select, extract, put._ _extract_ removes from a structure and generalizes `split-at`, `partition`, &c. `put` generalizes insert & create.
+
+a/symmetry can be seen in a map (alist) vs the `map` function (one fn over all data, where application to each datum does not affect other data in the structure being mapped over.) you can combine them: a `cond` inside a loop body. think of the `cond` clauses as exceptions to the norm, expressed by the `else` clause.
 
 it's best to write a usable yet slower tool that produces a faster version of the tool.
-
-btw ad-hoc & symmetric/parametric poly are better called a/symmetric values; the parameter/context either determines the value or is orthogonal with it. ad-hoc poly is thus _conditional_ value whereas parametric/symmetric poly is augmented by the parameters but not in a way that _affects the information_ of the thing being augmented. in other words, it's a question of independence [rand vars]. *ad-hoc:=program statement depends on values; symmetric:=not ad-hoc.* _in/variants_ is a fine alternative terminology for _a/symmetry_.
-
-a nicety about clear a/symmetry separation is that it naturally tells all test cases.
-
-there's no need for an ad-hoc map function; one cam combine symmetric and asymmetric mapping in `map`: `(map (λ (x) (let ([y (add1 x)]) (cond [(f y) ...] ...)) s)` shows y as being the result of applying a fn to each element, and the `cond` is the ad-hoc map. `cond` alone can also be a mix of a/symmetric mapping: `(cond-let [(massoc m x) => x x] [else (g x)])` (generalizes by adding conditions; reduced, specific version is `(or (massoc m x) (g x))`) uses a lookup map to find ad-hoc relations but otherwise uses a fn to apply to all other elements. this is used when all but few elements in a domain obey the same behavior i.e. this is how we encode exceptions to rules.
 
 .overview
 
 keywords: bound vs free, symmetric vs ad-hoc, axiom, algebra [universal algebra]/model & notation.
 
-it's inappropriate to say that each algebra has a notation/syntax; within each algebra's set of axioms are, among predicates, defined of particular objects and functions e.g. T = T ∨ F, which implicitly: 1. says that ∃ T & F which are special objects of the algebra (since they weren't brought into scope by ∃ or ∀), 2. partially defines `∧` (with the total meaning specified by other axioms involving `∧`), and 3. is a predicate (though this predicate being an _axiom_, by definition it always holds, though that's moot here because _always_ is practically meaningless because the predicate is of only specific elements (viz T & F) vs unbound variable e.g. ∀ a : a ∧ F = F.)
+within each algebra's set of axioms are predicates defined of particular objects and functions e.g. T = T ∨ F, which implicitly:
 
-the following are considered harmful:
+. says that ∃ T & F which are special objects of the algebra (since they weren't brought into scope by ∃ or ∀)
+. partially defines `∧` (with the total meaning specified by other axioms involving `∧`)
+. is a predicate (though this predicate being an _axiom_, by definition it always holds, though that's moot here because _always_ is practically meaningless because the predicate is of only specific elements (viz T & F) vs unbound variable e.g. ∀ a : a ∧ F = F.)
+
+basically, this document asserts that the level of specificity/complexity (measured by the complexity of a definition or the size of a specification) is the degree to which using it is painful and inelegant. common examples of over-specified things:
+
+[options="header"]
+|=======================================================================================================
+| harmful                                | preferable
+| language                               | algebra
+| syntax                                 | regular encodings (which _may_ support any representation(s))
+| coding                                 | specifying constraints
+| semantic structure / strict guarantees | [naming] conventions / _practical_ guarantees)
+| lists                                  | relational databases
+| data structures                        | abstract structures
+|=======================================================================================================
+
+the preferred alternatives are less constrained, more flexible, dynamic, or abstract. basically, everything is context-dependent, so it's foolish to specify anything outside of a context. therefore everything should be abstract, specified (automatically) to any context.
+
+varieties of partition which is harmful:
 
 [options="header"]
 |=======================================================================================================
 | harmful                                | preferable
 | programs (countable)                   | code (mass noun)
-| recursion                              | loops
-| [holding] data structures [in memory]  | loops (traversals)
-| language                               | algebra
-| syntax                                 | regular encodings (which _may_ support any representation(s))
-| coding                                 | specifying constraints
-| semantic structure / strict guarantees | [naming] conventions / _practical_ guarantees)
-| many program-specific modules          | one file. bind free vars by dynbinds at file's start.
+| modules                                | a database
+|=======================================================================================================
+
+other miscellaneous harmful things:
+
+[options="header"]
+|=======================================================================================================
+| harmful                                | preferable
 | functions                              | contextual mutations. see `purity.adoc`
-| lists                                  | relational databases
+| [holding] data structures [in memory]  | loops (traversals)
+| recursion                              | loops
 |=======================================================================================================
 
 languages are bullshit. they're all doing the same thing: putting or (re)moving data from one place from/or/to another. the only thing making them different is 1. their scoping model; 2. any builtin support for some structures [data patterns]; 3. how they sequence operations. oop classes, sql tables, lambdas (especially closures), lua tables, lisp lists, arrays, &c are all grouping & scoping mechanisms, some relative to other scopes (e.g. oop objects), and some indexed by identifier and/or ordinal. regarding ordering actions, most languages are so unsophisticated that they do exactly and only explicitly what you instruct; the statements cannot be confidently assumed to be optimized, and they're expecuted in the exact manner and order in which they're syntactically specified, unlike solver/strategy-based languages like sql or prolog. pure languages like scheme or haskell do not execute exactly as their code reads, but the programmer must know their simple evaluation strategies in order to write effecient code; one cannot write whatever code they wish and still have it be fast, so these languages effectively do exactly as the programmer says; only the syntax does not describe what one would naïvely think.
@@ -45,12 +64,12 @@ for a language to be good, it must satisfy some qualities:
   .. not treat code differently dependent on whether it's being statically vs dynamically considered (or being completely dynamic is good). again, if everything's data, then this dichotomy of considerations cannot exist.
 . bindings: the ability to associate labels with any part of the program. namely one should be able to label a part of control flow (for use with goto) and must be able to bind identifiers to variables anywhere. c allows these both, but features a cruft: the programmer must declare a variable before they can bind to it. this reflects the fact that, in c, a variable is not just a part of the program [logic], but literally a datum present in memory during runtime (on stack, in register, or in heap.)
 
-* apl (viz codfns) demonstrates that we can compute using only a gpu
-* factor demonstrates programming by applying a simple evaluation rule on a continuously changing data structure (viz a stack)
-* relational databases demonstrate efficient storage & traversal of recursive relations of arbitrary size
-* lisp's quasiquotation demonstrates a good syntax for easily-editable arbitrary relations
+a good consideration of a language is as a traversal over a data structure. applicative languages use trees (asts); stack langs obviously use stacks; prolog uses a lattice; sql uses relations. queries are traversals.
 
-among these we should be able to identify (even as a demonstration, not necessarily an ideal) a data-only language whose evaluation is just a loop of sql statements (or using backtracking instead of looping à la prolog.)
+* codfns apl compiler demonstrates that we can compute using only a gpu
+* _metaprogramability_ is given by ability to produce & evaluate routines/expressions.
+
+looping techniques: modify state with jmp, [tail] recursion, or backtracking.
 
 if you already commonly program, ask yourself: "how much of my intelligence or effort is spent just making my code clever enough to work nicely with the language or framework that i'm using?" if you were to ask a non-programmer how to express the same code, how would they do it? how simple would their code be compared to your code? obviously their code must be correct (namely for edge cases, too.) given that they haven't chosen a particular programming language or toolkit, is their naïve code efficient, or can it feasibly be optimized or expanded into efficient code?
 
@@ -63,7 +82,7 @@ naming conventions are better:
 . easy regex for finding symbols for refactoring
 . less constraint means more flexibility, though [common] intention is clear
 
-also conceptual representation should not reflect technical encoding. e.g. (map add1 (map add1 xs)) is...well, bad notation anyway; map add1 . map +1 $ xs is better: it represents composing fns. of course, this code should be parsed into one that traverses xs only once. there's a common assumption in how to write code and write code interpreters that must die: that code is broken into _instructions_ rather than general ideas. forget `map +1` as an instruction; consider it generally as an idea. then the question arises of its meaning and grammatical & semantic rules, e.g. that map f . map g = map (f . g). i expect / hope to god that apls do this. such simple & obvious compositions of ideas is taken for granted in natural language (which is logical & semantic) but in programming it's still assumed that the programmer needs to specify everything _literally_, since programs these days are still glorified instruction sequences, excepting prolog: the only language that can be stepped through forwards or backwards, and whose statements' order never matters. often but not generally is a sequence of arbitrary _actions_ a (sub)program. this is expressed in j as link:https://code.jsoftware.com/wiki/Vocabulary/Loopless[expressions rather than statements].
+also conceptual representation should not reflect technical encoding. e.g. `(map add1 (map add1 xs))` is...well, bad notation anyway; `map add1 . map +1 $ xs` is better: it represents composing fns. of course, this code should be parsed into one that traverses xs only once. there's a common assumption in how to write code and write code interpreters that must die: that code is broken into _instructions_ rather than general ideas. forget `map +1` as an instruction; consider it generally as an idea. then the question arises of its meaning and grammatical & semantic rules, e.g. that map f . map g = map (f . g). i expect / hope to god that apls do this. such simple & obvious compositions of ideas is taken for granted in natural language (which is logical & semantic) but in programming it's still assumed that the programmer needs to specify everything _literally_, since programs these days are still glorified instruction sequences, excepting prolog: the only language that can be stepped through forwards or backwards, and whose statements' order never matters. often but not generally is a sequence of arbitrary _actions_ a (sub)program. this is expressed in j as link:https://code.jsoftware.com/wiki/Vocabulary/Loopless[expressions rather than statements].
 
 another main idea is to look at the form of data devoid of meaning/interpretation. consider data only as information [information theory]; *generally code should not reflect interpretation.* code always permits multiple models [algebras] simultaneously. only some of these are human readable, even by a programmer. similarly, only some of these models should be considered [reasoned] by a programmer. progarmmers should define axioms, identify structures & operations that implement those axioms (e.g. uncons & cons with lists, or opcodes with registers), then perform arrangements of manipulations that eventually tend data toward a goal while preserving invariants to guarantee sensible future considerations thereof. this is similar to how we use closed form expressions to reason about sums rather than summing every number.
 
@@ -76,6 +95,25 @@ this being said, if an implementation or logic error is present, being able to v
 data used in the condition of a loop must support at least one axiom, even if that axiom is mere equality. if the loop is traversing a structure, then that structure must have at least one axiom: that it's constructed by repeated application of some closed operation. usually the inverse thereof is used to traverse the structure. typical loops are application of a fn f to some x where such application tends toward a y : f(y) = y; y is a fixed point of f. for imprecise data (e.g. floats) we can check whether f(y) ≈ y i.e. |f(y) - y| < δ. fixed points are usually the base case / exit condition. loops can break before then, though, if a condition is found to be violated, which means that we discovered _during_ the loop that its input was inappropriate. such checks are sensible only if we can't validate in O(1) before looping.
 
 .todo/discuss
+* langs as "models": evaluation as traversals over structures: applicatives: rose tree; stack langs: stack; prolog: predicates. _model_ means the data structure used to represent linguistic constructs, and the evaluation by traversal of those structures. inelegant, irregular langs like java, python, have multiple structures, many ad-hoc rules, and complex models.
+* metaprogrammability is important in the same way that recursion is. see a program as a data structure; don't you want to be able to manipulate data structures? that a structure can be evaluated is not special among any of its other properties. lambdas can be evaluated and passed around, so why not programs? in a lambda calculus language like haskell or scheme, is there really any difference between a program and a lambda? even if there is, why care? why define a proglang by some set of mandatory constructs? i want to _code_; why force an encoding on me?! why force _language_ on me? all programs are particular manipulations and particular relations. that, and nothing more particular, is what my programming tool should enable me! i want to *define relations and manipulations.* programs, as all data, must be encoded by some encoding(s), and those encodings must be represented by some syntax [representation scheme], whethrer textual, graphical, audial, or whatever; i must be able to "read" & manipulate the program. anyway, metaprogrammability acknowledges that there is no generally sensible way to consider code separately from other data/information. by no coincidence, all metaprogrammable "languages" are hardly languages; they're just relations e.g. prolog (`rel(vars...)`), factor (`vars ... rel`), scheme (`(rel vars ...)`). the latter two support `quote` & `eval`, and prolog has no need for that b/c programs are just sets of facts; evaluation is not part of the program itself, so quotation would have no meaning or a quoted object would equal it unquoted.
+  ** when you consider programs as models (traversals of data structures), a lack of metaprogrammability is as ludicrious as being told to program using only one data structure and not be able to make your own. like if i were to say that you could use only lists and hash tables, because that's just how the language is. you can't define a ring buffer, or deque, or b-tree, unless you define them in terms of lists or hash tables. now that's not terrible, since—mostly—any structure can define any other, but why start by arbitrarily limiting which structures are available?! why not use the least constrained structure: the [binary] relation? indeed, this is what lisp & prolog do! isn't it interesting that the languages whose data primitive is mere relation are metaprogrammable? factor goes a step further by not even having a special construct for relating things; instead of `(cons 1 2)` you just put `1 2` on the stack so that constants are implicitly sequentially related and are not even considered different from the rest of a program.
+* _flat_ means _non-recursive_. consider the structure `'(a b c)`. that's a "flat list." however, it is not flat! we know this certainly because lists are recursively defined: `'(a . (b . c . ()))`.
+  ** TODO: even in a truly flat array the elements are defined in terms of their relations to other elements; they're defined in terms of their context, but where their context is represented by literals rather than free symbols. when i've been saying "flat" i really meant context-free i.e. the context is given in terms of free & bound variables. this is the only satisfactory definition. it's how prolog does.
+* total optimization means compiling, and more constraints means greater potential for more optimization. this is at odds with program generality and general runtime modification. of course this has nothing to do with how facts/codes are _expressed_; again, no code for instructions should be taken literally—only virtually, and _macro_ should mean be pre-runtime metaprogramming, distinguished from runtime metaprogramming, since pre-runtime execution does not affect compiled code's execution speed. macros can be seen as partically-evaluated programs, just like _images_ in factor. partial execution is a form of optimization. to optimize optimization, all code that can be executed should be, leaving only computations dependent on runtime variables yet uncomputed.
+* metaprogramming is closure over execution: that the execution of a statement produces a statement that can be executed and so on
+* order is not needed; only indexing is. re-ordering is just re-indexing; it's just installing an intermediate map from indices to new ones. this is true of order of arguments (including both applicative and stack langs), order of columns or rows of an array or relation [relalg]. order is useful to make encoding schemes shorter b/c the indexing is implicit; it is unhelpful when indexing must still explicitly be done.
+  ** a similar argument can be made for re-grouping, since all things belong to the universe [set]. because all programming is regrouping, reordering, and basic arithmetic, we see that there's hardly anything to programming. at least given current programming tech, this presents a paradox!
+* stack langs do not particularly use stack(s) as data structures. the stack (TODO: investigate multistack models) is used for encoding a program only viz control flow (equally including branching and passing to & returning from functions, which technically _are_ control flow, seen in asm as pushing to the stack then jumping)
+* though apl, lisp, & factor are axiomatic, they're significantly restricted in being strictly order-based rather than unordered relation of primitives like prolog; ideally we want not need to bother with ordering.
+* applangs have asts, a recursive structure. stacklangs use stacks, a linear structure. thus apl fork x(fhg)y (i.e. h(f(x,y),g(x,y))) is expressed in factor as `2dup f g 2bi* h`. stack langs effectively flatten asts. instead of nesting expressions, we leave expressions' outputs on the stack so that later expressions can evaluate.
+* indices match the polynomial or number/radix pattern, Σ[i]x_i^i. this is why we can refine single-axis indices into multi-axis indices via modular arithmetic. this matches with polynomials being seen as vectors e.g. <6,3,2,1> to mean 6x^3+3x^2+2x+1.
+* nb. stack langs are postfix b/c files are read from left to right b/c files are so read; prefix would require either reading the whole file then evaluating it strictly in reverse order, or a foldr/thunk type eval from left to right.
+* stack langs are implicitly curried. one of my favs is n > "for greater than n" `(curry > n)` [scheme] has the opposite effect! haskell gets around this by using a fry-like syntax: `(> 5)` i.e. `(> _ 5)`, or ``[ _ 5 > ]` [factor/fry]
+* a nicety of stack langs is that they maintain state across evaluations; in a repl one can see the current state(s) as they consider and evaluate expressions, cf applangs which require binding and/or accumulating one large expression, which is messy or at least inconvenient.
+* `if` statements sharing common predicates should be refactored from `(if p x y) ... (if p a b)` into `(if p (list x a) (list y b))`
+* when the whole program's state is available, there's no need for functions, since all possible inputs are already in scope. obviously only known data would be used; if a function defines some variable `a` then another function would not use `a`, unless it were sure that `a` is still bound (i.e. that its defining function hasn't already finished and freed `a`.) `a` here is not access-scoped but is still temporally scoped; anything can use it but only if it's still bound. of course "functions" could still be useful & appropriate, but only insofar as being relations of vars, expressable as a simple tuple. then again, that's all that functions ever should be: tuples of an input object (list, vector, table, &c) and some such output object. functions denote relations unrelated to any context, excepting the existence of other functions or constants. there is no strict distinguishment between functions or constants of a particular context vs outside of any context. indeed, everything is in a context of the things by which it's defined; thus only primitives are truly context-free. therefore the very idea of functions is fundamentally flawed. one may as well dispell that error and instead have subroutines all of whose parameters are implicit and identified by their presence in the subroutine body. the only thing is to make a _syntax_ to bind vars e.g. with `f x y := x + y * 2`, `f 3 4` is syntactic sugar for `x y = 3 4; f; restore x y`. this is precisely what picolisp does. _functions_ are an overly specific consideration of the the contexts in which binds exist. the error is in making functions special language builtins rather than some convenience devices for removing or injecting relations into contexts. there are many valid systems for context management which vary among specific programs. again, a good language does not distinguish between `(a,4)` in a hash map and `a = 4` as a program variable. sql somewhat succeeds here, as all vars are stored in tables and manipulated as data; its success is only partial because tables themselves are not manipulable data, except in sqlite, where they are stored in a global table of tables. the most appropriate scoped bind mechanisms simply associate binds with some program subset e.g. `let x = 4 in x + x`, except that `(x 4) {x+x}` is cleaner syntax, showing that we're working only with relations. indeed, this syntax correctly & helpfully shows that `let x = 4 in x + x` is equivalent to `(\x -> x + x) 4`. this syntax supports `y := (x 4); b := x+x; y = ∅ {b}`, which binds `y` to a list and `b` (which can be said to be a function of `x`, since it's defined in terms of `x`) to the expression `x+x`, then says that within this anonymous evaluation of `b`, `y` is unbound. a device to choose immediate vs delayed evaluation (which differ because definition and evaluation contexts (bind sets) differ) has not been specified for this example, but would be integral for any language.
+* by reference should always be the default; by value is less efficient and less frequently used. in the functional paradigm there's not even any difference because nothing is ever modified, unless it's in a loop, in which case everything defined in terms of the now-modified thing is now recomputed. really the question should be, for any variable, whether computation should be done once at definition or usage time, or done for each usage. once at usage is lazy eval. once at definition is dereference in the definition. per usage is dereference per usage. dynamic vars are effectively see everything defined with dereference per usage, at least by default; there must be a mechanism to dereference in a definition, though. keep in mind that this is only relevant for vars defined in terms of other vars; none of these concerns matter for vars defined in terms of constants.
 * i like for fn seq `× z +` (like stack lang) to compose as \x y -> x × y + z
 * set theoretic binds, e.g. {x(t):t>1} or {x(t):t∈{1,-1,0}}. sql does this already (kinda) with `select x(t) from tbl`. most langs accomodate this by `for` loops (e.g. racket's use of sequences in its `for` for). HOWEVER! `for` loops are a sequential/nested (i.e. they've a definite unique location in the AST) whereas sets are not! furthermore {x(t):t>1} is an abstract structure (idea), not a data structure! it's calculable. it's not an operation, and so has not a measure of strictness, since it's not an evaluation, though many possible _considerations_ exist of it. anyway, sets aren't scoped! like prolog, sets are predicates calculated by logical implication of others; sets are predicates, and the whole system is just a collection of constraints/facts that're reconciled. ∃ or ∀ determines whether we're searching for one or traversing all of a set; these complete the control flow operators, having already considered manually-specified facts which naturally imply `cond` selection and structures to be traversed. here ∅ is interperable as void, ⊥, or any empty structure. sets free programmers from concern about _how_ relations are encoded (again, e.g. `(((x . y)) ((x . z)))` vs `((x . (y z)))`). the best encoding is never known in advance, and is trivial for a computer to calculate as it's just a constraint problem like graphviz' graph layout or determining a lattice of sets under subset.
   ** set notation is agnostic of language, data structure/model, encoding, or code organization (scope, whether of a module, method, object, or binding clause). sets specify exactly the program spec w/o implemenation-specific details.
@@ -204,6 +242,44 @@ considering such things makes one realize how bloated & confused most other lang
 * can remove arbitrary chunks of programs and a valid program remains
 * making self-modifying programs is plain & simple
 * we can run programs backwards
+
+''''
+
+how to handle:
+
+[source,scm]
+----
+(f (if p
+       a   ; but also make this whole expression return #t
+       b)) ; return this to f but make this whole expression return #f
+----
+
+refactor into
+
+[source,scm]
+----
+(let-values ([(r1 r2) (if p
+                          (values a #t)
+                          (values b #f))])
+  (f r1)
+  r2)
+----
+
+this is the functional style. concatenative/stack gives the perfect solution: `p a b if* g` becomes `p [ t a ] [ f b ] if g h` where `h` is a binary function one of whose arguments tells which branch was taken. we still put `a` or `b` on the stack for `f`, but after `f ( x -- )` uses it for side effect, `t` or `f` remains atop the stack, and thus effectively becomes the whole segment of code's return value.
+
+-----
+  h
+ / \
+f   g
+|   |
+x   y
+-----
+
+can be, in a stack lang, equally interpreted as `h(f(x),g(y))` [app] i.e. `x f y g h` [stack] or, assuming `h` as `if`, then `f` & `g` would be program branches. actually, this can already be done in any applicative language; it's just that in a stack lang managing variables across branches is easy b/c they're all just on the stack rather than needing to manage multiple names & scopes. this being said, mutating dynamically-bound variables could be just about as good or better, depending on how many things would be pushed onto the stack.
+
+we're so wonderfully enabled by the fact that stack languages are basically functional mixed with mutative: all variables are on the stack and all functions share a common input and output: the stack. that means no need to name variables, and makes control flow extremely simple. what's amazing is that it actually works.
+
+btw, the common refactoring pattern for applicative languages, `(f (+ 3 5))` --> `(let (x (+ 3 5)) (* (f x) (g x)))`, is done by `dup` in stack langs: `3 5 + dup \ f dip g *` (though it'd really be written using non-primitive combinator `bi`: `3 5 + f g bi *`.)
 
 === minimum [wip]
 
@@ -1898,6 +1974,36 @@ TODO: identify
 | constructors     | alist of interned symbols to lists
 | non-strict lists | `(de nats ((i 0)) (cons i (lambda () (nats (+1 i)))))`
 |==========================================================================
+
+=== evaluation
+
+mechanism to select whether eval is done at definition vs use. pointers or dynamic binding are such devices: `pos = {<, min, &low}` in c (or w/e syntax is needed to add functions to an array); in picolisp, `(de pos () (list < min low))` (defining a function since functions are always evaluated upon invocation); in factor, which, like haskell or ocaml, there are only words of natural arity, not partitioned into data vs functions:
+
+[source,factor]
+----
+SYMBOL: low
+0 low set
+: y ( -- y ) low get 4 + ;
+y . ! prints 4
+10 low set
+y . ! prints 14
+----
+
+here `y` is defined as a function instead of a global variable i.e. it's evaluated upon each use. typically languages make it very difficult to evaluate only part of a definition e.g. `y := x + 4 / z` where `x` is evaluated at y's definition time and `z` is evaluated per use of `y`. such complexity is usually unjustified, bad design. metaprogramming, redesign, or runtime or compiler optimization usually makes this a non-issue, so that, for things defined by both constants and variables, the constants or majority of output are not re-evaluated upon each use. functional paradigm makes this easy: `y := λz. x + 4 / z`. just like that, `x` is certainly evaluated at `y`'s definition time and `z` is certainly evaluated upon each invocation. unfortunately this comes at the cost of needing to pass some `z` as a parameter to `y`, except in picolisp, which, by its dynamic binding, uses whatever values `x` & `z` have at `y`'s invocation. this is good, but, afaik there's no way to evaluate `x` at `y`'s definition with `z` evaluated at `y`'s invocation. i'm very much a fan of optional parameters e.g. in picolisp:
+
+[source,lisp]
+----
+(de y (x) (+ x 20))
+(y 10) # 30
+(y) # NIL
+(let x 20 (y)) # NIL. actually i thought that it'd eval to 40
+(let x 20 (y x)) # works, but it's inelegant
+(de y () (+ x 20)) # redefine y
+(let x 20 (y)) # works, but inelegant; i'd prefer the syntax (y 20)
+(de y (z) (+ (or x z) 20)) # works. elegant invocation but inelegant definition.
+----
+
+i can define an fexpr to make `(de f (sym1 ... symn) (g sym1) ...)` (example's first definition form) expand to `(de f (sym1* ... symn) (f (or sym1 sym1*)) ...)` (example's last definition form).
 
 === case study: redbean
 

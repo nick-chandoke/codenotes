@@ -1,0 +1,26 @@
+== the ideal os for minimalist hackers who love symmetry and smolcode
+
+as i consider bsds, porteus, and other oses, i need to look at what each offers and check against the list of things that an os must do vs extra features, and whether those features are useful and how easily they can be found as simple code or programs that other oses run.
+
+i know, though, that i ultimately will be satisfied only not by an os, but a code machine, where there's no concept of "programs", only code, and the kernel is merely some code that boots and runs other code. all c-based and unix-based designs are out. everything about fixed-size filesystems, disk partitions, command lines, &c are intolerable. rather than permissions, there must be manual & automatic modes, so that care is preserved. of course, the shell must be freeform. the core of any kernel is how it manages hardware and running code. i'll learn how bsds, linux, lisp machines, &c do those. of course parallelism is a core feature of oses, so probably take hints from erlang on that one.
+
+see https://wiki.c2.com/?OperatingSystem, https://wiki.c2.com/?CategoryOperatingSystem, and onetab tabs.
+
+recall what as os is: an interface between programs and hw; it handles i/o, memory, & scheduling.
+
+.recalling principles & facts
+
+* hackability is best; at most, change the program while it's running; else merge source code change, recompile (incrementally if appropriate) if nedeed, then restart the program to run the new version.
+* compiling programs allows them to run on any os, and with custom config/hacks
+* don't include shit; just tell me where & how to get it
+
+.the minimum at install time
+
+* network connection
+* accept keyboard inputs in a decent iface (e.g. text editor, emacs-style cmdline)
+
+=== packages
+
+we don't need any prebuilt packages nor repositories; we can pull & compile our own code as we want. this is not an issue b/c we use few, small programs, and speedy compilers like tcc. we can resolve dependencies manually, and manage our own `PATH` &al envars (or w/e equivalent mechanism that the os uses.)
+
+there's no reason to pair a package manager with an os. any os can install nix, guix, pacman, or any other if such convenience is desired.

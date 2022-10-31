@@ -1,0 +1,21 @@
+"a poem is never finished, only abandoned." —w.h. auden
+
+the same is true of programs, and of life. we may suppose, at any time, that we know anything's fate, but until—_if_—it happens, we can only truly guess.
+
+there's nothing more dynamic than values. languages cannot be changed as easily as values in a program can. therefore it's better to abandon languages altogether, instead only throwing around program variables. we certainly need notations (even if graphical or auditory) to represent programs (or other data); however there's no need nor are we served by _enforcing_ linguistic constraints—the very constraints that _define_ the language.
+
+data is information; they're just synonyms. programming languages are entirely arbitrary: which things come built in vs neededing to be implemented by a programmer as a library. there are some _common_ (not _necessary_) _features_ that are _assumed_ to be in any language such as
+
+* the ability to define things
+* the ability to define functions
+* modules and other scoping devices such as `let` clauses, braces, function definitions
+* loop mechanisms
+* data structure literals (e.g. dictionaries, lists)
+* many other things
+
+prolog demonstrates that most language features commonly assumed necessary are indeed not.
+
+now there's nothing inherently bad about any of the above-enumerated constructs; it's only bad to assume any of them will be used. languages are defined in terms of constructs assumed to be used by the programmer, or assumed useful and forced onto the programmer. how can a non-negotiable, difficult-to-change set of practically arbitrary assumptions be a good idea? i appreciate that such constraints make writing compilers/interpreters easy (i didn't mean to say _possible_; i meant to say _easy_); however, one can either:
+
+. make a compiler without regard for efficiency, instead relying on the programmer to write efficient code
+. make the actual "language" so simple that the programmer has no ability to decide the actual implementation, which makes the compiled code incredibly efficient and easy to identify prgrammatically, and practically impossible for a human to compute, which is fine since there's never a reason for a human to do what a machine already can

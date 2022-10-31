@@ -1,0 +1,51 @@
+current conclusion: factor for control flow, sql for data processing, prolog to replace both once i learn it, though i'll retain factor or ntl for when they're plainer and great generality definitely isn't needed. and use kakoune for text processing. kak, prolog, factor, and sql certainly can do all!
+
+''''
+
+ULTIMATE INQUIRY: what benefit does prolog/datalog (language, henceforth collectively _prolog_) offer over sql (language, namely as used in factor or through ntl)? it may be convenience; my concern is not their computability classes. i'm considering them as tools. i am also separately looking-out for any possible facts that are easy to notice or appreciate by the view of predicate logic vs set theory, though i suspect that none exist.
+
+to test this, i simply need to compare prolog & sqlite/factor solutions to my problems at hand:
+
+TODO, oct 17: _explicitly_ identify common problems. what do i really want? furthermore, which data manipulations do i need for dr. allen? i should offer to immediately begin managing what of his records that i already can manage—namely non-computable data. the body tracing thing...would be useful to me. particularly, though, most pertinent to just myself staying well enough to live through my days, is making health.adoc computable to the effect of querying with symptoms (and having common symptoms & symptom categories) and returning cures. next most useful is organizing my filesystem into tag-based, and putting all known facts into a db to be queried rather than in files to be searched/read.
+
+consider computability of such simple facts as (symptom,cause); how would i query a db of such facts in predicate logic vs relalg? one certainty: it'd be beneficial to have automatic duality i.e. that i can calculate the cause from the symptoms and vice versa!
+
+...aaaand honestly a general reminder program/interface is practically mandatory! i need something to keep track of facts that must be remembered daily, and of current and upcoming things, and track my current goals and progress in each of them. that should be amply easy for me given my current computing knowledge. it must also track daily tasks e.g. number of pills or servings of given foods or nutrients. i can tally these simply in a text file then parse it at the end of the day into a db update statement.
+
+btw, every day until finished, give 3~4 hours to stockbot.
+
+really i often dislike merely living, so a program simply suggesting breakfast would be good. tracking *preperatory* things is very good since thoes are the easiest things to forget or track, since they're so plenty and non-immediate.
+
+laptop battery and change outgoing message.
+
+''''
+
+databases: deductive | [extended] relational
+prolog's logic generalizes relalg on many axes
+datalog educational system (des): an implementation of datalog that extends relalg dbs and manages its own non-sql relalg which is convertable among sql & datalog. not performance-focused. written in prolog. its db is the union of a prolog one and a sql one. can compile datalog queries to reldb for solving & vice versa.
+TODO: identify datalog extensions
+ded dbs, like rel dbs, can define infinite (recursive w/o base case) relations but only _queries_ (not definitions) can hang
+in non-declarative programming, the implementation is explicit, the spec implicit; declarative programming is inverse.
+prolog uses _logic variables_ (denoted by leading `?`)—free vars that, in queries, represent a space to be searched for elts that satisfy a predicate that contains the logic var. we see assertions as dual to queries [questions], like universal qualification is dual with existential. queries seek to find sets (hopefully not null) that satisfy a given predicate. prolog makes the correspondence between predicate logic & set theory a bit obvious.
+in logic programming, no functions—only relations! wonderful! there's no distinction between operand and result; they simply are all parts of a common fact/predicate. e.g. `(abs -3 3)` is true i.e. "-3 stands in the `abs` relation to 3;" or `(add x y z)` is true.
+datalog implementations are optimized for the subset of prolog that they concerns.
+in both prolog and sql, data structures are encoded by their axes (inputs & outputs, though who's to say which are which?) e.g. `matrix1(i,j,x,y,z)`: (i,j) is a 2-dimensional index and (x,y,z) is a 3-dimensional value. rotating rows by 1 to the left would be the operation (i,j)->(i-1 % count(*), j) (which should be performed only upon access, only for concerned rows). notice in this example that rotation exists only when the number of rows is fixed! i imagine that prolog supports "restructuring data structures" by simply accumulating an index endomorphism, thus being a virtual restructure.
+  TODO: shouldn't this mean that sql can do bi-directional queries, too? demo a (symptom,cause) bidirectionally implicative relation.
+a relation can be modeled by a list of product types, but for efficiency should be stored as a group of lists, one per column.
+NOTE: just like a list literal syntax is more sensible than an rdf db if you're only using lists, dataflow programming is more elegant than logic programming at encoding *specific* procedures; logic programming is useful for computable structures where the computations vary greatly or are unknown!
+attributes can be thought of as sets of vertices, and relations as hyperedges. under this interpretation, it seems odd that each relation should have its own attributes, rather than attributes each being defined separately top level, and defining relations over these attributes. still, this is basically accomplished by being able to `join using`, which acknowledges non-strict attribute equivalence across relations. that is better than the hypergraph model because it's implicit: each relation has some attributes, and only when those attributes are the join point are they assumed equivalent; however, we can do much more general joins than that; thus attribute interpretation is per query, which is appropriate, because meanings are determined only by relations!
+relations are appropriately named; consider `father("bill","ted")` and `mother("suzy","ted")`. they describe how ted relates to either bill or suzy. i suppose one could do `create table rel(rel,gen,acc); insert into rel values("father","bill","ted"),("mother","suzy","ted")` i.e. a graph store; the equivalance over these encodings is why any relational data language should be metaprogrammable and not arbitrarily partitioned. at least in the graph version metaprogrammability isn't much an issue because both edge names and vertex names are stored as data. in sql the graph encoding gives us a naming problem; suppose that we want to select ted's parents: `select F.gen,M.gen from rel as F join rel as M where F.rel = "father" and M.rel = "mother" and F.obj = "ted"`—clumsy and likely very inefficient, especially compared to `create table father(father,child); create table mother(mother,child); insert into father values("bill","ted"); insert into mother values("suzy","ted"); select father,mother from father join mother using (child) where child = "ted";`. graph db is a fine idea, but bad for sql and possibly for relalg. i guess the way to express a graph store in sql is like prolog and is probably generally true for relalg: the from _hyperedge(v1,...,vn)_. this is fine because each edge describes a different idea; the edge (and so relation) name _connotes_ a meaning, and the meaning is implicitly specified by the set of edges.
+TODO: how to choose using hyperedges [n-ary] vs many edges [binary]? it's likely a matter of coupling: to be fully decoupled, use edges; if you're going to group anyway, then hyperedges are a terser encoding. the boolean relations are a good example of appropriate 3+-ary relations; each pair of any two attributes *determines* the third,...and/or because they're relations modeling _functions_? _determination_ is a better word than _coupling_. so to determine your db schema, ask: 1. what ideas do i care about? 2. how are they related? which are determined by the others? but what about the father & mother tables vs a parents(father,mother,child) table? ...idk. i suppose that binary edges should be assumed by default and one should, for non-recursive queries, never join a table with itself?
+i'm considering how _query_ is similar to _inquery_, and how prolog facts are of form `(fact conclusion hypothesis ...)`, e.g. `(fact (grandparent ?x ?y) (parent ?x ?z) (parent ?z ?y))`, which is clearly related to science. also, if a set of values is found but any is still free, then that means that the relation is regardless of it.
+TODO: study/consider transitivity & natural joins.
+* `null` can denote a free variable e.g. `insert into rel(problem,symptom,fix) values(a,null,c)` which is a relation of `a` & `c` regardless of any `symptom`.
+do not create uids for groups of things; just create a primary key on the group e.g. for relation `x(a,b,c)`, make a primary key on `(a,b)` rather than refactoring into `y(uid,a,b)` & `x(y,c)`. duplicate values should be stored efficiently for indexed attributes.
+
+TODO: meditate on `(fact (parent amy larry))` => (), `(query (parent amy larry))` => t, and `(query (parent amy ?x))` => {...}. paths are allowed, too: `(query (parent ?gp ?p) (parent ?p ?c))` returns sets of {gp, p, c}. btw queries search _implied_ facts, not just explicit ones.
+
+.prolog benefits over sql
+
+* terse
+* metaprogrammable
+* recursion is just as easy as non-recursion
+* horn clauses are all uniform, whereas in sql some horn clauses must be defined as views and others as tables and value insertions.

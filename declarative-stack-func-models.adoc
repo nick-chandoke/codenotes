@@ -1,0 +1,124 @@
+== comparing the declarative, stack, and functionals models
+
+[TODO]
+* consider how in sql everything is in a relation, and how plurality is.
+* identify cata/morphic programming as a specific version of declarative programming
+* identify technically what a catamorphism is and maybe identify a better name than cata/morphic programming
+* stack, unlike func, relates data implicitly in a sort of if-then pattern; the stack being e.g. `a b c` tells us that we expect `c` to be used in some computations, then `b`, or `b` as an argument to `c` for some computations; and after `b` & `c` are used, then `a` may be used; or that `b` & `a` may be are used together i.e. are related. it also tells the order in which these data will be considered; this expectation makes the program easier to follow when read, as opposed to the func (generally binding) model, where vars are bound, but there's no expectation for how they relate or when they'll be used. this is useful if the relations of these arguments are complex, but that's rare, and suggests that the data should be in a data structure, all of which should always be stored in a relation. also an ast may appear complex, but its stack reduction reveals that the ast could've been written more elegantly; however, only the stack model _forces_ a reduction and thus forces elegance by non-redundancy. such reduction _can_ be done by the functional model, but is painful because of: 1. the need to name everything; 2. the need to use `let` or `λ`, both of which require crufty & difficult-to-refactor syntax nesting _and_ introduces scope—much worse than `dup`/`over`/`pick`, `bi`, &c. we thus see that the functional model is cruftier because of its mandatory explicitity whereas the stack is terse *and easier to work with* because it's implicit: not just that arguments are implied, but that the _boundary_ of arguments is implied. see, unlike the functional model, the stack model is concatenative; it allows splitting a program at any arbitrary point. this makes program composition much easier than function composition! this implies that multiple inputs & outputs can be used together e.g. `a b g h` -> `a c d h` where `h` uses `a c d` as its args. the functional model cannot express this, *because args are not related to each other.* furthermore, in the stack model both inputs & outputs are related! they're strictly separate in the functional model. func suffers from needless installment of ad-hoc rules. the relational model relates inputs & outputs, but does not distinguish one set from the other; thus rel is superior to stack b/c it lacks the needless ad-hoc rule that separates inputs & outputs, despite both being implicitly inputs on the stack.
+
+tl;dr: relational programming is the only sensible way to program.
+
+loops, reductions/folds, catamorphisms, are all the same: an initial state that ultimately ends at a state. it generalizes `map` (obviously, since we know that `foldr` generalizes `map`.) thus the catamorphism is the same as reduction; we can call reductionist programming cata/morphic programming (since generally those programs can be non-cata morphisms.) the morphism is defined without its dual being implicitly known.
+
+one of the the problems with the funcmodel is scope: that each function has _only_ its inputs in scope! this is a variety of the nesting problem: that each thing is unaware (and cannot compute on) things in the set to which the thing is an element, or sets containing that set &c. this is why flat indices are important: *no nesting means no scope!* this being said, nesting does not necessarily imply scoping! there are variable scopes too, e.g. picolisp's shadowing model, which is akin to the stack model, where elts closer to the top have higher precedence but all elts are accessible. regardless, we must remember, when designing or reasoning about related/structured data, to never make other data _unavailable_, though ordering data by preference of use is fine—again, as shadowing does, except that i'm saying that we should be able to access variables being shadowed—not just the shadowing variable. nested `map` is a common instance of this problem: inner subprograms cannot access the outer superprograms. the common solution is to create new inputs or outputs and use them in complex passing schemes.
+
+the stack model generalizes the applicative model to support:
+
+. inter-application mutation e.g. `(h (f x) (g y))` is `x y f [ g ] dip h`, but between `f` applying to `x` and `g` applying to `y`, any operation can be inserted, and the stack can be manipulated in any way that makes `y` available to `g`, and the result of `f x` and `g y` available to `h` _at the time that `h` is evalutated_. the ast can be traversed or flattened depth-first or breadth-first.
+. multiple function outputs (which i think is called a _multifunction_?)
+
+=== the "black box" function problem
+
+can factor's model (dynvars, stack, locals) help the following functional problem: `f : a -> b, g : b -> c, h=g⚬f`, but i want access to `b` without refactoring `h`? with functions you'd need to split `h` or modify it to inject `b` into its codomain. one solution is simply writing very many small inline words, so that arranging those words is easy and terse; thus we get expressivity without sacrificing terseness. i know that this isn't a problem in prolog because prolog doesn't define dataflow pipelines. consider pipelines as paths through a graph. prolog defines vertices and _valid_ edges, but says nothing about particular paths through the graph! instead it derives, much like hxt [haskell] semiring arrows, a set of paths from vertices satisfying initial conditions to the query's terminal result set of vertices. contrast with non-declarative langs, which only define pipelines of only existentially qualified variables, lacking universal quantification. also, all pipelines are just reductions. this is seen by variables being not global. they're all local in a bunch of nested scopes or kept in various positions on the stack; either way they're kept at *arbitrary & relative* ordinal or lexiographic addresses. global vars .... it's basically (or exactly) the same problem as functions being black boxes, unmodifiable i.e. not truly first class since their definitions (arrangements of "variables") are treated differently from how they're used (application only). black-boxing loses information unless the function preserves all original data. no such analogue exists in logic programming. i quote "variables" b/c they aren't true variables; they're symbols that represent values rather than being themselves computable. this is seen by `x == x` not being immediately obviously true to the computation engine, but is instead only known at runtime by replacing both `x`'s by whatever value they hold, then testing equality against those objects.
+
+THE SOLUTION: cata/morphic programming defines only specific edges; there are too many possible edges to specify them all, as silly as trying to specify all the numbers existentially rather than universally. really, trying to define any program is like that; it's sensible only to define a space (graph) by which a program can be _identified_ (as a path.) any non-flatness makes structure difficult because it makes looking difficult. the only decent way is to use relations, a generalization of indices. to solve the black box problem, we basically have to split a path at some points. however, because program state changes as paths are traversed, there must be a way to access certain substates at certain points of execution (vertices.) the problem with fns is that the define a closed set of inputs (and outputs), and definitions are in one place only, whereas declarative clauses are ad-hoc implicit relations of variables in multiple places, much like how factor generic methods are defined in multiple places. a => b says nothing about how a relates to other vars, whereas in a function f(a)=b defines f only for a; if i want to define it for other things too, then i need to add those to its formals, then refactor its body to account for the new variables in relation to the old, where the relation is ordered, meaning rearranging nestings of dataflow! the *openness/implicity and decoupling* of predicates makes them vastly better than functions! the decoupling is in the form of both multiple sites of declaring relations and of the relations being not nested.
+
+[options="header"]
+|==========================================================================
+| dataflow                                | prolog
+| paths                                   | graph
+| nested                                  | flat
+| *directed*                              | *undirected*
+| bound traversal, unconsidered structure | bound structure, free traversal
+| explicit paths                          | implicit edges
+| existential                             | universal
+| ad-hoc                                  | symmetric
+| morphisms                               | rules
+| imperative (instructive/actional)       | implicative
+|==========================================================================
+
+horn clauses can be nested, but that's merely syntactic sugar, a lossless compression of the ordinary notation.
+
+''''
+
+having no distinction between data & functions, naturally coupled with words having stack effects instead of arities, and that functions are not first class, but instead that, more generally, quoted programs are data passed around, makes _program composition_ very easy, whereas _function composition_ is an enormous pain in the ass. the word/stack model frees us from concern about which kinds of functions to pass around e.g. a functional paradigm would distinguish between `a -> b` and (c -> a) -> b` whereas a stack paradigm can define a word with effect `( a -- b )` and not care at all how `a` is arrived at. this is true of unary functions, but basically in a stack paradigm `a -> b -> c` is effectively `b -> c`. though application and currying try to achieve such elegance, they generally fail because there is a distinction between `a -> b -> c` and `b -> c`, or `a -> (x -> y -> z) -> b`. in a stack lang, just set-up the stack to have the correct args when a word is evaluated, and quote words that shouldn't immediately evaluate. now certainly we can have the effect `( a x y q: ( x y -- z ) -- b )`, but it's just as well to say `( a x y q -- b )`. i'm still not communicating the exact elegance that stack langs permit us. TODO: do it. basically it's easier to pass around a stack than each arg manually, especially when the stack is implicitly passed, and quoted programs generalize currying, composition, and first-class fns.
+
+=== elegance of the stack
+
+firsty, any reductionist (cf declarative) model requires the programmer to trace through state changes, whether it's data mutation through functions, or a variable mutated in place, or a stack mutated throughout word application. they're all the same. the declarative model does not require this because facts are declared universally instead of per datum. the reductionist model defines things derivative of other things, which _is_ a variety of *directional* relation *between* things (directed edge between two data), but the declarative model declares _only_ *undirected* relations *among* things (constrained set of data.) the directionality is what significantly makes the reductionist model more limited; it cannot infer/__pro__duce, only __re__duce; this makes sense because produce & reduce are duals while an arrow a->b is dual of arrow b->a. a-b = a<->b; an undirected edge is equal to a bidirectional edge. what is produced is the most general system still satisfying known constraints; this contrasts with reductionist programs which are not endowed with knowledge that enables them to generalize their program i.e. it's not considered to which sets [math, abstract structure] each datum belongs.
+
+regardless of which model is chosen, we want for code to be terse. in a functional model, this means terse recursive functions; in procedural programming this means a terse loop; in the declarative model this is seen as a set of facts. again notice the lack of ordering in the declarative model. ordering things is perhaps the greatest trouble that the reductionist model imposes. actually, order is the only thing that separates the reductionist & declarative models! generally taking arrows to commutative relations implies relations instead of functions; *relations can be interpreted as symbolic functions.* symbolic functions reduce not by application but by unification (application (intersection) of constraints (predicates.)) a function can be reduced to another function through partial application, which is a variety of enforcing constraint, but a function does not, in the reductionist model, imply a set; we cannot use set-theoretic operations on functions or define higher-order functions like function inverse once for all functions.
+
+the stack is elegant for β-reductions where data are incrementally added into the stack near related data, where _related_ means that they're arguments to a common reduction (e.g. in `g(a,f(b,c))` `a` is still near `b` and is expressed in factor as `a b c f g`.) another example is `f(a,a)` i.e. `a dup f`; expressed pointfree in factor as `dup f` but cannot be pointfree in λ-calculus, which can express it only as `\a -> f a a` or in terms of a combinator `dup f = \a -> f a a`, by which `dup f` is still `dup f` and pointed is `dup f a` e.g. `dup (*) 4` in haskell.
+
+the stack is not inelegant when data are related to many other data; the stack is still fine for this, but with an inline pointed mutation of the stack. the stack is inelegant if one must use only pointfree words. the same is true of applicative languages, too: an applicative language without lambdas would be painful to use. of course, this means no definitions since those are just lambdas. thus a purely pointfree stack lang is equivalant to a pointfree applicative lang. being pointfree does not even have to do with programs being concatenative; being _compositional_ is what makes them concatenative. *thus any language all of whose functions are composable with each other is concatenative.* the only reason why stacklangs are concatenative but applangs aren't is that applangs only define function composition as a function of number of inputs or outputs excepting lisp, where inputs & outputs can each be considered as lists. we can generalize from lists to any data structure, abstract data to abstract expressions, thus leaving us with an abstract structure, and generalize stack or ast evaluation to any traversal of the abstract structure. this is the general description of a program. recall that all structure is specified/defined exactly by constraints; thus prolog or any other form that uses only constraints is the most general programming model.
+
+anyway, arbitrarily related data sounds like a textbook use case for relations, which are unordered except by predicates.
+
+the fact that factor (unlike joy) is impure is very useful; things like stateful `cond` enable us great power in relating subprograms (through state) while requiring little cruft to make the subprograms independent. this being said, functions are still useful. that being said, we can interpret words as functions and still write recursive functions like we would in any funclang simply by using `inline recursive` after a word definition. thus factor (impure stack) elegantly generalizes the functional model.
+
+an ast clearly corresponds to the idea of β-reduction to a single outcome, as a tree has one root. a relation connotes no prescribed end value; its data are not related by the structure, but instead many permit many relations as predicates on their values. a stack still reduces to emptiness by _applying_ words to other words, eventually ending when the stack is empty.
+
+this all being said, remember to use the stack how it should be used! direct translation from an applang to a stacklang is generally inappropriate, since the original function was not made for the stacklang; consider the following translation from scheme to factor:
+
+----
+(define (limit/slippage amt slippage) `(amt limit ,(+ (car slippage) (* (sgn amt) (cdr slippage)))))
+: limit/slippage ( amt slippage -- x ) [ second over sgn * ] [ first ] bi + "limit" swap 3array ;
+----
+
+in the scheme version, `slippage` is a list because it is expected to be returned from another function, and returning in a cons pair is easier than returning multiple values, since, as a language constraint, multiple values can only be used inside a `let-values` clause, which is syntactically crufty, especially if not all values will be used. if the whole program were coded in factor, then the following would be appropriate:
+
+[source,factor]
+----
+: limit/slippage ( amt slippage1 slippage2 -- amt x lim ) swap [ over sgn * ] dip + "limit" ;
+----
+
+however, at least for this function, it's more sensible for the inputs to be given in a better order:
+
+[source,factor]
+----
+: limit/slippage ( slippage1 slippage2 amt -- x amt lim ) [ sgn * + ] keep "limit" ;
+----
+
+it's unknown but considerable whether this order is so appropriate for other words that may use these inputs. the core of the program, `[ * + ] dip` is much better than `(λ (a b) `(a ,(+ (car b) (* (sgn a) (cdr b)))))`, and still better than `(λ (a b c) `(a ,(+ b (* (sgn a) c))))`.
+
+NOTE: this shows `keep` as effectively moving the _evaluation point_ down the stack; complementary words like `over` move it up the stack.
+
+as it turns-out, a tuple rather than an array is ideal for this: `SYMBOL: limit ; limit >>type dup >>amt sgn * + >>limit`. tuples are a good accumulation pattern that doesn't concern order, which frees one from stack shuffling. hash tables and other set-like data structures provides the same benefit.
+
+=== recursion
+
+TODO: consider how apl recurses on trees, and the relational model for sexps; between the two of those i definitely should identify a loop that's effectively recursion!
+
+recursion is equivalent to, though often more elegant than, loops. _recursion_ is defined of _functions_. a _function_ can be thought of as a _word_, but rather than pushing to a stack, it outputs to whatever function called it. consider `foldl`, `foldr`, and `foldTree`:
+
+* `foldl` is strict and easily translates to a loop: the result of one iteration is left atop the stack and is used as input to the next iteration
+* `foldr` accumulates thunks then evaluates them; this too is translated easily to a loop, where the loop is parameterized by a stack of thunks. this method is O(2n) whereas foldr is O(n).
+* `foldTree` does not obviously translate to a loop, because each recursive call has different context (parameterization). despite the traversal's symmetry (as shown by the simplicity of `foldTree` definition), it's extremely complex (as shown by the program state throughout execution)
+
+the clear question is how to express general folds (i.e. those which accumulate thunks) strictly in terms of a *traversal structure (commonly a call stack, but generally a graph/relation[relalg] which may even support parallelism)*, an *accumulator structure*, and the *remainder of the structure to consume* (which may not exist and may instead be expressed purely by the traversal structure)? a simple, strict linear right fold pushes to a stack tuples (relevant loop state). consider haskell `foldr / 0 [1,2,3]`, which expands to `3/(2/(1/0))`, an ugly applicative form more clearly expressed in factor [stacklang] as `1 0 / 2 / 3 /`, demonstrating that `foldr` does traverse the input structure in normal order. foldr looks normal in factor! indeed, foldl looks odd in factor: `3 2 1 0 / /`. which is just a loop that checks if the structure to consume is empty, and if so then it traverses the traversal structure, applying its elements to the current accumulator value; else push the accumulated function .
+
+the general difference between recursion and looping is that a loop has one context which may change whereas recursion may have variable context i.e. each call to a recursive function is parameterized by fn args whereas a loop is parameterized by in-scope state. though state/progs & fns/args are equivalent concepts, the importantly practical difference here is that fn args do not contend with each other; they're neatly separate, which allows us to specify each's parameters without managing their relation to other invocations' parameters. fns also have outputs! thus nested recursive fns are easier to traverse than looping through a structure corresponding to a traversal, because the traversal is implicit in the definition!
+
+_context_ has slightly different meaning in recursion than looping because each recursive call may have its own parameterization and return point whereas a loop has exactly one of each. as i mentioned with foldr, using a traversal parameter incurrs extra runtime complexity. however, physical processors do not support "recursion" or "loops" _per se_; they support only _jumps_. *naturally recursion is a loop with a call stack whereas a non-recursive loop does not have a call stack.*
+
+for something to be easy to express recursively but not as a loop implies that losslessly flattening the recursive structure is difficult. that should never be possible, though; and traversing a flattened structure is exactly as easy as writing a parser. *however*, perhaps that statement is true only if the parser is itself a recursive function! then the question is: can parsers be easily written in terms only of loops?
+
+both foldr & foldl are, in factor, defined ``recursive``ly. they work on linked lists. this is sensible because `loop` is not a primitive; it's just a recursive combinator that allows inline recursion/looping without needing to define a word, much like `fix` in haskell or named let in scheme. foldl is strict whereas foldr accumulates thunks then evaluates them, which is the equivalent to pushing thunks to a stack then popping off the stack with `eval` (`call` in factor.)
+
+summary: unlike loops, recursive fns' traversal and accumulation structures are implied by the combination of 1. the definition of _function_, and 2. the recursive function's definition.
+
+TODO: how this would be done in the relational or deductive model? let relational model guide your reasoning about structure. consider multidimensional geometric interpretations of data. *how can recursion be interpreted by or relate to dimensionality (axes)?*
+
+[source,factor]
+----
+{ } { f g h } a
+[| ctrl rst a | rst
+                [ ctrl reduce ]
+                [ unclip-slice ctrl prefix! ]
+                if-empty ] loop
+----
+
+there can be a conditional inside the loop that modifies the return point (here the fn to apply next.)
+
+NOTE: for lists one can just access the list from right to left, but this does not generalize e.g. to rose trees.

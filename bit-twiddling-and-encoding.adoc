@@ -17,11 +17,6 @@ why?
 . flexible: boolean/integer duality
 . all systems support this variety of data, including direct support by ISAs
 
-requirements:
-
-. knowledge of information & encoding theory
-. metaprogramming
-
 .conventions, terms, and other notes
 
 * 2's complement is assumed
@@ -56,7 +51,7 @@ lastly, decimals occur only when dealing with continuous things. most non-scient
 
 decimals are also a useful grouping mechanism: we can select unique elements from a group of uids {1, 2, 3.1, 3.2, 4.1, 4.2} by using equality, or we can select groups whose elements have a common floor: {1, 2, {3.1, 3.2}, {4.1, 4.2}}. this is achieved by using a mix of integers and floats, or could be done using all-floats. remember, though: floats' precision can be relied on only when values are static! it's fine to use uids as long as they are never mutated; floating point mutation can break equality. for example, 1.1 + 1.0 may equal 2.1 or it may not; never assume that it will! you may keep it simple by encoding as fixed-point decimals or some other scheme partitionable into two discrete integers. generally this scheme is a tree structure: {3.1.0, 3.1.1, 3.2, 4} corresponds to sexp ((3 (1 (0) (1)) (2)) (4)). the sexp encoding is more compressed.
 
-==== efficiency vs/and simplicity
+==== relation between efficiency and simplicity
 
 the real polynomial example shows us that we get total elegance: efficiency *and* simplicity, naturally together. this is common, though it often requires a bit of tact to identify elegant encoding schemes.
 
@@ -103,7 +98,86 @@ the _order_ of an encoding is the number of bits that each datum encodes, assumi
 
 efficiency is obtained by exploiting symmetry and/or coincidence.
 
-TODO: expand stub
+===== lattices
+
+a common problem is choosing of `(<,max,high)` or `(>,min,low)`. this is simpler encoded as `(<,max,high)` under negation or not; min(a,b) = -(max(-a,-b)). thus the `<` & `>` lattices are opposites. one's min is the other's max.
+
+.retained info & arity
+[options="header"]
+|===================================
+| fn      | abs | sgn | arity | #cod
+| abs     | yes | no  | 1     | ∞
+| cmp     | no  | yes | 2     | 3
+| sgn     | no  | yes | 1     | 3
+| <,>,=   | no  | no  | 2     | 2
+| min/max | yes | yes | 2     | ∞
+|===================================
+
+* `sgn` is unary `cmp`
+* `min`/`max` retain(s) the most information
+
+to exploit symmetry, use only `<`, but not in its literal sense; its meaning must be relative to the usual lattice or its opposite. in program semantics this means that the reïfication of `<` is context dependent i.e. it'd be in a type class rather than selected from an `if` clause. if `if p then a < b else a > b` (or anything dealing with `min` or `max`) appears multiple places, then `opposite {a < b}`, where `opposite` specifies `<` & `min` to use the opposite lattice and is scoped, is easier to refactor and is less prone to code entering mistakes. as for selecting `low` or `high` (assuming that we need to track both), use only a single context-dependent identifier called `extreme`. such a context can be specified by using dynamically bound variables, e.g., in racket:
+
+[source,scm]
+----
+#lang racket/base
+
+(require (rename-in racket/base [< LT] [min MIN] [> GT] [max MAX]))
+
+;; these zeroes are dummy initial values. low & high will be set
+;; throughout the program.
+(define low  (make-parameter 0))
+(define high (make-parameter 0))
+
+(define pos (vector LT MIN low))
+(define neg (vector GT MAX high))
+
+(define (set-lat x) (if (> x 0) pos neg))
+
+(define lat (make-parameter pos))
+
+;; unfortunately in racket i can't define things in terms
+;; of memory addresses; i would instead define them as macros,
+;; but they're defined in terms of `lat`, and sharing identifiers
+;; between macros and non-macros is a pain. thus i define them as
+;; functions so that they'll be evaluated upon each use [invocation].
+(define (<)   (vector-ref (lat) 0))
+(define (min) (vector-ref (lat) 1))
+(define (ext) (vector-ref (lat) 2))
+
+(low 5)
+(high 20)
+
+(printf "~a < ~a: ~a~n" 40 ((ext)) ((<) 40 ((ext))))
+(set-lat #f)
+(printf "~a < ~a: ~a~n" 30 ((ext)) ((<) 30 ((ext))))
+----
+
+outputs
+
+----
+40 < 5: #f
+30 < 20: #t
+----
+
+this method branches often, which is inefficient. ideally we'd multiply everything by a given variable whose value is either -1 or 1. in most languages, though, this would look absolutely horrible, since that multiplication would need to be explicitly specified in syntax in many places. ideally we'd store `pos := (<,min,ext)` and `neg := (>,max,ext)` in arrays with constant memory offsets so that we can simply set a variable `lat` to either `pos` or `neg`, and use macros `<`, `max`, & `ext` to refer to `lat[0]`, `lat[1]`, & `lat[2]`.
+
+to define this code well, we need a mechanism to select whether eval is done at definition vs use. see _best paradigms_ section on evaluation for further discussion. ideally we'd use clever bit twiddling to avoid all this.
+
+consider whether `high` & `low` are positive fixed-point or not, and which encodings they support. recall that -x = ~x+1.
+
+.identities
+
+* abs(a) = max(a,-a) = -min(-a,a).
+* a <= b = a < b or not -a < -b
+* min(a,b) = a < b ? a : b. min is the result of folding <.
+
+everything is defined in terms of `<`, booleans, and `-`. we know that everything can be defined by `nand`, but can we use that simplicity to enable elegant code?
+
+=== encodings
+
+* a binary coproduct of positive integers can be represented by a single signed integer whose sign determines the interpretation of the absolute value
+* if two numbers are always sufficiently small and have fixed point precision, then we can fit them into a common integer, one taking the high bits, the other taking the low bits.
 
 === integer algebra
 

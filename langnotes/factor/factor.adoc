@@ -1,29 +1,92 @@
 == factor
 
 [TODO]
+* how to do haskell style applicative programming in factor? there's power & terseness there, enabled by global ad-hoc definitions (especially how things compose/relate) and function composition (namely unordered composition.) adts & type classes are at the heart of such programming! factor oop is equivalent. think of how `either` has left as associated state and is a [bi]functor.
 * concurrency
-* cf joy viz binrec or lacking lambdas. the combination of being stack-oriented _and_ being tacit might be particularly interesting....
+* compare against joy, particularly regarding its binrec or lack of lambdas. the combination of being stack-oriented _and_ being tacit might be particularly interesting....
 * cf link:https://forth-standard.org/[forth] viz wrt efficiency
-* what is god's name does _quotation's stack effect does not match call site_ mean?
+* check-out vocabs: `models`
 
-continue on page 49 of factor.pdf
+.common mistakes
+
+* builtins can't be found. you need to import them. for `cond`, `USE: combinators`. for `+` (yes, fucking *plus*) you must `USE: math`. for basic stack words, you `USE: kernel`. never assume that _anything_ does not require using some vocab.
+* no output / print does nothing, especially when near `exit`: use `flush`.
+* using factor when sql can do
+* forgetting `get` after a symbol; remember that symbols are symbol literals and are not themselves dynamic variables, though they can be used as such
+* mixing `set-global` & `set` or `get-global` & `get`
+* using `::` but forgetting to put leading args
+* using a quotation in `::` without `compose` or `call` (thus giving a larger return stack than expected)
+* "cannot create slice from 1 to 0": slice on empty sequence. you probably did `unclip-slice` outside of an `if-empty`.
+* `split-slice` "...does not support length". `split-slice` takes a sequence of split elements, not a single element!
+* stack effect off by one when an `if` statement is involved: you probably quoted the predicate when you shouldn't've e.g. `dup [ pred ] [ t ] [ f ] if`
+
+.when &c
+
+used for actions, except for `unless*`.
+
+* `a [ b ] unless*` means `a b or` but short-circuiting and accepts quotations rather than single values
+  ** or, more generally, `a b unless*` means `a b or` where `b` has effect `( -- x )` i.e. produces a value e.g. `x y [ dup ] unless*` leaves `x y` if `y` else `x x`
+* `? q when` means when `?`, _do_ `q`; `q` must have effect `( ..a -- ..a )` i.e. any fn from _n_ inputs to _n_ outputs
+  ** e.g. `10 dup even? [ 10 * ] when` pushes `100`; changing to `odd?` leaves `10` on the stack.
+  ** `unless` is `when` with negated condition e.g. `9 dup even? [ 10 * ] unless` produces `90`
+* `x q when*` means when `x`, do `q` to `x`, but q must consume a value (effect `( x -- )`), e.g. `print`
+  ** e.g. `6 [ 10 * . ] when*` prints 60. changing `6` to `f` results in no effect
+
+* stack effect problem for `when` (or `unless`): strange as it seems from looking at `when`'s definition, `P T when` is not equal to `P T [ drop ] if`. to understand: note, in `when`'s definition, that `[ drop ]` and `[ call ]` operate on the same object: `when`'s quotation! `when*` is the conveniently terser word for `t [ drop ] if*`. however, i've found myself most commonly doing `dup pred true [ drop ] if`, which discards the predicate but retains the subject of the predicate for use in the true clause. there is no builtin combinator for that. consider the following versions of it:
+
+[source,factor]
+----
+:: with-if ( pred: ( x -- ? ) true-prog def -- y ) dup pred call true-prog [ drop def ] if ; inline
+
+! PROG                                  ! OUTVAL     ! STYLE
+4 dup even? [ 1 swap / ] [ drop 10 ] if ! 80         ! if pred(x) then f(x) else defval
+1 [ even? ] [ 1 swap / ] 10 with-if     ! 10         ! shortened by 4 characters by with-if
+0 [ even? ] [ 1 swap / ] [ 4 * ] tri ?  ! error: 1/0 ! tri & ?
+4 dup even? [ 1 swap / ] [ 4 * ] if     ! 1/4        ! plain ol' if
+----
+
+* consider `smart-if*`
+* the plain form is best. they're all pretty much the same number of characters, and the plain form makes specifying a default value as easy as a false-branch function, including `[ drop ]`. whatever the case, the false branch's stack effect must equal the true's.
+* the `tri` form executes both branches, which can be problematic, and is inefficient
+* `with-if` saves us from typing `dup` & `drop` each once, but definitely returns a constant in the false case rather than a function on, and isn't appreciably shorter
+* even `?if` uses the condition's output, not the subject of the condition, in the true branch.
+
+i guess that the expected idiom for `if*`, `when*`, `?if`, &c is `keep and` e.g. `obj [ pred ] keep and [ fn ] [ else ] if*`. that's not really better than `obj dup pred [ fn ] [ drop else ] if`. they're equivalent, though, so if you find yourself using `if*` &c, then use `keep and`.
+
+the lesson is that `if` is the primitive selective evaluator and is perfectly simple and free. i'm unsure for stack machines, and especially specifically for factor's implementation, how `bi ?`'s speed compares with `if`'s. i imagine that naïve code is optimized well in any stack language, and especially in factor, which is designed to be fast. i'm not worrying about the efficiency of things like an `if` inside a `loop`. if you're so concerned about speed, and you can put a fixed size to your data, then use `math.vectors`, whose ops are auto-optimized to simd when possible; or use a gpu or stack/array lang like lang5, xy, &c.
 
 === design
 
 ==== language
 
+"language?" ...data with an evaluation model is more like it.
+
+* designed for metaprogrammability, simplicity, and flexibility/dynamicism, like elisp but better because the facilities available to the user are the exact same as are used to implement the factor language
+* all factor metaprogramming is compile-time
 * constrained design is generally bad (viz here using the stack—a quite constrained data structure). however, constraint is useful when we don't need to go outside the constraints anyway. in this way factor provides a simple model (stack) for the common cases but allows a simple arg-binding syntax for when that's more elegant.
-* cf apl: good: metaprogrammable; bad: typed, verbose
-* not an array lang. lang features plurality. however, at least it uses virtual sequences, i.e. functions from index to element.
-* stack, no neither functional nor stateful
-* syntax macros are called _parsing words_. the `syntax` vocabulary contains many.
+  ** the stack's simplicity allows extremely efficient program optimization and execution strategies
+  ** effectively implicit composition of arbitrary-arity functions
+  ** stack based (also called _concatenative_) languages are usually superior to functional ones. factor's support for globals, mutable objects, and local binds make factor clearly a good language, certainly strictly better than any functional language
+  ** there are no "void" words. ( ..a ... -- ..a ) is effectively void, but the "return value" is still `..a`, thus allowing composition of functions like `[ 1 + ] dup print [ 2/ ]`. no applicative language supports putting `print` or any other void function in a composition chain!
+* not an array lang. lang features plurality. however, at least it uses virtual sequences, i.e. functions from index to element—especially _cords_, vseqs that appear as a concatenation but have O(1) concat
+* stack
+  ** neither functional nor stateful
+  ** no scope. just position in the stack.
+* macros are quotation monomorphisms, and their parameters must "known as constants" by the stack checker, though their values may be only dynamically known
+  ** `inline` combinators may be partially applied to macros in one context so long as its parameters are appropriately compile-time e.g. `: length-case ( seq cases -- ) over length swap case ; inline`
+* _functors_ are like macros but more powerful...? idk how they differ.
+* lang is a core written in factor with a vm written in c++. factor began on the jvm, being used as a scripting lang for a larger java program.
+* ffi can call c, fortran, and obj-c, and additional libs enable ffi w/js, lua, and c++. the ffi is easy (at least for c): just type the function e.g. `FUNCTION: SSL* SSL_new ( SSL_CTX* ctx ) ;`
+* supports binary data well, viz as structs, simd vectors, and specialized [packed per data type] arrays. this should make factor a good lang for hacking binaries. by the optimizing compiler, operations on tehse binary structures can approach c's speed. un/boxing is implicit.
+* the _destructors_ lib supports deterministic cleanup/finalization of {see §5) external resources (e.g. file handle, network connection). this contrasts the usual gc model.
+* syntax macros are called _parsing words_. these words are evaluated at parse time and may perform arbitrary computations. the `syntax` vocabulary contains many.
 * extremely good [syntax] macros! an ideal mix of rebol & lisp macros.
-  ** backslash is needed to refer to a fn without execution e.g. `\ drop` pushes `drop`; `drop` alone would execute it. `\ drop` is different from `[ drop ]`.
+  ** backslash is needed to refer to a fn without execution e.g. `\ drop` pushes `drop`; `drop` alone would execute it. `\ drop` is different from `[ drop ]`. idk why, aside from being slightly briefer, one would use `\` instead of quotation.
   ** quotations are sequences
   ** the following are is implemented as factor macros, so they're expanded before runtime: named local binds, square and curly brackets, quote marks, and colon for fndefs. (meta-circular)
 * like lisp, factor is a data-based lang. however, factor [stack] is simple enough that we can easily examine the whole program state in the debugger!
   ** debugging steps through ops and shows the stack at each op
-* can pass around macros like any other data; unlike in lisp, macros are first-class data.
+* can pass around macros like any other data; unlike in lisp, macros are first-class data. truly all of factor's linguistic objects are symmetrical about computability; they're all data & transforms thereof.
 * good, _flexible_ (somewhat implicit by generic words, mixin classes & instances) oop support (like cl)
   ** this is how we do ad-hoc relations. this makes encoding ad-hoc polymorphism easy, so we can have haskell-like concision but without haskell's restrictions.
     *** programs are often prolog-like: small facts (except here fns) that are used like a vocabulary; more code re-use than big, specialized chunks of code.
@@ -36,19 +99,17 @@ continue on page 49 of factor.pdf
 * λ syntax is `::`
 * good unicode support
 * supports dynamic scope!
-* postfix; read left to right, e.g. `2 even? [ "OK" ] [ "Cosmic rays detected" ] if` for `2|2 ? "OK" : "Cosmic ..."`
+* postfix; read left to right, e.g. `2 even? [ "OK" ] [ "Cosmic rays detected" ] if` means `2|2 ? "OK" : "Cosmic ..."`
   ** pipeline [unix cmd pipe] design
 * like haskell, data are just nullary functions
   ** all syntactic objects are simply called _words_
-* all control flow is `if` branching or recursion
-  ** both branches of `if` must have the same stack effects
-  ** factor guarantees tail-call optimization!
 * excepting row-polymorphic combinators and macros, all words must accept and output a fixed number of words
-* latently typed w/dynamic checking, static stack effect checking
+* latently typed w/dynamic checking, static stack effect checking. duck typed oop/generics.
 * modules are called _vocabularies_
   ** for maximum flexibility & interactivity, even private identifiers are usable in greater contexts if explicitly referenced
   ** like java public classes, each vocabulary must be defined in a file of the same name
-* factor is oop, but all methods are generic
+* factor is oop, but all methods are generic; no class "owns" methods; instead, everything is interfaces [java] / purely abstract classes [c++] / type classes [haskell] and instances. instance lookup is dynamic.
+* identifiers can be marked as private, but this is a suggestion, not enforced linguistically
 
 ==== implementation
 
@@ -64,18 +125,50 @@ continue on page 49 of factor.pdf
 * ffi w/lua
 * has python bindings
 
-=== env
+=== environment
 
-* `USE: <lib>` imports a lib. `USING: <lib> ... ;` imports many.
+* `USE: <lib>` imports one lib. `USING: <lib> ... ;` imports many.
   ** *put space between last lib and `;`*
+* `FROM: vocab => word ...` disambiguates imported words. it overrides `USE:`/`USING:`, and can be used in lieu of those
 * see `QUALIFIED:`, `FROM:`, `EXCLUDE:`, AND `RENAME:`, too.
-* `IN:` defines a module
+* module A may use module B even if B has errors, as long as A doesn't use any of B's words in which the errors exist
+  ** or maybe not? perhaps _sometimes_....
+* `IN:` defines a module. *required when writing any module*
+* you must import `kernel` when running scripts. yeah, even `drop` must be imported.
+* _quotation's stack effect does not match call site_ is an inconsiderable runtime error displayed when a script finishes with a non-empty stack. even `MAIN:` is hard-coded to check against `( -- )`. either put `clear` at the end of your script or make your script have stack effect `( -- )`. this is probably the most idiotic thing i've seen factor do yet.
+* `save` saves the entire program state to a file. this is useful for scripts, since they're usually re-evaluated on each run. of course, for programs that do not need re-evaluation, it's best to use the ui deployment tool (`deploy-tool`) to make native, speedy executables.
+* command line args: `USE: command-line command-line get-global`
+* envars: `USE: env`; then singleton `env` is an assoc
+
+see factor handbook > the language > vocabulary loader > vocabulary roots. you can get there by searching for `vocab-roots`.
+
+vocabularies have metadata. this is encoded by directories: each vocabulary has its own directory e.g. `foo`, and inside it contains at least `foo.factor`, among any special metadata files (e.g. docs, author) or other files. any of the 3 methods in _working with code outside of the factor source tree_ are good for making directories available for use with `USE:` &c. otherwise you can use `add-vocab-root` *with an absolute path* (leading homedir tilde is supported.) *this are supported only in the listener.* in a source file, `USING:` is processed before the rest of the source file regardless of the order of words. this means that you can't set `FACTOR_ROOTS` in `env`, either.
+
+so `FACTOR_ROOTS` is useless for scripts, unless you're fine with wrapping every executable factor script in a single-line shell script that sets `FACTOR_ROOTS` before running the script. using `add-vocab-root` in `~/.factor-rc` is the best solution.
+
+NEXT: try `require` after `add-vocab-root`, just to see how it works
+
+.example
+
+suppose i'm keeping a `util` module at `~/programming/util/util.factor`, and i want to use it in the listener.
+
+[source,factor]
+----
+"~/programming" add-vocab-root
+USE: util
+----
+
+`util` here refers to the directory; that's why it's `util` and not `programming.util`. however, even if i name the module as `IN: programming.util`, i still can only `USE: util`, not `USE: programming.util`. that's unexpected. anyway, declaring names without periods is simpler anyway. still, TODO: explore how module (and corresponding directory) hierarchies correspond to `USE:` statements.
+
+.no transient imports of generic words
+
+because generic words are potentially many (and can often collide) the module system requires that you, at least in the listener, `USE:` providing vocabs despite having already `USE:`'d a module which itself `USE:`'d that same module. e.g. if my `util` module uses `io` for `stream-contents` (which is not generic but is defined in terms of `stream-contents*` which _is_ generic), then if you `USE: util` in the listener, you'll be prompted to `USE: io` so that `stream-contents` can be resolved. this affects only generic words. this is a price of dynamicism.
 
 === exploring code & learning factor
 
 NOTE: _ciif_ := "code in input field"
 
-* `#concatenative` on irc.freenode.net
+* `#concatenative` on irc.libera.chat (or irc.freenode.net? i'm seeing more ppl on libera)
 * start with the factor repl's `help` menu item
   ** see _developer tools_
   ** see _all tips of the day_ (factor handbook > developer tools > help system > tips of the day)
@@ -89,13 +182,28 @@ NOTE: _ciif_ := "code in input field"
 
 === semantics
 
+* see `DEFER:` for mutual recursion
+* scope is not often a consideration. however, `set` is scoped only within a source file (b/c files are parsed with `with-scope`)
+* strings are sequences of unicode code points, not of bytes. factor supports encodings well. writing bytes is merely a matter of using the correct encoding
 * pushing quotations does not use memory
 * `f` is the false value; all others are truthy
   ** `t` is the canonical truthy value
+* `{ 1 2 3 } dup [ [ 1 + ] map! ] dip . .` prints `{ 2 3 4 } { 2 3 4 }`. therefore `dup` duplicates, at least for non-primitives, a pointer, and arrays are mutable...? this seems to suggest so, but `{ } 3 suffix!` confoundingly fails with _sequence index out of bounds_. this example fails when i use `3 [0,b]` instead because ranges are immutable.
+
+.concurrency & parallelism
+
+see vocab `threads`, vocabs tagged with `concurrency`. parallelism words are in `concurrency.combinators`.
 
 ==== vs picolisp
 
-factor rivals picolisp for simplicity and flexibility. both use implicit state, except that factor's state is usually stored on the stack, and pil's in appropriate variables. both use basic data structures and are equally _flexible_, yet factor is technically a bit more _capable_ since it allows syntax macros like sbuf" hi " instead of `(sbuf "hi")`, which must be an sexp. that's hardly a difference, though. everything in factor is a word and everything in pil is a symbol. both langs use loop primitives instead of manual recursion. pil hasn't generics; _everything_ is lists.
+factor & pil are equally simple, dynamic, and support purity & mutation, and both are extremely efficient (though i've yet to contest them). lambdas are equally easy in both. factor's concatenativity and pil's applicativity is the big difference, and is what makes factor the clear winner. though lists are stacks and pil has `apply`, pil (or other lisps) can be a stack machine only if every function can choose how many data to take from the stack. some take a certain number (either common words, which is a fixed positive integer, or combinators, whose arities are ultimately functions of their parameter functions' arities) or are, like `loop`, variable (these classes can be phrased as static vs dynamic arities.) if we can calculate/get that, then a simple fexpr would make pil into a stack lang. yet factor's parameterization of words is slightly nicer than pil's parameterization of data: pil asymmetrically considers nullary functions & data differently, which means that parameterizing a datum is non-trivial.
+
+NOTE: i've yet to consider pil's universal dynamic binding, and how it can use various kinds of symbols
+
+* factor's state is usually stored on the stack, and pil's in appropriate variables. however, both can use stacks or variables easily.
+* both langs use loop primitives instead of manual recursion (usually)
+* pil hasn't generics; instead, _everything_ is lists.
+* macros are first-class in both factor and pil
 
 factor is easier to learn than pil, namely because:
 
@@ -104,45 +212,52 @@ factor is easier to learn than pil, namely because:
 * pil is far more likely to unceremoniously produce unexpected behavior instead of halting with a helpful error, as factor usually does.
 * pil's handling of symbols (internal, transient, &c) is uncommon and complex or not obvious, nor easily explained, at least by the official docs
 
-having not used factor nor pil considerably much, it still seems clear that pil is smaller (comes with fewer primitives), simpler (again, everything is only lists & `eval`), and even more powerful (more easily (in fewer & terser syntax objects) implements tailored, flexible systems) than factor, enabled by pil's use of arbitrary numbers of variables & implicit state changes rather than having only one variable (the stack). also factor is designed for unix-like oses, and makes system calls easy.
+.pil's advantages over factor
 
-factor's syntax is _maybe_ easier to refactor than pil's, but pil code is terser, which makes it easy to see all at once, and it's indexed by parens, making selecting (e.g. `<a-)>` or `m` in kakoune) logical chunks of code easy. refactoring pil code would be generally more complicated if state is much involved; however, usually state is confined appropriately, e.g. in a loop or control flow expressions like `(while (read) (println @))`. in pil it's trivial to statefully modify any number of stacks (i.e. lists), making is strictly more powerful than factor. given that pil is terser and simpler, and no slower to execute, it is strictly superior to factor. to write maintainable, refactorable, efficient pil programs, the developer must have mastered programming; pil's flexibility permits ugly, buggy programs. factor's limitation limits the number of ways that a program can (or is likely to) be written; thus any developer is likely to write fast, refactorable, idiomatic code; the factor language does not easily support slow, buggy, or messy code.
+* seems smaller (comes with fewer primitives)
+* is simpler; again, _everything_ is only lists & `eval`, and the vm is amazingly simple & efficient
+* not more dynamic, but dynamic & hacky behaviors are easier in pil
+* is terser (variable names)
+* easier to read if you're not already familiar with reading concatenative programs
+* designed for unix-like oses, and makes system calls easy; i'd probably prefer to write a *nix interactive shell in pil.
+* refactoring is easy b/c blocks of code are easily selected b/c they're delimited by parens
+* pil fexprs are easier to learn & use than factor's metaprogramming
+* supports parallel implicit mutation e.g. `(while (read) (println @))`. changing multiple independent states (viz variables) is easier than one state (viz the stack.)
 
-thus factor is preferable over pil when you want to:
-
-* quickly throw together a script or small program, ensuring before runtime that it works rather than dealing with runtime errors whenever they happen to occur
-* execute code on windows or *nix, especially without requiring the host to have factor installed
-* use a lib function that's conveniently already available in factor, e.g. `math.vectors` or `twitter`
-* enjoy variety of different semantics, syntax, and sensation of reasoning by these, which is mentally & spiratually theraputic
-* force a perspective [basis for reasoning & interpretation] change, enabling you to muse about different code designs
+it doesn't really matter which of factor or pil you use, but factor is easier to learn and use, comes with a large set of libraries, runs on both windows and *nix, and supports writing guis, so you should probably use factor, though pico is probably worth learning.
 
 === special builtins
 
 these are contrasted with non-special builtins; these builtins are not useful in writing programs, but are used to examine programs or otherwise concern the vm or language itself.
 
-* `call`: lisp's `apply` e.g. `[ 2 + ] 4 swap call` produces `6`. in the `kernel` vocab.
-* `curry` e.g. `2 [ + ] curry` produces `[ 2 + ]`
-* of the `prettyprint` vocab:
-  ** `.`: pop & print
-  ** `.s`: print stack
-* `clear`: clear stack
-
-[options="header"]
-|=================================
-| word or syntax | meaning
-| : [...] ;      | define new word (literally `:` sets factor in compile mode until `;`
-| --             | stack effects
-| :: [...] ;     | `:` but either stack effect symbols are locally bound vars or are bound by `val :> id` clauses before the body. requires importing `locals` vocab.
-|=================================
+* `call`: lisp's `eval`. runs a quotation, curried fn, or fry expression.
+* `\ f`: pushes `f` onto the stack. `f` is then callable via `execute`
+  ** `execute` cannot be used with dynamically bound variables; in that case you must use `execute(`
 
 === the repl (the _listener_)
 
+* *just because a program runs in the listener does not mean that it is correct*. e.g. `f [ 1 ] unless` runs but trying to get its stack effect produces a stack effect mismatch error! replacing it by `unless*` runs the same as `unless` but has a correct stack effect.
+* set font: e.g. `"monospace" 20 set-listener-font`. you can `save` the image or put in `~/.factor-rc`
+  ** btw the browser font size is *not* adjusted by using ctrl-- & ctrl-+, despite what's been said in the mailing list
+* press `shift+return` to start a new line in an expression; press `return` to evaluate.
+* when the cursor is left in a word for 1s, its stack effect is displayed in the status bar
+* the `refresh-all` word reloads all loaded source files. unlike clojure/cider, reloading the file does not merely execute statements; suppose that a file defines a word; then that file is loaded, modified to have the word definition removed, then reloaded; the word is no longer defined in the listener.
+  ** TODO: determine when/how/why `refresh-all` fails. never trust it too much.
 * supports tab completion
 * supports ^p & ^n but not up & down arrows
 * runs as a gui rather than cli program
 * is a client that connects to a repl server
 * tracks the stack for you, which makes easy both working with state and debugging
 * to enable dark mode (no idea how this was found): run `USE: tools.scaffold scaffold-factor-boot-rc` then add `USE: ui.theme.switching dark-mode` to `~/.factor-boot-rc`, then run `run-bootstrap-init save`, then restart the listener. on nixos i got a _read-only filesystem_ error, so this didn't work totally.
+
+=== stack evaluation model
+
+there is no function _composition_. there are only combinators (higher order functions) and application (β-reduction.) combinators are obvious because they always use qutations. unlike functional languages, words are always applied unless quoted (i.e. in a quotation); unquoted words are always applied. this differs from scheme, where `f` is different from `(f)` and `f` may be passed as an argument. factor is different from haskell, where `f x` evaluates to a result but `f` may still be passed as an argument to a higher-order function. in factor `f` is always applied to the stack below it. furthermore there is no distinguishment between data and functions; like haskell, words are all the same and each has variable natural number arity. `+ = 1 -1 ?` uses neither higher order functions nor composition _per se_; it is equivalent to composition, though composition exists only in a functional model and has no meaning in a stack model, since there composition is equivalent to application which are/is always implicit. binary `+` is applied, then binary `=` is applied. notice that i did not say "applied to `+`'s result." there are no function outputs in the stack model! the only input and output is the stack. any word may affect the stack in any way. here `+` is applied to the top two stack elements, then `=` is applied to the top two stack elements. therefore the stack effect of `+ =` is `( x x x -- x)`; `1 2 3 + =` is `1 == 2 + 3` in common pseudocode, and `+ = 1 -1 ?` is `λx y z. if x == y + z then 1 else -1`.
+
+* `[ + = 1 0 ? ]` has stack effect `( -- x)` i.e. it's just a datum; but `[ + = 1 0 ? ] curry` has stack effect `( x -- x)`.
+* non-higher order functions cannot be variadic, though higher order functions can be; their arity is a function of their argument function(s)'.
+
+NOTE: fns are curried. e.g. `{ { 0 1 } } at` is illegal if the stack is empty; however, `: X ( x -- x ) { { 0 1 } } at ;` is fine b/c it defines but not evaluates `X`. functions may be defined in terms of other [curried] functions, which in turn are curried. you can tell that a function is curried by using an unquoted function that would usually cause stack underflow if applied to an empty stack.
 
 === syntax
 
@@ -154,7 +269,8 @@ NOTE: primitive words are marked by featuring the `PRIMITIVE:` word in their def
 
 the _continuation implementation details_ page is very refreshingly overtly simple: "a continuation is simply a tuple holding the contents of the five stacks: [... each of which] can be read and written." no black box. no trepidation about internal complexity, and certainly no external complexity. maybe i've been scarred by racket's docs on continuations, but i know that all languages besides factor that i've encountered have even attempted to be so clean.
 
-* `!` starts single-line comments
+* `!` starts single-line comments. multiline comments are /* ... */, after `USE: multiline`
+* `$ word` executes `word` at parse time, adding its results to the parser accumulator [stack?]. seems similar to macros.
 * there is no built-in syntax except that there must be spaces between syntax objects. all delimiters and even strings are [reader] macros.
 * local binds: `[| m n | m n + ]` binds m & n to next-to-top and top stack elems respectively, then uses them to push m+n.
 
@@ -165,39 +281,17 @@ the _continuation implementation details_ page is very refreshingly overtly simp
 | '[ ... _ ... ] | threading macro, e.g. `5 '[ _ + ]` is equivalent to `[ 5 + ]`. requires `fry` library.
 |===========================
 
-==== word definition
+`5 '[ _ + ]` is equivalent to `[ 5 + ]`.
 
-[source,factor]
-----
-: foo stack-effect
-  body ... ;
-----
+==== defining words by other words
 
-where `stack-effect` is the syntax `( input ... -- output ... )`
+* `curry` combines a word and a quotation e.g. `2 [ - ] curry`. it always reduces the quotation's arity by 1.
+* `compose` combines two quotations e.g. `[ 2 + ] [ 4 * ] compose`
+* `::` inserts quotation parameters literally e.g. `:: test ( x q: ( x x -- y ) -- y ) x dup q ;` is wrong; by this definition, the stack effect is `( x x -- x x x )` and `2 [ 5 + ] test` pushes `2 2 [ 5 + ]` to the stack. the solution is to do `:: test ( ... ) x dup q call ; inline`.
 
-* the stack effect is for documentation and stack checking only. it's required syntax.
-* indentation is purely conventional. `:` & `;` delimit definitions
+=== oop / generics / ad-hoc polymorphism
 
-===== row-polymorphic definitions
-
-`each` has effect `( seq quot -- )`. `quot` may be any effect that balances correctly, e.g:
-
-* `( x elt -- x' )`
-* `( x y elt -- x' y' )`
-* &c
-
-e.g. `quot` can be a function from one value to one value, or two to two, &c.
-
-* `..a` identifies a row-polymorphic variable, where `a` is any character, and may appear in inputs or [inclusive] outputs
-* quotation inputs can be given stack effects by form `name: ( input ... -- output ... )` and row vars in those nested effects will be unified with row variables of the same name in the outer effect or other nested effects.
-
-.fully-expanded stack effect of `each`
-[source,factor]
-----
-( ..a seq quot ( ..a elt -- ..a ) -- ..a )
-----
-
-=== oop/generics
+TODO: discuss _protocols_ e.g. `assoc`
 
 probably the easiest & most flexible oop ever:
 
@@ -210,11 +304,25 @@ M: circle area r>> dup * pi * ;
 M: rect area [ l>> ] [ w>> ] bi * ;
 ----
 
-* >>foo writes, foo>> reads.
+NOTE >>foo writes, foo>> reads. it's unfortunate that these are words which must be imported rather than syntax for getting or setting a hash table. hash tables are better than tuples. i guess that words [functions] are used because, if true, as class hierarchies are built, mere accesses become arbitrarily or greatly augmented. such degree of augmentation seems unlikely, though. i would expect, especially in a language like factor that touts its dynamicism, that hash keys would be preferred over accessor & setter words, as it's done in clojure. it seems that factor is perhaps not so flexible or dynamic as picolisp. TODO: how are tuples advantageous over mere hash maps? actually, they cannot be, since maps are the plainest general structure.
+
+these are called _tuple_ classes. `r`, `l`, & `w` are called _instance variables_, so named for the interpretation of these named tuples as _classes_ and a constructed tuple (rather than its type/spec/shape) being seen as an _instance_ [object] of the tuple class. a _method call_ is a generic function that applies to a tuple e.g. `r>>` or `area`, both of which apply to any object that supports them (viz any tuple instantiated of a class having an `r` instance variable and a class that supports `area` respectively, where support is determined dynamically.
+
+ways to instance a tuple: `boa`, `new`, `T{`, or by using the `constructors vocab.
+
+i know not of classes other than tuples. tuples are considered as sets of attributes.
+
+_derived classes_:
+
+* _predicate classes_ are subclasses satisfying a predicate.
+  ** is a subclass not merely a union? e.g. `TUPLE: a a b c ; subclass b a d ;` sees `b` as a's attributes ∪ {d}, yeah?
+* _union & intersection classes_ are the union or intersection of classes.
+  ** _mixins_ are a variety of union class. i have no idea what they add to union classes.
+
+* _primitive_ classes represent data primitives and cannot be subclassed
 * what are
   ** multiple dispatch (planned inclusion in factor, but currently implemented by a library)
   ** predicate classes
-?
 
 three functions from class to class:
 
@@ -233,8 +341,8 @@ primitive & tuple classes use >> & << (but not derived ones?)
 
 === common words
 
-* `drop`: pop
-* `nip`: remove 2nd stack item
+.`sequence` vocab
+
 * `nth`: elem at index or error
 * `?nth`: elem at index or `f`
 * `prefix`, `suffix`: adjoin at head or tail
@@ -243,60 +351,270 @@ primitive & tuple classes use >> & << (but not derived ones?)
 * `concat`: concatenate elements of a sequence of sequences
 * `join`: intercalate then concat
 
-==== stack shuffle
+a complement of n-array (e.g. `2array`) &c is `match-cond`. see §_pattern matching_.
 
-uses haskell as-patterns and ellipsis represents [part of] the stack. implicit in this notation is the fact that the word is at the top of the stack before being evaluated.
+==== pattern matching
 
-f:: fn
-q:: quotation
+[source,factor]
+----
+USE: match
+MATCH-VARS: ?x ?y ;
+: my-match ( seq -- )
+{ { [ _ "2" ?y ] [ 14 number>string write ?y print ] }     ! case 1
+  { [ ?x _  ?y ] [ ?x 7 * number>string write ?y print ] } ! case 2
+  { [ _ ] [ "<no match>" print ] } }                       ! else
+match-cond ;
+{ "1" "2" " is the number" } my-match ! writes 14 is the number
+{  6  "6" " is a number"   } my-match ! writes 42 is a number
+----
 
-|====================
-| drop  | ... x -> ...
-| dup   | ... x -> ... x x
-| over  | ... x y -> ... x y x
-| swap  | ... x y -> ... y x
-| dip   | ... x q -> (q ...) x
-| keep  | z@(... x) q -> (q z) x
-| curry | ... x q -> ... (λX. q x X)
-|====================
+case 1 is more specific than case 2; were case 2 earlier, it would match even if case 1 were a better match.
 
-* remember that input & output names are programmatically unrelated (what does this mean?)
+=== stack tech
 
-mentally tracking stack effects is troublesome. you should use three easy-accounting fundamental combinators:
+==== basic stack words
+
+to write amazing code, master the following: drop, dup, dip, swap; cleave[-curry], apply[-curry], spread[-curry]; curry, compose, prepose; with; smart words. in factor, though many stuffle words are defined in `kernel` as ``PRIMITIVE:``s, these words can be defined by drop, dup, dip, & swap. being primitives, though, they're probably a tad faster than using those four manually, so use e.g. `pick` or `over` instead of `[ [ dup ] dip swap ] dip swap` or `[ dup ] dip swap`, and use non-primitives like `keep` &al because they're common and terse; however, use them only as brevity devices, not as their own technique! always _reason_ in terms of the four.
+
+* `preserving` (of the very useful `combinators.smart` vocab): when running a word, don't consume its args from the stack e.g. `1 2 [ + ] preserving` leaves `1 2 3` atop the stack.
+* `drop`: remove top elem
+* `nip`: remove 2nd elem. nip = [ drop ] dip
+* [2|3|5]nip: remove top n elems
+* `nipd`: remove 3rd elem
+  ** generally any word ending with `d` is that word under a `dip`
+* `dip`: pop, apply, push back
+* `x -rot` = `[ x ] 2dip`; think of `x y z -rot` as inserting `z` before `x y`
+  ** think of `rot` as moving `x y z` in front of `z`. i personally can imagine more easily moving one object rather than rotating a sequence. so `rot` (non-negative `rot`) moves `x` forward; `-rot` moves `z` backward.
+* `q keep` = `dup q dip`
+* `bi`,  `tri`,  `cleave`: apply many fns upon top elem
+* `bi*`, `tri*`, `spread`: apply pointwise fns upon data
+* `bi@`, `tri@`,  `apply`: apply one fn upon many data
+  ** `both?` & `either?`: `liftA2 (&&)` & `liftA2 (||)` in the `(->a)` category
+  ** use `[bi|tri]-curry[*|@]` to encode tacit data pipelines
+* over: x y -> x y x
+* pick: x y z -> x y z x. `pick` = `[ over ] dip swap`, \= `[ over ] keep`, btw.
+* `10 56 t [ 2/ ] when` -> 10 28. like `unless`.
+* at: lisp's `assoc`. use `at*` if you need non-`f` value on lookup failure
+* ?: `if` but accepts value literals instead of quotations. its only benefit over `if` is eschewing bracket syntax cruft 
+  ** `if*` keeps the test value on the stack *only when the true branch is taken*, effectively `maybe` in haskell
+* `when*` is `when` but the conditional is the thing to be modified. effectively haskell's fmap in Maybe
+* `a b qt qf ?if` applies `qt` to `b` if `b`, else `qf` to `a`. so it's `if` when there's already an alternative/fallback value left on the stack; usually we'd specify the fallback value in `if`'s false quotation.
+
+NOTE: `keep` supports only quotations e.g. `: add1 ( x -- x ) 1 + ; 1 add1 keep` errors but `1 [ add1 ] keep` is correct
+
+functions start at f and are named with a leading arity. functions grouped together are suffixed by indices e.g. 1f1 1f2 for two related unary functions.
+
+* `[ x ] 2dip` is clearer than `x -rot`
+* `dup 1f 2g` = `[ ] [ 1f ] bi 2g`
+* though `0 { 1 2 3 } { 4 5 6 } [ 1 + ] [ [ tail ] bi@ ] bi` fails b/c it tries to apply `[ 1 + ]` to `{ 1 2 3 }`, we can do `{ 1 2 3 } { 4 5 6 } 0 1 + [ [ 1 tail ] bi@ ] dip` to get `{ 2 3 } { 5 6 } 1` or `0 { 1 2 3 } { 4 5 6 } [ 1 + ] 2dip [ 1 tail ] bi@` to get `1 { 2 3 } { 5 6 }`.
+
+.impure `cond`
+
+`cond` performs stack effects in order until the top is truthy. prior conditional predicate quotations affect later ones. this example demonstrates it, as does the following one:
+
+[source,factor]
+----
+{ { [ dup empty? ]              [ drop 1000 ] }
+  { [ dup first 6 * dup 50 <= ] [ ] }
+  { [ drop t ]                  [ drop "none" ] }
+} cond
+----
 
 [options="header"]
-|======================================================================================================
-| word   | description                            | example
-| cleave | apply multiple operations to one datum | 5 { [ 1 + ] [ 2 - ] } cleave -> 6 3
-| spread | pointwise application                  | "A" "b" { [ >lower ] [ >upper ] } spread -> "a" "B"
-| napply | apply an operation to n stack items    | "A" "B" [ >lower ] 2 napply -> "a" "b"
-|======================================================================================================
+|=============================
+| argument   | resultant stack
+| `{ }`      | 1000
+| `{ 5 3 }`  | 25
+| `{ 15 3 }` | "none"
+|=============================
 
-bi & tri combinators are a bit more convenient: they eliminate braces or a number argument:
+note its ``dup``s & ``drop``s. the 1st condition must `dup` so that, if not empty, the sequence will remain on the stack for the 2nd condition to test, and so on. consequently, each branch replaces the sequence by some other value. factoring-out the ``dup``s to before the `cond` assoc is incorrect; that'd be the same as moving the first `dup` and removing the second. `dup` must be performed before each of `empty?` and `first`; a sequence must be atop the stack before each of those predicates is performed, and each predicate must ensure that it keeps [that] sequence atop the stack for the next predicate to evaluate, unless the assoc is designed to mutate the stack as it goes through the predicates. admittedly, though mutating state while going through predicates is _generally_ useful, it's _commonly_ not, and a pure version of `cond` would be nice to have additionally.
 
-* `bi` & `tri` are 2- & 3-cleave
-* `bi*` & `tri*` are 2- & 3-spread
-* `bi@` & `tri@` are 2- & 3-apply
+stateful `cond` is especially useful in writing parsers e.g.
 
-==== control flow
+[source,factor]
+----
+USING: kernel namespaces system command-line ;
+SYMBOL: PARAM1 PARAM1 off
+command-line get-global
+[ [ f ]
+  [ unclip-slice { { [ dup "--param1" = ] [ drop PARAM1 swap set-global t ] }
+                   { [ dup "--help" = ] [ print-help 0 exit ] }
+                   { [ drop t ] [ write " is an invalid arg" print -1 exit f ] } }
+                 cond ]
+  if-empty ]
+loop
+----
 
-.branches
-|==================================================
-| when   | ... x q -> ... ! side effect q run if x
-| unless | negation of when
-| if     | ... x q u -> ... ! run q if x else run u
-| when*  | ... x q -> ... x ! when but leaves x
-| smart-when* | TODO
-|==================================================
+==== sequence & looping words
 
-==== common higher-order fns & loops
+.general loops
 
-* `each`, `map`, `reduce` (fold), `replicate` (scan), `accumulate` (pushes (scan w/o last elem) and (fold's last elem))
-* `x f g produce` scans g over x until not f.
-  ** `while` is same but fold rather than scan.
-* `while` is a general loop construct. cf apl's ⍣
+* `loop`: general loop construct; repeats a quotation until the quotation evaluates to `f`
+* `while` & `until`: `loop` but partitioned into predicate & body.
 
-.filter evens
+.loops over sequences or quotations
+
+* `collector-as` (guard is filter) & `selector-as` (guard is short-circuit) are the most general looping functions that collect into a sequence. they do not require input sequences; they use whatever state the stack has as input.
+  ** implemented in terms of `push` & `push-if` respectively
+    *** `suffix!` = `over push`
+  ** `q collector` leaves a quotation that applies `q` then pushes that result to a resizable seq, and that resizable seq (to keep it in scope)
+    *** `collector` is more convenient than `loop`: less shuffling and terser.
+* `combinators.short-circuit` for short-circuiting `and` & `or`
+* `each`, `map`
+* `reduce`: fold
+  ** `foldl` & `foldr` are for _lists_, not _sequences_ (two different types)
+* `replicate` seq of elts produced by calling a quotation _n_ times
+  ** `follow` is like `replicate` but mixed with `while`: it calls a quotation until that outputs `f`, collecting results into a seq
+    *** `follow` is implemented in terms of `produce`, which is implemented in terms of `collector-as`. `produce`:`until`::`follow`:`loop`.
+* `accumulate`: scan
+* `map-find`: dual of `filter-map` as `find` is dual of `filter`
+* `seq [ ] each` pushes each elt of seq to the stack
+
+collector & selector examples:
+
+there appears to be no `filter-map`, so one would use `collector` instead. it's nicer than `map-reduce`. 
+
+[source,factor]
+----
+[ 2 * dup when ] collector ! leaves [ 2 * ~vector~ push ] V{ }
+10 [0,b] -rot [ each ] dip . ! prints V{ 0 2 4 6 8 10 12 14 16 18 20 }
+----
+
+NEXT: quite frankly there should be just a loop that processes whatever `e`, which may conveniently be an input sequence as given by a combinator `seq>loop` of effect `( seq -- e )`, and: 1. if `SYMBOL: stop` is returned then the loop stops; 2. returning `f` will not push the element into the output sequence; 3. other values are pushed into the output seq. `seq>loop` will output `short` if empty. this general filter/map/stop loop pattern is practically universal! it can mutate state arbitrarily, accumulate from any state into a sequence, retaining or discarding elts.
+
+.non-looping sequence words
+
+* `a b s snip` leaves `s[0:a]` & `s[b:]`
+
+deep-each example: `{ { { 1 2 { 3 4 } 5 6 } { 7 8 } } } [ . ] deep-each` outputs:
+
+----
+{ { { 1 2 { 3 4 } 5 6 } { 7 8 } } }
+{ { 1 2 { 3 4 } 5 6 } { 7 8 } }
+{ 1 2 { 3 4 } 5 6 }
+1
+2
+{ 3 4 }
+3
+4
+5
+6
+{ 7 8 }
+7
+8
+----
+
+==== general loop supporting short-circuiting
+
+use `each` if you won't short-circuit; else use whichever of `until`, `while`, or `loop` is most elegant for your problem. they all short-circuit by having the body push a bool atop the stack, but `until` & `while` also support a predicate given outside the body. they are more powerful, but can look a little clumsier than `loop` if only the body gives the continuation condition.
+
+`unclip[-slice]` is just a shorthand for `[ rest[-slice] ] [ first ] bi`. if putting the tail & head adjacently isn't particularly helpful, then use each individually where appropriate. it's best to use `[ f ] [ unclip-slice ... ] if-empty` for easy stack effect balancing.
+
+the ideal stack solution to any problem is determined by identifying the reduced AST. let's look at how we'd write haskell `[y | x <- seq, let y = 12*x, y <= 50]` in factor. first, consider the tree of morphisms that we'll need:
+
+* seq
+  ** empty? (in loop predicate)
+  ** [ first 12 * ] (bound to `y` in the list comprehension)
+    *** [ 50 <= ] (guard condition)
+  ** rest-slice (needed to loop)
+
+note that this bullet list matches how it'd be written in factor, minus `cleave`:
+
+[source,factor]
+----
+seq
+  { [ empty? ]
+    [ first 12 * dup { [ 50 <= ] } cleave ]
+    [ rest-slice ] }
+cleave
+----
+
+then we just need to shuffle the stack. this demonstrates equivalance of bullet notation and `cleave` in source code. neither accounts for evaluation conditionality. in actual code you'nd never use `cleave` on a singleton; you'd just use `[ first 12 * dup 50 <= ]`. however, if a macro were to expand a bulleted list, it'd expand to `cleave` on a singleton, unless it were trying to be clever.
+
+anyway, continuing, we install some sensible combinators:
+
+* `keep and` ( x pred -- maybe-x ). e.g. `6 [ even? ] keep and` --> 6. `6 [ odd? ] keep and` --> f.
+* a preserving `bi`. rather than `[ keep ] dip call`, use `[ keep ] dip keep -rot` or `[ keep swap over ] dip call`. we'll call it `bik`.
+* `if-empty` (of the `sequences` vocab)
+* a form of `and` that accepts quotations or the maybe monad would be good for short-circuiting, but wouldn't help here since the shorting is determined easily already by just pushing `f` for `loop`
+
+order of word application is irrelevant up to conditional evaluation.
+
+[source,factor]
+----
+! only shuffle words. terser, less clear
+{ } seq [ [ f ] [ dup first 12 * dup 50 <= [ swapd suffix swap rest-slice t ] [ 2drop f ] if ] if-empty ] loop
+! uses locals syntax. clearer & more verbose.
+{ } seq [ [ f ] [ dup first 12 * dup 50 <= [| acc src v | acc v suffix src rest-slice t ] [ 2drop f ] if ] if-empty ] loop
+! `until` version
+{ } seq f [ [ dup empty? ] [ ] bi* or ] [ dup first 12 * dup 50 <= [| acc src v | acc v suffix src rest-slice f ] [ drop t ] if ] until drop
+----
+
+* the `until` version needs a leading boolean
+* using `if-empty` means that `empty?` isn't in a cleave, but it wouldn't be able to be in a cleave anyway, since the remainder of the cleave quotations are conditional on emptiness.
+
+granted, that's much longer than haskell `[y | x <- [0..n], let y = 12*x, y <= 50]`! that being said, that's special syntax, not a loop using haskell primitives. we can and should use ``Alternative``s and `foldMap` in factor for elegant loops that support short-circuiting. factor does not come with such libraries, but it does come with a rudimentary `monad` vocab.
+
+.monadic version
+[source,factor]
+----
+USE: monads
+FROM: monads do ;
+{ [ seq >array ] [ 12 * dup 50 <= [ array-monad return ] [ array-monad fail ] if ] } do
+----
+
+it's long, but only in characters, not tokens. the way this works is that:
+
+* `x q bind` is the same as `x >>= q` in haskell.
+* `return` uses 1. the kleisli's output as considered inside the monad, and 2. a singleton saying how to interpret the value (e.g. `array-monad`), to produce a monad-specific interpretation of that value e.g. a list.
+  ** we can use `fail` in place of `return` to mean `empty` of the haskell `Alternative` class (or `mzero` if you're into that.)
+* you must use `fail`; there's no `guard`, and using `{ }` is not interpreted as `empty`; those empty lists will be returned in the resultant list.
+* btw `Just x` is `T{ just f x }` in factor, as discovered by evaluating `100 maybe-monad return` since idk factor oop well yet.
+
+NOTE: arrays are strict and lists are lazy. therefore `>array` is needed for arrays, and `>list` (and `list-monad`) for lists. lists would be more appropriate since they're more efficient, but i can't figure-out how to print, or generally loop through, them.
+
+conclusion: clearly a combinator would be best. the obvious winner is the monadic version, preferably a lazy list version. otherwise `loop`-with-only-shuffle-words version is best. regardless, a combinator should be written to make easy work of shorting loops:
+
+[source,factor]
+----
+:: map-until ( seq g: ( x -- y stop? ) -- seq ) { } seq
+  [ [ f ]
+    [ unclip-slice g call [ 2drop f ] [ swap [ suffix ] dip t ] if ]
+    if-empty ]
+  loop ; inline
+
+10 [0,b] [ 12 * dup 50 >= ] map-until
+----
+
+it looks long, but i feel better about deciding to learn factor when i compare it to the scheme version:
+
+[source,scm]
+----
+(define (map-until f s)
+  (let r ([s s])
+    (if (null? s)
+        '()
+        (let-values ([(y stop?) (f (car s))])
+          (if stop?
+              '()
+              `(,y . ,(r (cdr s))))))))
+
+(map-until (λ (x) (let ([y (* 12 x)]) (values y (>= y 50)))) (range 10))
+----
+
+besides, `map-until` should really be written in a loop combinator that combines `loop` and `if-empty`, since that's so common:
+
+[source,factor]
+----
+:: loopseq ( ..a seq g: ( ..a -- ..b ? ) -- ..b seq ) seq [ [ f ] g if-empty ] loop ; inline
+: loopseq ( ..a seq g: ( ..a -- ..b ? ) -- ..b seq ) [ f ] swap [ if-empty ] 2curry loop ; inline ! alt def
+:: map-until ( seq g: ( x -- y stop? ) -- seq ) { } seq [ unclip-slice g call [ 2drop f ] [ swap [ suffix ] dip t ] if ] loopseq ; inline
+----
+
+NOTE: using locals may be easier, but remember to think pointedly! i spent a supid amount of time trying to figure-out why my locals version of `loopseq` caused the `map-until` unit test to output nothing; it turned-out that i'd forgotten to include `seq` at the start of its definition, since i'm so used to thinking pointfree! and you'd think that omitting `seq` would make `if-empty` give a stack underflow error, right? nope; `map-until` puts `{ } seq` on the stack. `seq` gets omitted, leaving the empty sequence. thus `if-empty` chooses `[ f ]`, thus terminating the `loop`, producing no effect.
+
+.example of multi-arity word composition
 [source,factor]
 ----
 { 1 2 3 4 } [ 2 mod 0 = ] filter
@@ -304,9 +622,41 @@ bi & tri combinators are a bit more convenient: they eliminate braces or a numbe
 
 we see that effectively each item in the list is inserted before filter's predicate; then the predicate is applied. thus we get e.g. `1 2 mod 0 =`.
 
-`'[ _ 2 mod 0 = ]` with the `fry` vocabulary tries to do `{ 1 2 3 4 } 2 mod 0 =`.
+`'[ _ 2 mod 0 = ]` with the `fry` vocabulary tries to do `{ 1 2 3 4 } 2 mod 0 =`; fried expressions expand to unquoted expressions.
 
-.mutable vars example
+==== sequences
+
+* TODO: try using push & pop
+* use destructive sequence operations when accumulating a sequence in a loop! this will prevent copying the sequence, staying in linear time rather than quadratic!
+
+=== globals
+
+like lua's `_G`, factor has a global namespace called `global`. namespaces instance the `assoc` class.
+
+[source,factor]
+----
+SYMBOL: x      ! declare
+4 x set-global ! set
+x get-global   ! access
+----
+
+==== locals
+
+[source,factor]
+----
+60 [let 2 5 + :> x 49 x / * ] ! pushes 420
+60 [let :> x x x * ] ! pushes 64. :> binds the top of the stack to an identifier while dropping it
+----
+
+locals do not care about nesting:
+
+[source,factor]
+----
+[let 40 :> x x even? [ x 2 * :> y y 2 * ] [ ] if ] ! pushes 160 to the stack
+----
+
+===== mutable vars
+
 [source,factor]
 ----
 USE: locals
@@ -318,85 +668,60 @@ USE: locals
 
 `x!` pops into `x`. exclamation marks ("shrieks") are particular here.
 
-===== globals
-
-[source,factor]
-----
-SYMBOL: x      ! declare
-4 x set-global ! set
-x get-global   ! access
-----
-
-=== examples
-
-each example here is a 1-liner
-
-[source,factor]
-----
-{ 1 2 3 4 } 0 [ + ] reduce
-{ "hello" "there" "boi" } [ print ] each
-[ "#" head? not ] filter [ string>number ] map 0 [ + ] reduce
-----
-
-.tail, naïve, and sequence factorial
-[source,factor]
-----
-: tail-factorial ( acc n -- n! )
-  dup 0 =
-  [ drop ]
-  [ [ * ] [ 1 - ] bi tail-factorial ] ; [ * ] [ 1 - ] bi = λx. x*(x-1)
-  if ;
-
-: factorial ( n -- n! ) 1 swap (factorial) ;
-
-[1,b] product # not even defined as its own function b/c it doesn't need to be; it's not recursive
-----
-
-=== common designs/patterns
-
-* `x y f g bi` = `g (f x y) y`
+this syntax can be used in `[let` also e.g. `[let 24 :> x! x x * x! x 400 - ]` which outputs 176.
 
 === caveats
 
-* `print` doesn't accept numbers (generic word `string-lines` does not define a method for the fixnum class)
+none (in this general section) documented yet! frankly, though, "caveat" is an attributive of some properties, and they're commonly caveats about other things, which makes "caveat" a property of a statement, and those statements concern particular subjects; therefore one should query a db for caveats ∩ subject.
 
-=== libs
+=== libs & specific words
 
 * for graphics, use cairo; it has bindings to factor
-* see factor documentation > libraries. mah gawd it feel good seeing such a wealth of functionality in one big listing!
+* see factor documentation > libraries. it's a wealth of functionality in one big listing!
+
+=== tricks
+
+[source,factor]
+----
+26 <iota> [ CHAR: a + ] map            ! list of a..z
+USE: math.ranges CHAR: a CHAR: z [a,b] ! same
+USING: math.parser random ; "(ddd) ddd-dddd" [ { { CHAR: d [ 10 random number>string ] } [ 1string ] } case ] { } map-as concat
+USING: calendar calendar.format ; now 30 days time+ { YYYY " " MONTH " " DD " " hh ":" mm ":" ss } formatted>string .
+----
+
+=== `math`
+
+* `bitxor`, `bitand` &c. see the docs for related fns like `2/` (right shift by 1 bit), `bitcount`, and `even-parity?`
 
 === os
 
-==== subprocesses (`unix.process` vocab)
+==== subprocesses (`io.launcher` vocab)
 
-tl;dr: e.g. `USING: vectors unix.process ; { "echo" "hi" } >vector exec-args-with-path`.
-
-TODO: ask eduardo cavazos (dharmatech in #concatenative) how to use. though perhaps i should check the manpages (§2) for wait, fork, execv &al—online, since nixos doesn't have those (what the fuck?)
-
-i got the following to work:
+.read a process into a string
 
 [source,factor]
 ----
-USING: vectors unix.process prettyprint ;
-"/nix/store/ajpn5689vqhczp2mpwmkygrg636wrm8s-system-path/bin/echo" { "echo" "hello" } >vector exec .
+USING: io.launcher io.encodings.utf8 ;
+<process> ! new blank process object
+  { "echo" "hello, there!" } >>command
+  utf8 <process-reader> stream-contents
+"and hello to you, too!" append print
 ----
 
-god only knows why, despite giving the expected output—a line that says hello—it prints that the stack's head is -1. btw this must be executed in the terminal, not in the listener, since the listener does not capture stdout from forked procs.
+NOTE: use `with-disposal`, or more likely, `with-<input|output>-stream`.
 
-i looked at the `underlying>>` docs (since that class was mentioned in an error when i tried the above without `>vector`) then tried some of its instances until i found one that didn't mention any low-level stuff like c-ptr: `sbuf`. `sbuf` was weird, though: it seemed a string rather than a vector of strings. then i found `vector` and yay it worked.
-
-if you use `exec` then you must specify the path to the executable yet still specify its name in the argv's 0th position. also, it appears that only the directory of the path is used, since `"touch"` works instead of `"echo"` just fine, even though we get the ever-dreaded "Quotation's stack effect does not match call site" error if we specify only a directory path.
-
-`exec-args` removes this redundancy:
-
-[source,factor]
-----
-factor -e='USING: prettyprint vectors unix.process ; { "/nix/store/ajpn5689vqhczp2mpwmkygrg636wrm8s-system-path/bin/echo" "hello" } >vector exec-args .'
-----
-
-prints `hello` as expected, but unexpectedly `.` has no effect; no exit code is output. in fact, i may specify the dot any number of times and there's no error of stack underflow; it's just completely ineffectful!
-
-`exec-args-with-path` allows us to specify `"echo"` instead of its pathname. again, putting `.` or `.s` at the end does not a god-damn thing.
+* `obj run-process` is the simple synchronous execution of a cmdline string or array of strings.
+* `stream-contents` replaces the process on the stack with its output.
+* though `echo` supports `-e` to not output trailing newline, remember that we can trim trailing newline by `[ CHAR: \n = ] trim-tail`
 
 ==== filesystem
 
+* vocabs: `io.files`, `io.directories`, `io.encodings`
+* load files as streams: `with-file-[reader|writer]`
+* load whole file: `[set-]file-[contents|lines]`
+* `current-directory` dynvar
+
+examples:
+
+* `"filepath.txt" utf8 [set-]file-contents` to read or write to a file.
+* `"writeme" utf8 [ "readme" mac-roman [ [ print ] each-line ] with-file-reader ] with-file-writer`

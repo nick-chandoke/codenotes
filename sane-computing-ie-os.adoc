@@ -1,5 +1,7 @@
 == sane computing
 
+when people are shown bash's power, they're seeing power due to using an executable, regular notation for relations involving various parts of the system, namely the filesystem. that many programs are piped is a stupid & limited version of relating codes; the better version is general n-ary unordered relations rather than unilateral piping, and instead of piping from one _program_ to another, just relate one relation's result (having been constrained) to another relation (i.e. one relation's "output" is the other's "input", but literally the relations are related by one's attribute(s) being related to the other's attribute(s).)
+
 TODO: check-out link:https://fossil-scm.org/home/doc/trunk/www/index.wiki[fossil], a vcs bespoke for sqlite, that uses a sqlite db instead of `.git/`. cf *dragonfly bsd*'s _hammer_ filesystem (viz b/c it has historic records & mirroring [redundancy] (cf RAID).) remember, though, that any filesystem based on lies (viz disk cylinders) is undesirable. i ideally want no disk partitions and no filesystem, but instead, a datasystem (i.e. a database, though not necessarily a tabular one.)
 
 NOTE: i use _data_ and _information_ interchangably.

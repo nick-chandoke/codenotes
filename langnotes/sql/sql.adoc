@@ -28,9 +28,7 @@ sql is an array-based proglang whose sole data structure—the table—generaliz
   ** reactive programming via triggers
 * clear separation of ad-hoc and symmetric relations: symmetric across rows (with implicit map over rows, and explicit map over tables by `group by` and aggregates) and ad-hoc relation of attributes of each given row.
 
-but appears to lack:
-
-* pointfree funcomp
+but lacks metaprogrammability! for queries to not be manipulable nor generated then executed is a big lack! that'd be like if factor didn't support composing quoted programs then ``call``ing them!
 
 NOTE: sql is case-insensitive!
 
@@ -268,13 +266,15 @@ then use `where` to select a particular row. another possible condition is, inst
 * `x not in (select a from t)` may return ∅ if the `select` returns a set containing `null`; the whole query would translate to `x not in (b,...,null)`, which is equivalent to `not(x=b or x=... or x=null)`. in 3-valued logic, which sql uses, `x=null` is an expression involving `null`, so the whole expression evaluates to `null`. the solution is to use `exists`, which uses 2-valued logic. other solutions are `except`, `where x is not null`, or, if your sql engine supports it, `left outer join`
 * predicate evaluation order is nondeterministic e.g. in `isint(a) and a > 0` may fail with "can't apply > 0 to string" since that may be evaluated before `isint`. cte's are not a solution; they suffer from the same non-deterministic evaluation order. `case` is a solution because it has definite evaluation order.
 
+.grouping & bare columns examples
+
 in the following query, `a` is not a bare column because it is in the `group by` clause, so `a`'s value is properly determined in the result set:
 
 [source,sql]
 ----
-sqlite> create table x(a,b);
-sqlite> insert into x values("x",1),("x",2),("y",34),("y",65);
-sqlite> select a,sum(b) from x group by a;
+create table x(a,b);
+insert into x values("x",1),("x",2),("y",34),("y",65);
+select a,sum(b) from x group by a;
 ┌───┬────────┐
 │ a │ sum(b) │
 ├───┼────────┤
@@ -284,6 +284,8 @@ sqlite> select a,sum(b) from x group by a;
 ----
 
 according to sqlite v3.39's `select` docs, §2.4, `group by` associates each row with a group. `select a,f(b) from t group by e` where `e` is an expression that uses [only?] `a`, should be a common idiom. idk how `select` behaves if `e` uses multiple column ids. 
+
+`select a,1.0/count(x) from x` returns only one arbitrary column. `a` is bare here. fix: `select a,cnt from x join (select 1.0/count(*) as cnt from x)`.
 
 ==== using sql engines efficiently
 
@@ -503,6 +505,8 @@ in `a left join b`, all of `a`'s rows are present, but some of their correspondi
 
 ==== syntax
 
+comments: `-- ... ` for single line, `/* ... */` for multiline
+
 `table.attr` disambiguates when `attr` is shared by multiple tables; otherwise attr is resolved against the table of the `from` clause.
 
 .basic operators
@@ -520,7 +524,7 @@ in `a left join b`, all of `a`'s rows are present, but some of their correspondi
 ===== `create table`
 
 * `create table as` still inserts a table into a database. it's used to init a table at declaration time, for convenience.
-* `temp` tables are accessible in the remaining sql script, but is not persistent; it isn't inserted into the database, and so doesn't exist after the sql script that created it finishes execution.
+* `temp` tables are accessible in the remaining sql script, but are not persistent; it isn't inserted into the database, and so doesn't exist after the sql script that created it finishes execution.
 
 ===== user-defined functions (not supported by sqlite)
 
@@ -723,7 +727,6 @@ select * from y;
 create table to_mg(oz,g);
 insert into to_mg values(28349.5,1000);
 select 3*g,12*oz from to_mg;
-
 ----
 
 this sees using a table as a simple ad-hoc relation. obviously the symmetry constraint here restricts the table from holding expressions beyond mere literal values. such functionality would require first-class λ's or `eval` (see sql metaprogrammability section.)
@@ -793,7 +796,7 @@ with t(x,y) as (select * from (values(1)) join (select * from generate_series(1,
 └───┴───┘
 ----
 
-we could `natural join` that table with grid on `(x,y)`. (btw, expressions like `where (x,y)=(1,2` are valid!) however, this is a perfect use case for `group by` & the `sum` aggregate. the finished code is:
+we could `natural join` that table with grid on `(x,y)`. (btw, expressions like `where (x,y)=(1,2)` are valid!) however, this is a perfect use case for `group by` & the `sum` aggregate. the finished code is:
 
 [source,sql]
 ----
@@ -803,8 +806,8 @@ insert into grid(x,y) select * from generate_series(1,3) as x join generate_seri
 select sum(v) from grid where x=y;
 select sum(v) from grid where x=4-y;
 -- check rows & columns
-select * from grid group by x having abs(sum(v))=3; -- rows for which sum({(x,y)|x=n})=3
-select * from grid group by y having abs(sum(v))=3; -- rows for which sum({(x,y)|y=n})=3
+select * from grid group by x having abs(sum(v))=3;
+select * from grid group by y having abs(sum(v))=3;
 ----
 
 so there you go: checking for winners in tic tac toe simply by 4 queries. maybe it can be syntactically shorter, but this is a good encoding of the game's rules: you win if you cross any row, column, or diagonal.
@@ -858,31 +861,31 @@ with x(start,end,high,low,vol) as (
 )
 select strftime("%Y-%m-%d",start),high,low,open,close,vol
 from x join (select datetime as cdt, close from x_AAPL) on end = cdt
-       join (select datetime as odt, open from x_AAPL) on start = odt;
+       join (select datetime as odt, open  from x_AAPL) on start = odt;
 ----
 
 returns
 
 ----
-2010-01-04|30.6429|30.34|30.4871|30.5971|116694802
-2010-01-05|30.7986|30.4643|30.64|30.6257|136014592
-2010-01-06|30.7471|30.1071|30.6257|30.1343|133300727
-2010-01-07|30.2857|29.8643|30.25|30.0829|113809059
-2010-01-08|30.2857|29.8657|30.0429|30.27|104221936
-2010-01-11|30.4286|29.7786|30.4143|30.01|111353487
-2010-01-12|29.9671|29.4886|29.8843|29.6757|129700571
-2010-01-13|30.1329|29.1571|29.6957|30.0571|145122992
-2010-01-14|30.0657|29.86|30.0157|29.9171|98356076
-2010-01-15|30.2286|29.41|30.1314|29.4143|130680837
-2010-01-19|30.7414|29.6057|29.7671|30.72|161574329
-2010-01-20|30.7929|29.9286|30.6914|30.2614|148014426
-2010-01-21|30.4734|29.6014|30.2971|29.7486|145818463
-2010-01-22|29.6429|28.1657|29.54|28.2514|205441418
-2010-01-25|29.2429|28.5986|28.93|28.9286|216214306
-2010-01-26|30.53|28.94|29.3986|29.4129|425729542
-2010-01-27|30.0829|28.5044|29.5471|29.71|417601177
-2010-01-28|29.3571|28.3857|29.2714|28.4714|281731401
-2010-01-29|28.8857|27.1786|28.7243|27.4457|300374774
+2010-01-04  30.64  30.34  30.48  30.59  116694802
+2010-01-05  30.79  30.46  30.64  30.62  136014592
+2010-01-06  30.74  30.10  30.62  30.13  133300727
+2010-01-07  30.28  29.86  30.25  30.08  113809059
+2010-01-08  30.28  29.86  30.04  30.27  104221936
+2010-01-11  30.42  29.77  30.41  30.01  111353487
+2010-01-12  29.96  29.48  29.88  29.67  129700571
+2010-01-13  30.13  29.15  29.69  30.05  145122992
+2010-01-14  30.06  29.86  30.01  29.91  98356076
+2010-01-15  30.22  29.41  30.13  29.41  130680837
+2010-01-19  30.74  29.60  29.76  30.72  161574329
+2010-01-20  30.79  29.92  30.69  30.26  148014426
+2010-01-21  30.47  29.60  30.29  29.74  145818463
+2010-01-22  29.64  28.16  29.54  28.25  205441418
+2010-01-25  29.24  28.59  28.93  28.92  216214306
+2010-01-26  30.53  28.94  29.39  29.41  425729542
+2010-01-27  30.08  28.50  29.54  29.71  417601177
+2010-01-28  29.35  28.38  29.27  28.47  281731401
+2010-01-29  28.88  27.17  28.72  27.44  300374774
 ----
 
 === implementation-specific
@@ -905,7 +908,7 @@ TODO: this document should be stored as database table with indexes on both topi
   ** `csv`
 * special output:
   ** `html`
-  ** `insert`: sql insert statements; good for copying from one table to another
+  ** `insert`: sql insert statements; good for copying from one table to another, but not for duplicating table schema. for that you'll likely want `.clone` or using a system shell to copy the db then use sql to modify the copy.
 
 all except `list`, `csv`, `insert`, `html` force headers to be displayed. other modes aren't good.
 
@@ -976,7 +979,7 @@ it's likely in your best interest to add csvs as tables into a db, then use sql 
 .describe a table
 
 |===
-| sqlite | `pragma table_info(tableName)` //NOTE: no effect if tableName ∉ db
+| sqlite | `pragma table_info(tableName);` //NOTE: no effect if tableName ∉ db
 | mysql  | `describe tableName`
 |===
 
@@ -1114,7 +1117,7 @@ with recursive
 select ps from acc order by id desc limit 1;
 ----
 
-* we really do use functional style here. we can't use noe `with` clause over both an `update` and a `select` statement. rather than use `update` (a stateful, non-functional style), we can use recursion and nested ``select``s. each row is defined in terms of its predecessor.
+* we really do use functional style here. we can't use one `with` clause over both an `update` and a `select` statement. rather than use `update` (a stateful, non-functional style), we can use recursion and nested ``select``s. each row is defined in terms of its predecessor.
 * `acc` is the named tuple of the fold. `printf` (`format` in other sql engines) is used for string concatenation since sqlite has no separate such function.
 * the proper solution binds `x` b/c `select * from c limit 1 union all ...` is invalid syntax; we can't use `limit` there, though `where` is fine there
 * i'ven't yet ``explain``ed this query to see its efficiency
