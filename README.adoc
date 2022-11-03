@@ -44,6 +44,8 @@ _reductionist_ means that a program reduces input to output. declarative program
 
 the reason that applicative & stack are necessarily reductionist is that they're defined by a structure to traverse (ast or stack) *and* the traversal is predefined: both β-reductions of the current continuation at the bottom level of tree or top of stack. ast langs are depth-first traversals of structures rooted (for the stack, _rooting_ means that the stack is guaranteed empty there) at main, after top-level statements have been processed.
 
+*in a reductionist model, unbound variables assume the empty value (usually denoted `f` or `nil`, supposed to correspond to ∅ or ⊥), whereas in the logical model, they assume the set of everything.*
+
 .interpretations
 
 i prefer to think of reductionist programs as paths through an unknown graph, and declarative programs as an infinitely sized undirected graph; queries identify path(s) through the graph. an undirected edge is equal to a bidirectional edge; in the declarative model, defining a relation can be interpreted as simultaneously defining a morphism and its dual. for example, the `xor` relation:

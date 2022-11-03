@@ -311,6 +311,12 @@ g bi *  ! account for new thing
 
 think about how nice that looks on diffs [vcs].
 
+===== limitations of the stack explicitly passing words
+
+like functions, stack words have access only to those explicitly left by other words. this means that every word must account for all words left by the former word(s). that disables us from the context-sensitive subprograms available in picolisp by its use of dynamic binding; in picolisp, any all variables are available (including those never bound, which have `NIL` value) to every function, so a function may use *whatever subset* of variables happen to be bound or not at its execution time. though a word implicitly has access to the whole stack, putting to the stack is the only way to pass data among words; words cannot set variables (as a side effect) of which another word may use an arbitrary subset.
+
+this is simply solved in factor by its support of dynamic variables. that allows changing program state in a way that words not must, but may, care about those changes. this being said, dynamic variables must still be declared by `SYMBOL:`, which really makes them like global variables. to be true dynamic variables they'd need to, as in picolisp or lua, be able to reference variables without declaration (e.g. `print(z)` in a fresh lua repl prints `nil`.)
+
 === recursion
 
 TODO: consider how apl recurses on trees, and the relational model for sexps; between the two of those i definitely should identify a loop that's effectively recursion!
