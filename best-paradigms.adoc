@@ -95,6 +95,8 @@ this being said, if an implementation or logic error is present, being able to v
 data used in the condition of a loop must support at least one axiom, even if that axiom is mere equality. if the loop is traversing a structure, then that structure must have at least one axiom: that it's constructed by repeated application of some closed operation. usually the inverse thereof is used to traverse the structure. typical loops are application of a fn f to some x where such application tends toward a y : f(y) = y; y is a fixed point of f. for imprecise data (e.g. floats) we can check whether f(y) ≈ y i.e. |f(y) - y| < δ. fixed points are usually the base case / exit condition. loops can break before then, though, if a condition is found to be violated, which means that we discovered _during_ the loop that its input was inappropriate. such checks are sensible only if we can't validate in O(1) before looping.
 
 .todo/discuss
+* consider metric spaces for program optimization (less redundant encodings and more efficient traversals)
+* a _program_ is anything that uses information. it's commonly a state manipulator, or produces a variant, reinterpretation, or implication of a state.
 * langs as "models": evaluation as traversals over structures: applicatives: rose tree; stack langs: stack; prolog: predicates. _model_ means the data structure used to represent linguistic constructs, and the evaluation by traversal of those structures. inelegant, irregular langs like java, python, have multiple structures, many ad-hoc rules, and complex models.
 * metaprogrammability is important in the same way that recursion is. see a program as a data structure; don't you want to be able to manipulate data structures? that a structure can be evaluated is not special among any of its other properties. lambdas can be evaluated and passed around, so why not programs? in a lambda calculus language like haskell or scheme, is there really any difference between a program and a lambda? even if there is, why care? why define a proglang by some set of mandatory constructs? i want to _code_; why force an encoding on me?! why force _language_ on me? all programs are particular manipulations and particular relations. that, and nothing more particular, is what my programming tool should enable me! i want to *define relations and manipulations.* programs, as all data, must be encoded by some encoding(s), and those encodings must be represented by some syntax [representation scheme], whethrer textual, graphical, audial, or whatever; i must be able to "read" & manipulate the program. anyway, metaprogrammability acknowledges that there is no generally sensible way to consider code separately from other data/information. by no coincidence, all metaprogrammable "languages" are hardly languages; they're just relations e.g. prolog (`rel(vars...)`), factor (`vars ... rel`), scheme (`(rel vars ...)`). the latter two support `quote` & `eval`, and prolog has no need for that b/c programs are just sets of facts; evaluation is not part of the program itself, so quotation would have no meaning or a quoted object would equal it unquoted.
   ** when you consider programs as models (traversals of data structures), a lack of metaprogrammability is as ludicrious as being told to program using only one data structure and not be able to make your own. like if i were to say that you could use only lists and hash tables, because that's just how the language is. you can't define a ring buffer, or deque, or b-tree, unless you define them in terms of lists or hash tables. now that's not terrible, since—mostly—any structure can define any other, but why start by arbitrarily limiting which structures are available?! why not use the least constrained structure: the [binary] relation? indeed, this is what lisp & prolog do! isn't it interesting that the languages whose data primitive is mere relation are metaprogrammable? factor goes a step further by not even having a special construct for relating things; instead of `(cons 1 2)` you just put `1 2` on the stack so that constants are implicitly sequentially related and are not even considered different from the rest of a program.
@@ -218,68 +220,6 @@ programs have a dual nature: data pipelines and logical rules. i've yet to see a
 in summary: graphs appropriately encode control flow, but the subset of graphs called _trees_ cannot elegantly (or naturally) encode all forms of control flow. the ad-hoc inelegance is seen syntactically by there being separate syntaxes for 1. function composition (which generally encode trees), 2. looping constructs (which generally encode loops), and 3. binding statements (which generally encode dags). technically, we can use combinators and recursion to uniformly encode all these as function composition, but that's generally ugly as sin, and still, though it may be hidden, ultimately relies on a branching operator. if the language supports first-class continuations, then we may elegantly have a variable that stores a continuation, so that the program can be control flow is not given statically by the code's syntactic structure alone. however, this is possibly difficult to reason about. it's certainly not functional style.
 
 conclusion: though there might exist many even equally good ways to encode control flow, we must acknowledge that programs are not nested compositions of building blocks. they are not layered together like onions. they are general, complex, arbitrary, like brains, neural networks, general graphs. any language that disregards this truth is bound to inelegance. certainly refactoring should be as easily programmed as factoring an algebraic expression, according to that algebra's defining rules. this is another call for programs to be constructed of algebras. it's certainly sad to require a human to not only rearrange code into isomorphisms that follow simple & regular rearrangement rules, but especially to require rearranging its syntax in a text editor! we need _logic_ editors, not _text_ editors, as obviously programs are composed of logical objects, not text objects, though they are currently commonly so _expressed_. expressions are constrained by their definitions as are all things; carefully consider whether these constraints cripple working with the thing being expressed!
-
-''''
-
-NEXT: learn then incorporate erlang and prolog. prolog, being predicate-based, ideally accomplishes structural typing (where each type is exactly defined mathematically i.e. by a set of predicates)
-
-hackers should consider the following paradigms, which are incidentally expressed in these langs:
-
-* prolog: declarative, horn clause-based
-* apl: concatenative, array-based
-* assembly: procedural, purely stateful, register machine
-* haskell: purely functional, λ-calculus
-* factor: stack machine
-* erlang: agent & message-based, π-calculus
-
-these are different from common langs like python, ruby, go, java, &c. common langs are all complex, interchangable, and mixed-paradigm—all of which are bad qualities.
-
-learning all these languages is important because each language is very different from all the rest. each is a simple language with one underlying structure, one paradigm. one can look at these languages altogether and infer the fundamentals of computing, and see how paradigms completely at odds with each other nonetheless are turing-complete, convenient, and elegant.
-
-considering such things makes one realize how bloated & confused most other langs are, so choosing simple langs is obvious and liberating. the simple langs demenstrate that hardly are "languages" needed, but instead simple notations for describing equivalent formal systems. such study reveals that common assumptions are false. truths:
-
-* variables aren't needed
-* can remove arbitrary chunks of programs and a valid program remains
-* making self-modifying programs is plain & simple
-* we can run programs backwards
-
-''''
-
-how to handle:
-
-[source,scm]
-----
-(f (if p
-       a   ; but also make this whole expression return #t
-       b)) ; return this to f but make this whole expression return #f
-----
-
-refactor into
-
-[source,scm]
-----
-(let-values ([(r1 r2) (if p
-                          (values a #t)
-                          (values b #f))])
-  (f r1)
-  r2)
-----
-
-this is the functional style. concatenative/stack gives the perfect solution: `p a b if* g` becomes `p [ t a ] [ f b ] if g h` where `h` is a binary function one of whose arguments tells which branch was taken. we still put `a` or `b` on the stack for `f`, but after `f ( x -- )` uses it for side effect, `t` or `f` remains atop the stack, and thus effectively becomes the whole segment of code's return value.
-
------
-  h
- / \
-f   g
-|   |
-x   y
------
-
-can be, in a stack lang, equally interpreted as `h(f(x),g(y))` [app] i.e. `x f y g h` [stack] or, assuming `h` as `if`, then `f` & `g` would be program branches. actually, this can already be done in any applicative language; it's just that in a stack lang managing variables across branches is easy b/c they're all just on the stack rather than needing to manage multiple names & scopes. this being said, mutating dynamically-bound variables could be just about as good or better, depending on how many things would be pushed onto the stack.
-
-we're so wonderfully enabled by the fact that stack languages are basically functional mixed with mutative: all variables are on the stack and all functions share a common input and output: the stack. that means no need to name variables, and makes control flow extremely simple. what's amazing is that it actually works.
-
-btw, the common refactoring pattern for applicative languages, `(f (+ 3 5))` --> `(let (x (+ 3 5)) (* (f x) (g x)))`, is done by `dup` in stack langs: `3 5 + dup \ f dip g *` (though it'd really be written using non-primitive combinator `bi`: `3 5 + f g bi *`.)
 
 === minimum [wip]
 

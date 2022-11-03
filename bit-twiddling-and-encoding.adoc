@@ -176,7 +176,7 @@ everything is defined in terms of `<`, booleans, and `-`. we know that everythin
 
 === encodings
 
-* a binary coproduct of positive integers can be represented by a single signed integer whose sign determines the interpretation of the absolute value
+* a binary coproduct of positive integers can be represented by a single signed integer whose sign determines the interpretation of the absolute value i.e. n is shorthand for +n which contrasts -n which is interpreted as the cons pair (sign,n) where sign∈{+,-}
 * if two numbers are always sufficiently small and have fixed point precision, then we can fit them into a common integer, one taking the high bits, the other taking the low bits.
 
 === integer algebra

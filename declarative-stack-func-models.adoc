@@ -1,5 +1,7 @@
 == comparing the declarative, stack, and functionals models
 
+got it! the solution to making things good in a reductionist paradigm is to have literal data that represent actual reductions; this way the data can be manipulated and thus have morphisms across abstract instructions. think of haskell's foldl/`Fold` typeclass or the tuple (a,b) to represent the series from `a` to `b`; let's say that i want to intersect them. though it'd be painful to work with the lists that they represent, but finding the intersection of (a,b) & (c,d) is easy! also stuff like `filter` not doing a whole sequence, but instead adding the predicate that it check any _given single_ element against a predicate when evaluated, backtracking/continuing if it fails. so this is just *virtualization* and/or non-strict eval. as another example, the identity matrix can be encoded in factor as `= 1 0 ?`. combining filters is just ANDing (product of) the predicates.
+
 [TODO]
 * consider how in sql everything is in a relation, and how plurality is.
 * identify cata/morphic programming as a specific version of declarative programming
@@ -21,21 +23,32 @@ the stack model generalizes the applicative model to support:
 
 can factor's model (dynvars, stack, locals) help the following functional problem: `f : a -> b, g : b -> c, h=g⚬f`, but i want access to `b` without refactoring `h`? with functions you'd need to split `h` or modify it to inject `b` into its codomain. one solution is simply writing very many small inline words, so that arranging those words is easy and terse; thus we get expressivity without sacrificing terseness. i know that this isn't a problem in prolog because prolog doesn't define dataflow pipelines. consider pipelines as paths through a graph. prolog defines vertices and _valid_ edges, but says nothing about particular paths through the graph! instead it derives, much like hxt [haskell] semiring arrows, a set of paths from vertices satisfying initial conditions to the query's terminal result set of vertices. contrast with non-declarative langs, which only define pipelines of only existentially qualified variables, lacking universal quantification. also, all pipelines are just reductions. this is seen by variables being not global. they're all local in a bunch of nested scopes or kept in various positions on the stack; either way they're kept at *arbitrary & relative* ordinal or lexiographic addresses. global vars .... it's basically (or exactly) the same problem as functions being black boxes, unmodifiable i.e. not truly first class since their definitions (arrangements of "variables") are treated differently from how they're used (application only). black-boxing loses information unless the function preserves all original data. no such analogue exists in logic programming. i quote "variables" b/c they aren't true variables; they're symbols that represent values rather than being themselves computable. this is seen by `x == x` not being immediately obviously true to the computation engine, but is instead only known at runtime by replacing both `x`'s by whatever value they hold, then testing equality against those objects.
 
-THE SOLUTION: cata/morphic programming defines only specific edges; there are too many possible edges to specify them all, as silly as trying to specify all the numbers existentially rather than universally. really, trying to define any program is like that; it's sensible only to define a space (graph) by which a program can be _identified_ (as a path.) any non-flatness makes structure difficult because it makes looking difficult. the only decent way is to use relations, a generalization of indices. to solve the black box problem, we basically have to split a path at some points. however, because program state changes as paths are traversed, there must be a way to access certain substates at certain points of execution (vertices.) the problem with fns is that the define a closed set of inputs (and outputs), and definitions are in one place only, whereas declarative clauses are ad-hoc implicit relations of variables in multiple places, much like how factor generic methods are defined in multiple places. a => b says nothing about how a relates to other vars, whereas in a function f(a)=b defines f only for a; if i want to define it for other things too, then i need to add those to its formals, then refactor its body to account for the new variables in relation to the old, where the relation is ordered, meaning rearranging nestings of dataflow! the *openness/implicity and decoupling* of predicates makes them vastly better than functions! the decoupling is in the form of both multiple sites of declaring relations and of the relations being not nested.
+solutions:
+
+actually, factor, since it quotes programs instead of using black box functions, allows you, so long as your program is quoted, to consider it as a sequence, testing on words ond manipulating or inserting words. what's more, this is much easier for a linear structure (stack) than a recursive one (ast.)
+
+cata/morphic programming defines only specific edges; there are too many possible edges to specify them all, as silly as trying to specify all the numbers existentially rather than universally. really, trying to define any program is like that; it's sensible only to define a space (graph) by which a program can be _identified_ (as a path.) any non-flatness makes structure difficult because it makes looking difficult. the only decent way is to use relations, a generalization of indices. to solve the black box problem, we basically have to split a path at some points. however, because program state changes as paths are traversed, there must be a way to access certain substates at certain points of execution (vertices.) the problem with fns is that the define a closed set of inputs (and outputs), and definitions are in one place only, whereas declarative clauses are ad-hoc implicit relations of variables in multiple places, much like how factor generic methods are defined in multiple places. a => b says nothing about how a relates to other vars, whereas in a function f(a)=b defines f only for a; if i want to define it for other things too, then i need to add those to its formals, then refactor its body to account for the new variables in relation to the old, where the relation is ordered, meaning rearranging nestings of dataflow! the *openness/implicity and decoupling* of predicates makes them vastly better than functions! the decoupling is in the form of both multiple sites of declaring relations and of the relations being not nested.
+
+consider many functions that naturally combine together vs one large function with multiple options. the latter is less maintainable because it's a black box (unmodifiable, non-partitionable). it, like all programs, can be factored [partitioned into an expression of free & bound symbols] by any predicate or symbol. given that, why should many fns be different from one? we see a sort of infinitesimal calculus here where dp is the smallest possible program—a primitive. the tradeoff (given how programs have been structured) is many small programs which is flexible but requires syntax to label subsections of a program vs which is inflexible, central, convenient [how/why?]. yes, that's the solution: dispense with functions (just like we dispense with programs [defined by entry points]) and instead have only code, but, for convenience, we may label any partition of programs. this requires programs to be not reductionist, but actual logical objects. this can be done textually in a statically scoped language, but it more powerful when programs are considered logically by the language without imposing any static scoping constraint. actually, even reductionist picolisp is somewhat without the black box fault: functions can inherit state from other functions by dynamic binding! i can define a function that runs differently depending on which function is using it! that's pretty cool, but limited: functions must be nested and inheritance is one-way. you may say that the outer function already knows what the inner function is, and so can choose how it interacts with the inner one e.g. setting certain vars for the inner function's use, since the inner function is hard-coded in the outer function's body, but that's wrong simply because the inner function may be variable (e.g. taken as a parameter or inferred from a type class.) again, this is impractical in the functional model, since therein all inputs & outputs (i.e. all relations among functions [[sub]programs]) must be explicitly specified, again excepting variadic functions (available only in non-statically-typed languages.)
+
+TODO: words (generally scoped evaluation) can _leave_ values, allow "dipping into" inner scopes. maybe scopes or mutation sequences can be dynamic, indexed, rearranged or smth.
+
+''''
 
 [options="header"]
-|==========================================================================
-| dataflow                                | prolog
-| paths                                   | graph
-| nested                                  | flat
-| *directed*                              | *undirected*
-| bound traversal, unconsidered structure | bound structure, free traversal
-| explicit paths                          | implicit edges
-| existential                             | universal
-| ad-hoc                                  | symmetric
-| morphisms                               | rules
-| imperative (instructive/actional)       | implicative
-|==========================================================================
+|========================================================================================================
+| dataflow                                       | prolog
+| paths                                          | graph
+| nested                                         | flat
+| *directed*                                     | *undirected*
+| bound traversal, unconsidered structure        | bound structure, free traversal
+| explicit paths                                 | implicit edges
+| existential                                    | universal
+| ad-hoc                                         | symmetric
+| morphisms                                      | rules
+| imperative (instructive/actional)              | implicative
+| whitelist (start with nothing then add things) | blacklist (start with everything then add constraints)
+|========================================================================================================
 
 horn clauses can be nested, but that's merely syntactic sugar, a lossless compression of the ordinary notation.
 
@@ -43,7 +56,7 @@ horn clauses can be nested, but that's merely syntactic sugar, a lossless compre
 
 having no distinction between data & functions, naturally coupled with words having stack effects instead of arities, and that functions are not first class, but instead that, more generally, quoted programs are data passed around, makes _program composition_ very easy, whereas _function composition_ is an enormous pain in the ass. the word/stack model frees us from concern about which kinds of functions to pass around e.g. a functional paradigm would distinguish between `a -> b` and (c -> a) -> b` whereas a stack paradigm can define a word with effect `( a -- b )` and not care at all how `a` is arrived at. this is true of unary functions, but basically in a stack paradigm `a -> b -> c` is effectively `b -> c`. though application and currying try to achieve such elegance, they generally fail because there is a distinction between `a -> b -> c` and `b -> c`, or `a -> (x -> y -> z) -> b`. in a stack lang, just set-up the stack to have the correct args when a word is evaluated, and quote words that shouldn't immediately evaluate. now certainly we can have the effect `( a x y q: ( x y -- z ) -- b )`, but it's just as well to say `( a x y q -- b )`. i'm still not communicating the exact elegance that stack langs permit us. TODO: do it. basically it's easier to pass around a stack than each arg manually, especially when the stack is implicitly passed, and quoted programs generalize currying, composition, and first-class fns.
 
-=== elegance of the stack
+=== stack elegance
 
 firsty, any reductionist (cf declarative) model requires the programmer to trace through state changes, whether it's data mutation through functions, or a variable mutated in place, or a stack mutated throughout word application. they're all the same. the declarative model does not require this because facts are declared universally instead of per datum. the reductionist model defines things derivative of other things, which _is_ a variety of *directional* relation *between* things (directed edge between two data), but the declarative model declares _only_ *undirected* relations *among* things (constrained set of data.) the directionality is what significantly makes the reductionist model more limited; it cannot infer/__pro__duce, only __re__duce; this makes sense because produce & reduce are duals while an arrow a->b is dual of arrow b->a. a-b = a<->b; an undirected edge is equal to a bidirectional edge. what is produced is the most general system still satisfying known constraints; this contrasts with reductionist programs which are not endowed with knowledge that enables them to generalize their program i.e. it's not considered to which sets [math, abstract structure] each datum belongs.
 
@@ -85,6 +98,218 @@ it's unknown but considerable whether this order is so appropriate for other wor
 NOTE: this shows `keep` as effectively moving the _evaluation point_ down the stack; complementary words like `over` move it up the stack.
 
 as it turns-out, a tuple rather than an array is ideal for this: `SYMBOL: limit ; limit >>type dup >>amt sgn * + >>limit`. tuples are a good accumulation pattern that doesn't concern order, which frees one from stack shuffling. hash tables and other set-like data structures provides the same benefit.
+
+==== flatness and nesting/indentation creep
+
+another nice thing about the stack is its flatness; whereas in applicative languages we must either nest or bind, in a stacklang we just sequence operations. consider
+
+[source,scm]
+----
+(let ([zs (for/list ([x (or xs (in-naturals))] [y ys])
+            (g x y))])
+  (h zs) ; indentation creep!
+----
+or
+
+[source,scm]
+----
+(define zs (for/list ([x (or xs (in-naturals))] [y ys])
+            (g x y)))
+(h zs) ; no indentation creep, but we had to bind to arbitrary symbol #'zs
+----
+
+or
+
+[source,scm]
+----
+(h (for/list ([x (or xs (in-naturals))] [y ys])
+     (g x y))) ; still indentation creep! without indentation or newlines, nesting still creeps-in!
+----
+
+vs
+
+[source,factor]
+----
+[ [0,inf] or ] dip [ g ] 2map
+h ! neither senseless bind nor nesting, so no indentation! never indentation! even `if` can be expressed flatly!
+----
+
+just to make production-sized codebases of applicative code syntax manageable we need to break into multiple functions, binding clauses, or indent into enormous chunks of code! this is where we clearly see that concatenative langs can be split anywhere, whereas complex monoliths of composed functions can be split only in certain places while retaining readability or sensability! they must be carefully rearranged like a ship in a bottle. furthermore, as functions are composed and symbols are needed for their binds _just to keep them in scope_, we're forced into producing a glut of symbols, some of which will be used only once (which would be ideally tacit), or some in many places (ideally non-tacit), and many of which will have not descriptive names or will need to be shadowed because they describe the same thing but at different stages of computation. that's a confusing mess!
+
+apl is applicative but does not really suffer this problem basically because it's terse, has limited arity, and features combinators, so large programs are 1-liners, which we _can_ do in other langs, but they're usually unreadable there, and most langs don't have combinators. even if they were to support combinators, their support of multi-arity (or even more complicated, also supporting kwargs & optional args!) coupled with the inflexibility of functions (fixed args) means that very many combinators would be needed, and many would be similar to each other, which is inelegant. also:
+
+. apl programs mostly read like stack or monoidal programs: as unilateral continuous modifications of program state
+. programs can be split anywhere without affecting meaning (whitespace is not part of the language)
+. when binds are desired, apl uses non-nesting bind form `<-` like `define` in the 2nd of the above examples, unlike `let` in haskell or scheme, which use indentation or parens respectively to denote scope
+
+==== refactorability
+
+===== easy use of multiple outputs
+
+[source,scm]
+----
+(f (if p
+       a   ; but also make this whole expression return #t
+       b)) ; return this to f but make this whole expression return #f
+----
+
+refactor into
+
+[source,scm]
+----
+(let-values ([(r1 r2) (if p
+                          (values a #t)
+                          (values b #f))])
+  (f r1)
+  r2)
+----
+
+this is the functional style. concatenative/stack gives the perfect solution: `p a b if* g` becomes `p [ t a ] [ f b ] if g h` where `h` is a binary function whose boolean argument tells which branch was taken. we still put `a` or `b` on the stack for `f`, but after `f ( x -- )` uses it for side effect, `t` or `f` remains atop the stack, and thus effectively becomes the whole segment of code's return value.
+
+-----
+  h
+ / \
+f   g
+|   |
+x   y
+-----
+
+can be, in a stack lang, equally interpreted as `h(f(x),g(y))` [app] i.e. `x f y g h` [stack] or, assuming `h` as `if`, then `f` & `g` would be program branches. actually, this can already be done in any applicative language; it's just that in a stack lang managing variables across branches is easy b/c they're all just on the stack rather than needing to manage multiple names & scopes.
+
+stack languages are basically functional mixed with mutative but with implicit, ordinal state rather than needing to name state(s) then explicitly reference it/them by name(s).
+
+here's a real-world example of some racket code that i had:
+
+[source,scm]
+----
+(define pts (map (match-lambda [(cons y xcs) (cons y (sort xcs < #:key car))])
+                 (sort (hash->list (let* ([range (let-values ([(min max) (min&max < vs)]) (- max min))]
+                                          [h (if (negative? h)
+                                                 (min (abs h) (exact-ceiling (/ range num-dots)))
+                                                 h)])
+                                     (for/fold ([acc (hash)]) ([v vs] [x (or xs (in-naturals 1))])
+                                       (let*-values ([(y rem) (quotient/remainder (- (exact-floor (/ (* v 3 h) range)) 1) 3)] ; y=0 is bottom row
+                                                     [(char) (hash-ref >dot (exact-floor rem))])
+                                         ;; accumulate ((x . c))@y
+                                         (hash-set acc y `((,x . ,char) . ,(hash-ref acc y '())))))))
+                  >
+                  #:key car)))
+----
+
+hideous, i know. it's about to get worse; it turns-out that i need to get the max x value encountered; to do that, i need to add fold var `max-x`:
+
+[source,scm]
+----
+(define pts (map (match-lambda [(cons y xcs) (cons y (sort xcs < #:key car))])
+                 (sort (hash->list (let* ([range (let-values ([(min max) (min&max < vs)]) (- max min))]
+                                          [h (if (negative? h)
+                                                 (min (abs h) (exact-ceiling (/ range num-dots)))
+                                                 h)])
+                                     (for/fold ([acc (hash)] [max-x 0]) ([v vs] [x (or xs (in-naturals 1))])
+                                       (let*-values ([(y rem) (quotient/remainder (- (exact-floor (/ (* v 3 h) range)) 1) 3)] ; y=0 is bottom row
+                                                     [(char) (hash-ref >dot (exact-floor rem))])
+                                         ;; accumulate ((x . c))@y
+                                         (values (hash-set acc y `((,x . ,char) . ,(hash-ref acc y '())))
+                                                 (max max-x x))))))
+                  >
+                  #:key car)))
+----
+
+now the fold returns multiple values: `acc` & `max-x`. this means that the above code is invalid: i can't pass that huge chunk directly to `hash->list`! per the language, i _must_ bind both values by a `let-values` clause:
+
+[source,scm]
+----
+(define pts (map (match-lambda [(cons y xcs) (cons y (sort xcs < #:key car))])
+                   (let-values ([(acc max-x) (let* ([range (let-values ([(min max) (min&max < vs)]) (- max min))]
+                                                    [h (if (negative? h)
+                                                           (min (abs h) (exact-ceiling (/ range num-dots)))
+                                                           h)])
+                                               (for/fold ([acc (hash)] [max-x 0]) ([v vs] [x (or xs (in-naturals 1))])
+                                                 (let*-values ([(y rem) (quotient/remainder (- (exact-floor (/ (* v 3 h) range)) 1) 3)] ; y=0 is bottom row
+                                                               [(char) (hash-ref >dot (exact-floor rem))])
+                                                   ;; accumulate ((x . c))@y
+                                                   (values (hash-set acc y `((,x . ,char) . ,(hash-ref acc y '())))
+                                                           (max max-x x)))))])
+                     (sort (hash->list acc) > #:key car))))
+----
+
+ok, now i've extracted `acc` from the fold's multiple outputs then passed it to `hash->list`. what about `max-x`? where does it go? as it turns-out, it's used later in the program. we must keep it in scope, which means that `define pts` becomes `define-values (pts max-x)`:
+
+[source,scm]
+----
+(define-values (pts max-x)
+    (map (match-lambda [(cons y xcs) (cons y (sort xcs < #:key car))])
+         (let-values ([(acc max-x) (let* ([range (let-values ([(min max) (min&max < vs)]) (- max min))]
+                                          [h (if (negative? h)
+                                                 (min (abs h) (exact-ceiling (/ range num-dots)))
+                                                 h)])
+                                     (for/fold ([acc (hash)] [max-x 0]) ([v vs] [x (or xs (in-naturals 1))])
+                                       (let*-values ([(y rem) (quotient/remainder (- (exact-floor (/ (* v 3 h) range)) 1) 3)] ; y=0 is bottom row
+                                                     [(char) (hash-ref >dot (exact-floor rem))])
+                                         ;; accumulate ((x . c))@y
+                                         (values (hash-set acc y `((,x . ,char) . ,(hash-ref acc y '())))
+                                                 (max max-x x)))))])
+           (values (sort (hash->list acc) > #:key car)
+                   max-x))))
+----
+
+now you may have asked why not just leave it all in the one `let-values` instead of using both it and `define-values`. the answer is that, as discussed in the prior section, `define-values` avoids indentation/nesting creep.
+
+oops. i didn't even realize that this is still wrong! i'm binding to multiple values within the argument to `map`! that means that i need to bind those values before `map` then pass them to `map`:
+
+[source,scm]
+----
+(define-values (pts max-x)
+    (let-values ([(acc max-x) (let* ([range (let-values ([(min max) (min&max < vs)]) (- max min))]
+                                     [h (if (negative? h)
+                                            (min (abs h) (exact-ceiling (/ range num-dots)))
+                                            h)])
+                                (for/fold ([acc (hash)] [max-x 0]) ([v vs] [x (or xs (in-naturals 1))])
+                                  (let*-values ([(y rem) (quotient/remainder (- (exact-floor (/ (* v 3 h) range)) 1) 3)] ; y=0 is bottom row
+                                                [(char) (hash-ref >dot (exact-floor rem))])
+                                    ;; accumulate ((x . c))@y
+                                    (values (hash-set acc y `((,x . ,char) . ,(hash-ref acc y '())))
+                                            (max max-x x)))))])
+           (values (map (match-lambda [(cons y xcs) (cons y (sort xcs < #:key car))])
+                        (sort (hash->list acc) > #:key car))
+                   max-x)))
+----
+
+there we go! `acc` is bound locally so that only `map` uses it, and `pts` is bound for use for later code, and `max-x` is locally bound by `let-values` to be passed through to `define-values` to bind it in the greater scope where it's actually used! wow, is that inelegant? i suppose it's arguably better to define `acc` as `pts` then mutate its value: `(define-values (pts max-x) [...]) (set! pts (map (match-lambda [(cons y xcs) (cons y (sort xcs < #:key car))]) (sort (hash->list pts) > #:key car)))` but...eh, either way it's ugly.
+
+and this is the problem with the functional paradigm: to keep things in scope, we must return and bind, whereas in a stack paradigm we just push it to the stack and if it's not what we're immediately using, then we just push it further down the stack for use later. mutating state is easier than using functions for the same reason that the stack is easier. aside from the immediately prior mutation example, i could mutate `max-x` for more elegant code, too:
+
+[source,scm]
+----
+(define max-x #f) ; dummy #f value
+(define pts (map (match-lambda [(cons y xcs) (cons y (sort xcs < #:key car))])
+                   (let-values ([(acc max-x) (let* ([range (let-values ([(min max) (min&max < vs)]) (- max min))]
+                                                    [h (if (negative? h)
+                                                           (min (abs h) (exact-ceiling (/ range num-dots)))
+                                                           h)])
+                                               (for/fold ([acc (hash)] [max-x 0]) ([v vs] [x (or xs (in-naturals 1))])
+                                                 (let*-values ([(y rem) (quotient/remainder (- (exact-floor (/ (* v 3 h) range)) 1) 3)] ; y=0 is bottom row
+                                                               [(char) (hash-ref >dot (exact-floor rem))])
+                                                   ;; accumulate ((x . c))@y
+                                                   (values (hash-set acc y `((,x . ,char) . ,(hash-ref acc y '())))
+                                                           (max max-x x)))))])
+                     (set! max-x max-x)
+                     (sort (hash->list acc) > #:key car))))
+----
+
+you get the idea. this doesn't work because, in the `set!` sexp, both `max-x` refer to the same object, though i want the first one to refer to the `max-x` of the outer scope and the latter of the inner. and here's a problem that the stack lacks: not only we must name variables when it shouldn't be necessary, but we must insensibly change names just to make the code technically correct. as a stylistic rule, give the inner-scoped variables the stupid identifiers. even if there were scoping rules such that `(set! x x)` set one `x` to a different `x`, that's just stupid language; never should `x=x` be anything other than a tautology.
+
+===== `dup` instead of `let`
+
+the common refactoring pattern for applicative languages, `(f (+ 3 5))` -> `(let (x (+ 3 5)) (* (f x) (g x)))`, is done by `dup` in stack langs: `3 5 + f` -> `3 5 + dup [ f ] dip g *` (though it'd really be written using non-primitive combinator `bi`: `3 5 + f g bi *`.) in summary, in factor the refactor is just appending `g bi *` to the program. no nesting or binding junk. you can even put a newline for readability:
+
+[source,factor]
+----
+3 5 + f ! original
+g bi *  ! account for new thing
+----
+
+think about how nice that looks on diffs [vcs].
 
 === recursion
 

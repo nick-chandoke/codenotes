@@ -12,6 +12,7 @@ progress has moved quickly, and how splendidly so, yet so notes are mixes of out
 * the nonsense & truth of metaprogrammability [stub?]
 * stateful servers, not "alloc-do-free" (reductionist) programs [stub?]
   ** related: programs should be modifiable & debuggable as they run, never crashing, but halting then returning execution to an earlier point. being a server naturally generalizes to the erlang model.
+* virtualization
 
 .wisdom one-liners
 

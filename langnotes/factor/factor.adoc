@@ -481,7 +481,7 @@ there appears to be no `filter-map`, so one would use `collector` instead. it's 
 10 [0,b] -rot [ each ] dip . ! prints V{ 0 2 4 6 8 10 12 14 16 18 20 }
 ----
 
-NEXT: quite frankly there should be just a loop that processes whatever `e`, which may conveniently be an input sequence as given by a combinator `seq>loop` of effect `( seq -- e )`, and: 1. if `SYMBOL: stop` is returned then the loop stops; 2. returning `f` will not push the element into the output sequence; 3. other values are pushed into the output seq. `seq>loop` will output `short` if empty. this general filter/map/stop loop pattern is practically universal! it can mutate state arbitrarily, accumulate from any state into a sequence, retaining or discarding elts.
+NEXT: quite frankly there should be just a loop that processes whatever `e`, which may conveniently be an input sequence as given by a combinator `seq>loop` of effect `( seq -- e )`, and: 1. if `SYMBOL: stop` is returned then the loop stops; 2. returning `f` will not push the element into the output sequence; 3. other values are pushed into the output seq. `seq>loop` will output `short` if empty. this general filter/map/stop loop pattern is practically universal! it can mutate state arbitrarily, accumulate from any state into a sequence, retaining or discarding elts. i should be able to have the argument function return multiple values, too, thus allowing it to return multiple values, and those can be inserted inline into the output seq. in fact, i should be able to have my accumulator be any structure that supports insertion, e.g. a splay tree.
 
 .non-looping sequence words
 
