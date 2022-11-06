@@ -49,7 +49,7 @@ current:: valid in `[un]set-option`. refers to the narrowest scope in which the 
 
 === differences from vi
 
-see `:doc keys` for notation.
+see `:doc keys` for notation. nb. `lt` & `gt` represent `<` & `>`.
 
 * instead of asterisk to search term, select text, press asterisk to save to the `/` register, then press `n`, `<a-n>`, etc to search
 * `[p` and `]p` instead of { and }

@@ -79,6 +79,8 @@ sillily, the main feature that makes prolog so powerful is that it uses _symbols
 
 === syntax
 
+* predicate parenthesis are redundant and commas should be replaced by whitespace; `rel(a,b,...) [:- ...].` is better as `rel a b ... [:- ...].`.
+  ** they are not redundant when expressing nested relations, though, e.g. `rel1 a (rel2 b c) [:- ...].`; however, note is this case that the relation is inside the parens rather than before them.
 * `;` separating two clauses means coproduct. it's semantic sugar for distributing over the disjoint set.
 * identifiers begin with capital letters or underscores (excepting special token `_`)
   ** prolog's internal anonymous vars are of form /_[0-9]+/
