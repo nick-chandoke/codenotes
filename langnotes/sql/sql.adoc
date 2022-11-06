@@ -639,12 +639,12 @@ could use `values` instead of `select`; `values` is just `select` but more effic
 
 [source,sql]
 ----
-with recursive t(v) as (
-  values(1) union all select v + 1 from t
-) select v from t limit 5
+with recursive t(v) as ( values(1) union all select v+1 from t ) select v from t limit 5;
 ----
 
-produces a column `v` with five rows of values 1 through 5, effectively equal to haskell `take 5 (Data.List.NonEmpty.unfoldr (\n -> (n, pure $ n + 1)) 1)`. the definition of `t` is unbounded; the bound is in `limit 5`; therefore locally bound tables (at least when bound with `recursive`) are not stricted evaluated before the body of the `select` statement.
+TODO: why does this not produce (1)++(2),(3)++(3),(4),(5)++...? i'd think that `select` would return the whole table (since there's no `where`) on each iteration.
+
+produces a column `v` with five rows of values 1 through 5, effectively equal to haskell `take 5 (Data.List.NonEmpty.unfoldr (\n -> (n, Just $ n + 1)) 1)`. the definition of `t` is unbounded; the bound is in `limit 5`; therefore locally bound tables (at least when bound with `recursive`) are not stricted evaluated before the body of the `select` statement.
 
 .example: trace predecessors/ancestors
 
@@ -770,7 +770,7 @@ this example demonstrates many things about how to reason about relations. to st
 ----
 -- make the grid
 create table grid(x integer, y integer, v integer default 0, primary key (x,y));
-insert into grid(x,y) select * from generate_series(1,3) as x join generate_series(1,3) as y;
+insert into grid(x,y) select * from generate_series(1,3) as x join generate_series(1,3) as y; -- generate_series(x,y) is interval [x,y]
 -- assume that player just moved, which updates grid. now check for winner:
 select sum(v) from grid where x=y;   -- one diagonal
 select sum(v) from grid where x=4-y; -- the other diagonal

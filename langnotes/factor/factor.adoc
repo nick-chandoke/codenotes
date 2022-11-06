@@ -3,7 +3,6 @@
 [TODO]
 * how to do haskell style applicative programming in factor? there's power & terseness there, enabled by global ad-hoc definitions (especially how things compose/relate) and function composition (namely unordered composition.) adts & type classes are at the heart of such programming! factor oop is equivalent. think of how `either` has left as associated state and is a [bi]functor.
 * concurrency
-* compare against joy, particularly regarding its binrec or lack of lambdas. the combination of being stack-oriented _and_ being tacit might be particularly interesting....
 * cf link:https://forth-standard.org/[forth] viz wrt efficiency
 * check-out vocabs: `models`
 
@@ -94,7 +93,6 @@ the lesson is that `if` is the primitive selective evaluator and is perfectly si
   ** use `optimized.` (instead of `.`) to see optimization details of some code
 * extremely good ide: simple, debugger/stepper, inline docs (all local), quickly see everywhere that any word is used, and any word's definition
 * uses arrays with pseudo-indexing (i->a) e.g. `<reversed>`
-* has a PEG lib! (uwu) (`EBNF:`) furthermore pegs are for SYNTAX!
 * comes with memoization library
 * λ syntax is `::`
 * good unicode support
@@ -471,6 +469,31 @@ loop
 * `map-find`: dual of `filter-map` as `find` is dual of `filter`
 * `seq [ ] each` pushes each elt of seq to the stack
 
+.multi-parameter fold accumulator example
+
+we'll test whether all items in a sequence equal by using a 2-part accumulator; one part is the element to test equality against, and the other is a boolean of whether all of the elements so far have equaled:
+ 
+[source,factor]
+----
+: all-eq? ( seq -- ? ) [ first ] [ ] bi t [ pick = and ] reduce nip ;
+{ 1 0 3 } all-eq? ! f
+{ 1 1 1 } all-eq? ! t
+----
+
+* `reduce` accepts only one `identity`, so we need to have the other part(s) of our accumulator already on the stack before the input sequence.
+* `nip` to remove the non-output part of the accumulator. generally you'd `[ drop ... drop ] dip`
+
+actually, though, this particular example is more elegantly expressed as:
+
+[source,factor]
+----
+: all-eq? ( seq -- ? ) dup 1 tail-slice t [ = and ] 2reduce ;
+----
+
+which is efficient b/c `tail-slice` produces a virtual sequence. factor's common use of virtual sequences makes mapping or other folds easy to express without sacrificing efficiency.
+
+TODO: try swapping the boolean and first element to see how that goes.
+
 collector & selector examples:
 
 there appears to be no `filter-map`, so one would use `collector` instead. it's nicer than `map-reduce`. 
@@ -725,3 +748,154 @@ examples:
 
 * `"filepath.txt" utf8 [set-]file-contents` to read or write to a file.
 * `"writeme" utf8 [ "readme" mac-roman [ [ print ] each-line ] with-file-reader ] with-file-writer`
+
+=== peg
+
+factor's `peg` vocab is a link:https://bford.info/packrat/[packrat parser].
+
+peg is like regex but makes extracting substrings and implicitly putting them in an ast much easier.
+
+* `parse (input parser -- ast)` where input may be a string
+* common parsers (e.g. `any-char`) are in `peg.parsers`
+* `hide`
+* `satisfy` matches a character against a predicate quotation
+* `token` is a parser that tries to match a string literal
+* `sp` modifies a parser to accept & ignore leading whitespace e.g. `"  hi" "hi" token sp parse .` prints "hi"
+
+.regex as peg words
+
+these are in `peg`:
+
+[options="header"]
+|================================================================
+| regex    | peg word(s)
+| [A-Za-z] | `range` & <and AND combinator to be defined>; or `range-pattern` (in `peg.parsers`)
+| ab       | `seq`, `token` (`token` is `seq` on string literals)
+| a?       | `optional`
+| a*       | `repeat0`
+| a+       | `repeat1`
+| (a|b)    | `choice`
+|================================================================
+
+the following are in `peg.parsers`:
+
+[options="header"]
+|=====================================================================================
+| regex            | peg word(s)
+| a                | `1token`
+| .                | `any-char`
+| {m,n}            | `at-least-n`, `at-most-n`, `from-m-to-n`, `exactly-n`
+|                  | `epsilon` (empty sequence)
+| `[0-9]`          | `digit-parser`
+| `[0-9]+`         | `integer-parser`
+| ((<pat>)<sep>?)* | `list-of` e.g. `"2,32,64" integer-parser "," token list-of parse`
+| "([^"])"         | `string-parser`
+|=====================================================================================
+
+.ideas sensible only in peg, not regex
+
+* `ensure[-not]`
+* `satisfy`
+* `semantic`
+* `hide`
+* `action`
+* `surrounded-by`
+* `add-error`
+
+[TODO]
+* how to run a parser just to see if it succeeded or not?
+* how to combine a parser `p` with `satisfy` as `[ p quot and ] satisfy`?
+
+* `satisfy repeat[0|1]` returns a vector of characters
+* `1token`, defined in terms of `1string`, returns a singleton string
+
+`ensure-not` allows us to check whether we're at the end of input:
+
+* `"X" any-char any-char ensure-not 2seq parse` pushes `V{ 88 }`
+* `"" any-char ensure-not parse` pushes `ignore`
+
+* it seems that adding `ensure[-not]` to `choice` makes a `cond`-like parser
+
+examples:
+
+[source,factor]
+----
+! COMMON PARSERS
+: any ( q -- parser ) satisfy repeat0 [ >string ] action ; inline
+! to is to-end if predicate is never hit
+: to ( q -- parser ) [ not ] compose any ; inline
+: to/c ( c -- parser ) [ = not ] curry any ; inline
+! BUG: to-end fails on empty string; it should then return the empty string
+: to-end ( -- parser ) any-char repeat1 [ >string ] action ; inline
+: many ( q -- parser ) satisfy repeat1 [ >string ] action ; inline
+: a* ( c -- parser ) [ = ] curry any ; inline
+: a+ ( c -- parser ) [ = ] curry many ; inline
+! sp is probably more efficient when you can use it; ws* & ws+ are
+! intended to be used at least for list-of.
+: ws* ( -- parser ) CHAR: space a* hide ; inline
+: ws+ ( -- parser ) CHAR: space a+ hide ; inline
+: WORD ( -- parser ) [ CHAR: space = not ] many ; inline
+: words ( -- parser ) WORD ws+ list-of ; inline
+
+! EXAMPLE COMPOUND PARSER
+: my-clause-parser ( -- parser )
+  f ! empty seq
+  CHAR: - to/c [ [ CHAR: space = ] trim ] action suffix
+  "->" token sp hide                             suffix
+  WORD sp                                        suffix
+  CHAR: : to/c [ words sp parse ] action sp      suffix
+      [ CHAR: : = ] satisfy ensure
+      ":" token sp hide
+      to-end sp
+    3seq
+    any-char ensure-not
+  2choice                                        suffix
+seq ; inline
+----
+
+[options="header"]
+|===========================================================================================================================
+| input                                              | output
+| "expr -> mytbl apple   booty cow  dargon : x >= 5" | V{ "expr" "mytbl" V{ "apple" "booty" "cow" "dargon" } V{ "x >= 5" } }
+| "expr -> mytbl apple   booty cow  dargon"          | V{ "expr" "mytbl" V{ "apple" "booty" "cow" "dargon" } }
+|===========================================================================================================================
+
+* "x >= 5" is in a vector because of `3seq`; e.g. `"A" any-char parse .` returns 65 as expected, but `"A" any-char 1array seq parse .` returns `V{ 65 }`.
+* how to parse recursive syntaxes? there should be a peg json parser example on the web for an example.
+
+caveats & mistakes:
+
+* `"thing horo nee" any-char repeat1 ws+ list-of parse` returns a singleton vector of a vector! this is because `list-of` calls `any-char repeat1` which matches the whole string; then `list-of` tries to break on spaces, but there's no more input, so it returns that single vector of characters in a vector.
+* error about gensym: then check to see if you forgot `suffix` after your parser
+* error about `length` not having method for `parser`: you probably put 2+ parsers on the stack but forgot to put them into a sequence. especially with `ensure`, ensure that you do `<q> ensure <parser> 2seq`
+
+==== EBNF
+
+basically, unless i'm given a correct, formal description of `peg.ebnf`'s ebnf's grammar, then it's unusable. use manual parsers instead.
+
+peg's ebnf syntax produces a parser that you could've written by hand, but i'm unsure that ebnf can describe all that manual parser combiniation can. i'm not even sure when ebnf is really more convenient than manually writing a parser. for example, can ebnf elegantly describe tokens delimited by `/[[:space:]]+/` or a group of tokens delimited by commas with optional space?
+
+* `EBNF:` in `peg.ebnf`
+
+syntax is like regex:
+
+* `|`
+* `[abc]` & `[^abc]` (don't quote characters)
+* use double-quotes for literals
+* `?`, `*`, `+`
+* `EBNF[[ y=[W-Z] x=[T-X] ]]` creates rules `y` & `x` and is a quotation that applies a parser that checks `y AND x` i.e. a single character in `[W-X]`.
+* need to use `<tokenizer-name>=`; no unnamed tokenizers.
+
+in trying to learn the ebnf grammar by reading source, i'm learning about using non-ebnf parser( combinators) e.g. `choice*`, and i'm finding those easy to use though more verbose and less readable than ebnf.
+
+the errors can be astonishingly stupid: `"A" EBNF[[ aa = "A" aa|"B" ]]` errors with "Expected 'A' or 'B'. Got 'A'", though it parses `"B"` just fine. however, after some poking around, i see that `|` does not mean "or": `"AAAAB" EBNF[[ aa = "A" aa|"B" ]] .` prints `V{ "A" V{ "A" V{ "A" V{ "A" "B" } } } }`. with such complexity, i decide to no longer try to try to learn the ebnf grammar by looking through source code.
+
+.lookahead
+
+`"a ∈ mytbl -> t(b,c,d)" EBNF[[ y= .+ => " -> " .+ ]]` fails b/c `.+` matches whole string before required token `" -> "` is attempted to be parsed; b/c there's no more input, `" -> "` fails to match, causing the whole parser to fail. `ensure[-not]` can be used for lookahead. then again, we usually want something more specific than `.+`; for example, here "a ∈ mytbl" should be matched against some parser that chooses from multiple valid expressions; the expression should be terminated by its own grammar rather than `" -> "` terminating that expression; therefore the expression should match without worry about accidentally parsing `" -> "` before the appropriate occasion. that `.+` may match `" -> "` and more is not a defect of ebnf; it's no easier to manually write a parser that has not that problem.
+
+this being said, it probably is sometimes reasonable to want to parse until a given string. TODO: how to do that?
+
+.decoding ebnf grammar
+
+terminal: blank or ∈ ["'|{}=()[].!&*+?:~<>]
