@@ -28,8 +28,19 @@ used for actions, except for `unless*`.
 * `? q when` means when `?`, _do_ `q`; `q` must have effect `( ..a -- ..a )` i.e. any fn from _n_ inputs to _n_ outputs
   ** e.g. `10 dup even? [ 10 * ] when` pushes `100`; changing to `odd?` leaves `10` on the stack.
   ** `unless` is `when` with negated condition e.g. `9 dup even? [ 10 * ] unless` produces `90`
-* `x q when*` means when `x`, do `q` to `x`, but q must consume a value (effect `( x -- )`), e.g. `print`
+* `when*` is *not* like `fmap` for `Maybe`. `x q when*` means when `x`, do `q` to `x`, but q must consume a value (effect `( x -- )`), e.g. `print` (and not like `[ 1 + ]`)
   ** e.g. `6 [ 10 * . ] when*` prints 60. changing `6` to `f` results in no effect
+
+there's nothing like `Maybe`'s `fmap`. should there be? `: fmapMaybe ( ..a q: ( ..a x -- x ) -- y ) [ f ] if* ; inline`. would you ever want to preserve the `f`? certainly you may want to perform a mutation on the top of the stack if it's not `f`, and you may want to do that for multiple conditions. however, given that `fmap` leaves `f` if it starts with `f`, then one mutation occurring implies that the rest must also occur, and so they all can be combined into one mutation. therefore a more sensible word is one that operates on the stack unless its top is `f`, in which case the `f` is dropped: `[ ] if*`. however, this fails because the branches have different stack effects. `[ f ] if*` balances them, and is the definition of `fmapMaybe`. so it appears that we should have `fmapMaybe`. one must now choose between `fmapMaybe` and `when` depending on the stack effect. it'd be nice to have one word that drops a `f` value and one that consumes it and any other things. for example, the fact that we must code like the following is annoying:
+
+[source,factor]
+----
+[ . ] [ ] if*
+[ . . ] [ drop ] if*
+[ . . . ] [ drop drop ] if*
+----
+
+`smart-if*` does not help because it relies on the predicate consuming a certain number of values, which cannot be done if the quotation has effect `( ..a x -- ? )`; in that case youd need `ndup` & `ndrop`, but in that case you may as well use `if` directly.
 
 * stack effect problem for `when` (or `unless`): strange as it seems from looking at `when`'s definition, `P T when` is not equal to `P T [ drop ] if`. to understand: note, in `when`'s definition, that `[ drop ]` and `[ call ]` operate on the same object: `when`'s quotation! `when*` is the conveniently terser word for `t [ drop ] if*`. however, i've found myself most commonly doing `dup pred true [ drop ] if`, which discards the predicate but retains the subject of the predicate for use in the true clause. there is no builtin combinator for that. consider the following versions of it:
 
@@ -44,7 +55,7 @@ used for actions, except for `unless*`.
 4 dup even? [ 1 swap / ] [ 4 * ] if     ! 1/4        ! plain ol' if
 ----
 
-* consider `smart-if*`
+* `smart-if*` can sometimes be useful
 * the plain form is best. they're all pretty much the same number of characters, and the plain form makes specifying a default value as easy as a false-branch function, including `[ drop ]`. whatever the case, the false branch's stack effect must equal the true's.
 * the `tri` form executes both branches, which can be problematic, and is inefficient
 * `with-if` saves us from typing `dup` & `drop` each once, but definitely returns a constant in the false case rather than a function on, and isn't appreciably shorter
@@ -52,7 +63,7 @@ used for actions, except for `unless*`.
 
 i guess that the expected idiom for `if*`, `when*`, `?if`, &c is `keep and` e.g. `obj [ pred ] keep and [ fn ] [ else ] if*`. that's not really better than `obj dup pred [ fn ] [ drop else ] if`. they're equivalent, though, so if you find yourself using `if*` &c, then use `keep and`.
 
-the lesson is that `if` is the primitive selective evaluator and is perfectly simple and free. i'm unsure for stack machines, and especially specifically for factor's implementation, how `bi ?`'s speed compares with `if`'s. i imagine that naïve code is optimized well in any stack language, and especially in factor, which is designed to be fast. i'm not worrying about the efficiency of things like an `if` inside a `loop`. if you're so concerned about speed, and you can put a fixed size to your data, then use `math.vectors`, whose ops are auto-optimized to simd when possible; or use a gpu or stack/array lang like lang5, xy, &c.
+the lesson is that `if` is the primitive selective evaluator and is perfectly simple and free, and it's not worth the time trying to find something nicer than plain `if`, except some obvious ones like `if-empty`. i'm unsure for stack machines, and especially specifically for factor's implementation, how `bi ?`'s speed compares with `if`'s. i imagine that naïve code is optimized well in any stack language, and especially in factor, which is designed to be fast. i'm not worrying about the efficiency of things like an `if` inside a `loop`. if you're so concerned about speed, and you can put a fixed size to your data, then use `math.vectors`, whose ops are auto-optimized to simd when possible; or use a gpu or stack/array lang like lang5, xy, &c.
 
 === design
 
@@ -280,6 +291,16 @@ the _continuation implementation details_ page is very refreshingly overtly simp
 |===========================
 
 `5 '[ _ + ]` is equivalent to `[ 5 + ]`.
+
+i wish that these terser syntaxses were available; they'd make e.g. `cond` easier:
+
+[source,factor]
+----
+[ a ] [ b ] ... => [a:b:...]
+{ a } { b } ... => {a:b:...}
+----
+
+refactoring these into their more general cases (mixing arrays & quotations) is not an _extra_ cost; it's a _delayed_ cost; you'd need to take that cost the first time anyway!
 
 ==== defining words by other words
 

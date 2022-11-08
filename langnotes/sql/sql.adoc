@@ -169,6 +169,41 @@ select * from y_full; -- (1,2,3,20)
 
 you may name the view 'y' & the underlying table _y, or you may name the view e.g. y_full & the underlying one 'y'. consider that you cannot delete, insert, nor update a view; those must be done to the actual table.
 
+==== pointwise `update`
+
+TODO: carefully read sqlite's docs, then revise with wiser tech if appropriate.
+
+sql does not support updating multiple rows by a map. instead we must set a set of values by another set of values; thus instead of `(map! f x)` we do `(set! x (f x))` but must associate each `x` with a corresponding `f(x)`; of course we do this by join:
+
+[source,sql]
+----
+create table x(x);
+insert into x values(1),(2),(3);
+select x,x*10 from x join x using (x);
+┌───┬──────┐
+│ x │ x*10 │
+├───┼──────┤
+│ 1 │ 10   │
+│ 2 │ 20   │
+│ 3 │ 30   │
+└───┴──────┘
+update x set x =         (select x*10 as fx from x join x using (x)); -- wrong: sets all in x to 10
+update x set x = fx from (select x as id, x*10 as fx from x join x using (x)) where x=id; -- correctly sets each x to f(x)
+----
+
+the 1st form would be correct were sql to see `x` as a free symbol. unfortunately sql is limited to using literal data sets only.
+
+`update from` is a non-standard yet commonly supported form. instead of `update t set a = expr` we do `update t set a = expr from t2`. were our sql engine (sqlite) not support `update from`, we'd need to execute an `update` statement for each row in a table e.g.
+
+[source,factor]
+----
+"select x from t" query-rows
+[ [ f ] [ ] bi "update t set x=? where x=?" query-exec ]
+each
+----
+
+`where x=?` is the pointwise association of `x` with `f(x)` and `each` represents `∀x`. ideally, for efficiency, we'd collect all queries into a list then run them together in a single transaction.
+
 === design
 
 match data's logic's invariants with sql invariants e.g. attribute sets, sql column or table constraints. all symmetric data belong in rows, sql's only symmetric aspect.
