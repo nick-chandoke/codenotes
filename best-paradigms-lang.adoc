@@ -2,79 +2,267 @@
 
 this document is supposed to be a terse spec of the ideal programming language.
 
-NEXT: the difference between reductionist programs and logic programming is that the latter retains implication rather than just testing a predicate, which is synonymous to computing a result because they're both reductionist, both analagous to a logic circuit. what logic programming does that a logic circuit does not is identify other circuits given a set of constraints and facts about making circuits!
+_program_ [noun] is not a useful term/concept. forget the term _language_, too. say _coding_ instead; `code` entails encoding [of information] and denies the fallacious code vs data dichotomy. whether a relation is about a universally quantified symbol or a particular literal value determines the ad-hoc or symmetric aspects of the relation e.g. `thing(i,v), in(i,0,4)` to mean `{(i,v) | i∈[0,4]}`. remember that these are predicates, though! the predicates set of implied values are not computed until queried. relations are like edges in a graph (symbols <-> vertices.) computations are traversals of (paths through) these graphs. btw, predicates are the most general abstract structure, and graphs are the most general data structure. *coders should never deal with data structures; they should deal exclusively with abstract structures.* this rule does not apply to those implementing logic engines. coders should never to deal with details beyond a program's spec; that's the optimizer's business!
 
-_programs_ are 1. data, 2. structure, 3. traversal. _data_ is encoded _information_ [information theory]. data is structured/encoded; the structure suggests a _traversal_. data should be stored as mere relations—the least-constrained encoding. code syntax should be, for every thing being encoded, encoded by an appropriate encoding e.g. use a list syntax to represent lists rather than a general graph syntax, since the list syntax is simpler and extra generality is not needed. however, all code encodings are just syntactic sugar for a graph encoding; an optimizer will determine the most constrained traversal/encoding/structure of a given program's concerned subset of the data graph, thus keeping data separate from limiting structuring which permits more efficient traversals/execution. indeed, there's an inherent tradeoff between flexibility and constraint! constrained programs are more determined and so more efficient.
+predicates directly correspond to sets; however, predicates are terser encodings than sets.
 
-* homoiconic langs must not be langs! being that they're only _data_, their syntax communicates only _expressions_ (relations of relations or primitives) not _linguistic_ objects!
-* languages like racket or other lisps, which are supposedly metaprogrammable or dynamic, are actually stupidly greatly constrained by namespace rules or static things. no language can appropriately be called "dynamic" unless it can modify itself while running and load/eval code (including from a file, regardless of whether that's called a "module" or not) during runtime. if the program supports a repl (which it should), then running code must be exactly equal to loading/evaluating it during runtime which must exactly equal evaluating the code in the repl. finally, if the program halts/crashes, then it must enable the user to modify the program while running then retry the failed instruction. furthermore, the user should be able to modify the program as it runs even if it has not halted. obviously the language must be metaprogrammable (not necessarily homoiconic, though). anything less must be inherently limited, bound to some eventual, frustrating limitation.
-  ** tacit programs are especially good for live loading since they don't accumulate binds in a namespace and so they avoid scoping problems. that being said, it appears that picolisp hasn't trouble with that, despite being an applang.
+to code:
+
+. identify information, aka: relations, structure, constraints, predicates, queries, rules
+  .. _joins_ are relations of relations
+  .. each structure suggests at least one efficient traversal
+  .. a relation may be thought of as a set of tuples all of the same tuple type. they may be used like factor oop.
+  .. relations will [a filter of] pointwise pairing or cartesian prod. this all is accounted for by `join` [relalg]
+. identify convenient encodings/notations which have equal information. e.g. `2` which can be interpreted as [2..], and [a,b] encoded by { a b }, which may represent 2 ordered or unordered things, or a sequence from a to b, or the cartesian product [0,a]×[0,b], or a sequence of `a` repeated `b` times. think not in terms of cardinality, but in information content. another example is encodings of geometric space: cartesian, polar, cylindrical, spherical; relations exist among these spaces (with free vars for converting from 2D to 3D); considering relations as graphs, we may say that there are cliques, and staying within one clique is most efficient, but going from one clique to another may be useful, most commonly going from clique A to clique B, then traversing a path in B, then going back to A, analagous to an operation under a transform.
+  .. try to identify encodings that permit multiple interpretations of that information
+  .. using interpretations allows pure structure to remain alone, open to study and interpretation. it's equivalent to duck typing but considering it as _information extraction_ biases the coder's mind better.
+. specify constraints then see implications. this is enabled b/c the empty predicate [logic/symbolic programming] is everything whereas the empty value [reductionism] is nothing.
+
+programs must be virtual/abstract, not reductions. think logic programming: symbols are literal math symbols, not just placeholders for literal values. everything is relations. a relation can have multiple indexes. transforms should be preserved, not applied; programs must be accumulations of constraints, not sequenced mutations on values e.g.
+
+* `x=x` is immediately known as tautology and reduced to `t` because that's a terser, lossless encoding of equivalent information
+* `swap swap` reduces to the identify function
+* `swap` changes indices; this is a swap on two ints
+* predicates may be unioned (a commutative operation/relation)/joined or had a subset extracted from it &c, then used in `filter` or `map` &c
+
+keeping a rolling system of constraints enables, dynamicism, optimization, and implication. the idea of a self-modifying program here is silly; we just modify the fact set kept in primary and/or secondary storage. seeing as we're just determining implications of constraints, running in the repl will be exactly the same as compiling a program. here _program_ usefully refers to a binary executable loadable by a hardware processor.
+
+.coding primitives
+
+* `join` [relalg] is a subset of a cartesian product of relations and generalizes zip[with] (on a commonly satisfied predicate of attributes) 
+  ** we're concerned both with relations of sets and relations of subsets; therefore relations & subset selection are our bread & butter.
+  ** sql `where` can be rephrased as `for`
+* predicate unification
+* relations generalize functions
+
+like in relalg, this model uses sets; therefore map & traversal are implied by subset selection. what is usually expressed in reductionist langs as complex, nested traversals, is here expressed by relation. use sql or stack models to avoid input/symbol ambiguity, imperatively no further namespacing tech be used!
+
+TODO: consider how a pure expression can be more efficiently expressed by mutation e.g. rather than mapping `case when p then select f(x) from t [else null]`, use `update t where x=f(x) where p`. the obvious symptom is that we mutate instead of return an empty nonce value. consider this too in factor, though perhaps in factor it's not as easy, due to the constraint that both branches of `if` must have the same stack effect. btw, conditional branches, even in sql, are a good place to use a stack, as a preferable alternative to `let ... in cond ...`. recall that any thing must be eventually used in i/o in order to be useful; and that there are purely stateful, non-functional models, though these are _mostly_ better done by the stack paradigm; there are still places where mutation is useful, though this is usually best done in an array/set manner a la apl or sql.
+
+TOOD: how does sql, relalg, or logic/predicate programming do `let-values`, namely when sets of values are cods of cond blocks? think about conds as associative maps encoded as relations or predicates and that `let` ``set``s for a context, and that contexts are representable as relations. even having the term `let-values` horribly confuses me, distracting me from the elegance of relations that would be obvious without the distraction. i feel the same about sql, which unnaturally shoehorns thought into its limited set of arbitrary constructs, such as triggers; in prolog, _everything_ is triggers, right? isn't A->B is equivalent to when A then B? _actions_ are just i/o or state changes that persist regardless of scope. even prolog has scoping rules: 1. named rules are defined top-level and are then in scope of following rules; and 2. the symbols bound by the LHS of :- are in the RHS' scope. hell, when things are not named, scope is no matter, as demonstrated by stack langs!
+
+.comparison of predicate forms
+
+* `intersect` & `except`, `union` & `union all`, `where` & `having`, and `join`; and `case`
+
+NOTE: `put` is called `replace` in sqlite (and some other sql engines). see `upsert`, too.
+
+in sql, any recursive expressions must contain `union [all]`, `intersect`, `except`, or `join`. the base case is when either argument of those is 1. not a table created for `with recursive`; or 2. a select statement that evaluates to an empty table. empty tables are produced by predicate forms. a statement _s_ prefaced by `with recursive` loops then evaluates _s_ once, so the recursion logic the same regardless of the type of statement (get, put, or del) that the loop parameterizes. <somethings> are always bulit on get, never on del or put! this is fine because del & put are just persistent get's; del should not even exist as an algebraic primitive; there should only be put; instead of `delete from x where p`, say `x = x\*∈x:p`. the same is true of put: instead of `insert into x t`, say `x=x∪t` and instead of `update x set (a,...) = e from t`, say `x = x\*∈x:p∪e`. that last one is invonvenient because it requires redundant code just to keep things the same, and isn't even appropriate, because it considers rows differently from any row's values even though they're all just related data. therefore modifying a row should be no different from modifying any of its values.`x y join on p` is equivalent to:
+
+[source,factor]
+----
+x y × ! cartesian product (unconstrained inner join)
+dup p filter -- `select` can be rephrased as `filter`
+\
+----
+
+this can be generalized to left & right join and beyond by making `p` return either a row (include function of input row (of x×y) in result) or `f` (do not include row in result). that generalized join is equivalent to `x y × p map-filter`. this can be generalized to a fold over a set on an order, which can be further generalized to a loop permitting action execution & short-circuiting over a set on an order. that is, however, firmly outside relation algebra, and should be properly separated into 1. the [virtual] generalized join (henceforth _goin_) and 2. the action loop that may short-circuit.
+
+let's define a sequence for each attribute and name each attribute. table schema are then specified as a set of attribute names. goin is then easily defined:
+
+[source,factor]
+----
+SYMBOL: attrs -- global map from attribute name (as string) to sequence of values
+-- the goin is a virtual array defined by strictly unioning both tables attrs then to `select f(a),b` is just `seq-index { "a" "b" } { f [ ] } [ attrs at call ] 2map`
+: goin ( x y -- t ) [ attrs>> ] bi@ union ; inline -- unfinished definition
+----
+
+this model does not need to especially consider indexes [sql] because a sql index is just a map (int→int) from virtual to literal index.
+
+NOTE: prolog uses comma to denote `AND` (boolean product) and sql uses comma to denote `join`. the set product is intersection, so you'd think that comma would be intersection. but intersection is quite similar (and probably somehow expressible in terms of) `where` i.e. "such that."
+
+''''
+
+TODO: how does sql bias the coder to sequenced mutations vs queries over data? prolog may or may not feature mutation, and sql supports it by write ops like `delete`, `update`, `insert`. there's no true difference between mutative or "pure" programming, and the stack is a nice meet between the two. the only considerable difference between stateful or not mutation is the set of contexts in which we want the mutations to persist. the pure stack model would see no definite tables, but all transient tables on a stack. then statements would not reference tables by name, but instead implicitly by position e.g. `select a,b,g(c) from t join s on p` would be `p join [ first3 g 3array ] select` except that instead of `first3` & `3array` we'd use a words that work on attribute sets rather than sequences. attribute sets would implement the `sequence` protocol and are really just arrays of attribute names (as strings); the model would interpret them as attribute names, using each as indices in the relation's attribute set, and `g` here would be implicitly applied to all `c` up to constraint.
+
+also, why does sql have triggers? sql has many built-in features & syntaxes. prolog does not, and prolog is all data. how would sql triggers be expressed in a logical language?
+
+.looping
+
+in sql, to express a loop that may need to short-circuit, we must use the sole looping device, `with recursive`. consider a set partitioned into sets, T∈S|p, t∈T. for no more than one `t` per `T`, `p(t)` => execute effect `f(t)`. `∀T #{t∈T|p(t)}<=1` is incorrect; more than one `t` _may_ satisfy `p`; it's just that we won't perform an action for more than one.
+
+the mapping over one t generally affects other t; we must use a fold and not a map if using iterative method.
+
+if using logical method then we'd iterate not by map nor fold, but by backtracking, which generalizes fold to include `fold` & `if`. as such the logical iteration/evaluation (they're unified under the logical model!) method is like an `if` inside a `while` loop. the loop would better short-circuit than loop over all `t` but do nop for `{t|p(t)}\τ` where `τ` is the set of elements for which f(t) has been already performed, unlike the set of `t` (implicitly given merely by the symbol `t`), `#τ(T)<=1` is correct! the expression `τ(T)` means `τ` at a given `T` i.e. `τ` parameterized by `T` or `τ` such that `T` i.e. the intersection of `τ` & `T`'s contexts. we thus see the program modifying itself while it runs: as part of unifiing the predicate (analagous to traversing a stack or ast for stack or applicative langs) side effects are performed which both perform `f` _and_ modify the system being unified (by changing `τ`,) which affects the unification itself, making `#τ<=1` make the program correct. thus the whole program is:
+
+----
+Ω∈π(S), ∀Ω α∈Ω.
+∀Ω∃τ. τ←∅. ! every Ω is uniquely associated with a τ. this is a bad notation b/c it's a commutative relation yet the use of two separate symbols, ∃ & ∀. really there should be only non-commutative 1:n and commutative n:n. n:1 is omitted like right join is omitted in sqlite
+∀x∈{α|p(α)} #τ≤1∧f(x)∧τ<-τ∪{x}.
+----
+
+or, better expressed by a stack notation:
+
+[source,factor]
+----
+Ω π(S) ∈
+α Ω n:1
+Ω τ n:n τ ∅ set
+ x
+ α [ p ] s.t.
+∈
+{ [ τ # 1 ≤ ] [ x f ] [ τ { x } ∪ τ set ] } 0&&
+----
+
+or, exploiting the stack:
+
+[source,factor]
+----
+Ω
+ [ π(S) ∈ ]
+ [ α 1:n ]
+ [ τ n:n τ ∅ set ]
+tri
+ x
+ α [ p ] s.t.
+∈
+{ [ τ # 1 ≤ ] [ x f ] [ τ { x } ∪ τ set ] } 0&&
+----
+
+and this has equal program semantics.
+
+TODO: correctly express by replacing `1:n` & `n:n` by ⊗.
+
+.primitives
+
+predicate unification engine. predicates are preferred over sets because they're just a terser encoding. the λ calculus is not considered because it's verbose and accepts ordered arguments. prediactes are just symbols that become increasingly constrained. that's a very simple & flexible model. also predicates are a single construct that generalize both literal data insertions (by predicates without bodies) and potentially recursive queries (by predicates with bodies.)
+
+|========================================
+| symbol   | description
+| ∧        | and
+| ∨        | or
+| ¬        | not
+| #        | cardinality
+| →        | implication
+| (a ... ) | group literal
+| ⊗        | cartesian product (group)^*^
+|========================================
+
+^*^initially we considered pointwise relation (`join using`) vs one-to-many relation. however, one-to-many (1:n) is actually unconstrained `join` i.e. ⊗. the "1" in "1:n" can be considered as a datum in an array variable; then this 1:n relation is true of all in the variable, which means that 1:n is re-expressable as n:m so that the whole space is n×m associations. this is equal to ⊗ because `join using` is a specific variety of predicated `join`, and because predication is already a separate concept, 1:n & n:n shall be reduced to just ⊗, with optional filtering (predicate application/endowment) being understood to be implicit. also predicated join generally associates each `x` with a unique number of `y`, connoting a ragged array.
+
+[TODO]
+* cartprod is the largest set derivable from two sets that does not have set elements (cf powerset.) how to express powerset? shouldn't there be something more powerful/general than cardprodin order to
+  ** should be plainly expressable by a looped application of ⊗
+* below i say that join is nonsense, that it's just a scoping mechanism that shouldn't be needed because scope should never be limited in the first place! so how can i justify keeping ⊗?
+  ** ⊗ is the grouping operator; it or its subsets relate things by grouping them.
+* what's ⊗ in predicate logic?
+
+.obviated concepts
+
+|======================================================
+| concept                  | obviating generalization
+| if/cond/case/loops/folds | unification & backtracking
+| x∈S                      | S(x)^*^
+| x∈S                      | {x}⊆S^†^
+|======================================================
+
+^*^ sets correspond to predicates, which generalize the particular `∈` relation.
+^†^ set theory only. in set theory it's appropriate to use _sets_ rather than elements.
+
+.preferred concepts
+
+these concepts make everything consistently predicate logic rather than set theory.
+
+|====================================
+| concept     | preferred alternative
+| {x∈S:p(x)}  | x∈S ∧ p(x)
+| ∩, ∪, , x\y | ∧, ∨, & x∧¬y
+| ∅           | ⊥
+|====================================
+
+subset selection (`where`) is obviated by predicates & free symbols; `π(x)` constrains symbol `x` to predicate `π`. this corresponds to `{x|π(x)}` i.e. `x where π(x)`. in prolog predicates are clearly parameterized; in sql clauses' expressions are syntax that does not make apparent which variables are being related under the same relation/predicate. for example, i may `select x,y from t where (select z from t2 where z%2)`, and it's not so obvious that this is an impractical query since the nested `select` does not reference either `x` nor `y`! `π` must be a function of `x` for this to be practical; were `π` an expression not in terms of `x`, then `x` would have no meaning: if `π` then `x` gains no new information/constraint; if not `π` then `x` is ⊥/∅ and is therefore useless or insensible.
+
+i favor predicate logic over set theory at least because:
+
+. its _such that_ (`where`) is the primary object and is implicit i.e. sqls statements may not feature `where` clauses but a prolog program must have them, since that's literally all that a prolog program is.
+. membership/subsets are not special in predicate logic; predicate logic features fewer primitives. then again, if it's not a primitive, is there an alternative? what's it even needed for anyway? i really must identify the common information basis underlying set theory and predicate logic.
+
+i'll avoid ∀ & ∃ because they distinguish plural vs singular vs none. they're more clearly communicated as ∧ & ∨ anyway.
+
+i may prefer (+,×,-,0) as notation instead of (∪,∩,\,∅) or (∨,∧,¬,⊥) since they're familiar, a little easier to type [input], and are not commonly used, thus explicitly connoting ring algebra, removing preconceptions of set theory or predicate logic.
+
+NOTE: binary logical operators work on variables, not data, and are actually relations, not operators. thus we never fold them over sets.
+
+what if all of the lang's syntax were strings, the above primitives, or numeric literals? there'd be no need to quote strings, and strings would be used as commonly as relalg attributes. quoting would be needed only if one of the primitives were used. ah, that's right! picolisp does this! and with a programs being so simply & canonically expressed, querying the code as a db would allow e.g. selecting all of the code related to other code, or tracing paths through code relations.
+
+all binary operations are generalized to sets e.g. logical and is _all_, logical or is _any_, logical xor is _any one_. these all are further generalized to a range that #p(x) must satisfy (_any_ is `#p(x)>0`, _all_ is `#p(x)=#`, xor is `#p(x)=1`), which is even further generalized to a predicate on count, thus supporting e.g. `#p(x)∈[3.5]` or `#|2`. TODO: what is predicate logic's analogue of `#`?
+
+
+NOTE: x∈S is generalized to {x)⊆S, and the latter is preferable in set theory or relational algebra because it uses two sets rather than one set and one "naked" element (two different types.) however, in predicate logic x⊆S is effectively `x t [ S ∈ ∧ ] reduce`.
+
+organizer: task(loc desc start end freq priority timecost). item(desc havecnt wantcnt usefreq cost priority). traveling salesman on taxicab metric. i need the above predicate system to support at least a relation's attribute being the predicate any e.g. `x or y or z`.
+
+NOTE: ideal lang should be tacit, stack logic lang e.g. supporting `π1 ∧ π2` instead of just `π1(x) ∧ π2(x)`.
+
+.non-primitive convenience forms
+
+* `if`. built-in abbreviation rule: `if(x,y,z) <-> (x -> y) ∧ (¬x -> z)`.
+* `<->`, bidirectional implication. `a<->b` abbreviates `a->b. b->a`.
+
+.total nonsense
+
+* relations. relations are arbitrary grouping [coupling] of array/set data. have only "columns" (really just (non-nested) arrays.) this agrees with having a relation then, rather than adding one or more columns, adding a new relation that contains an attribute joinable with the original relation. more relations/attributes means better encoding: one large relation would have many nulls but the same encoding on multiple tables would see few nulls; the nulls would be present only when the relations are outer-joined. this is obvious when any attribute is plural e.g. `location:={name : string, hours : [(day-of-week,open,close)]}`.
+* join
+  ** `join` includes both `x`'s & `y`'s attributes in the query's scope. you may think of it as creating or identfiying a table whose attribute set is the union of `x`'s & `y`'s, but that's a needlessly complicated interpretation because it suggests that we needed to union; we did not; we will not be mutating the transient table, and `x` & `y` retain their attributes; we already can access them plainly; the only thing that changed was the query's scope. with only columns and no tables of course we would be able to access any column at any time. tables are sql's only scoping device. without tables we'd be able to access all attributes, so there'd be no need for join! therefore join really is not an algebraic operation, but instead is a linguistic device that exists solely to get around an arbitrary language limitation!
+  ** the coder should not be able to choose nested select vs join; there should be a single include-in-scope device.
+
+''''
+
+* the stack accumulates context. applicative langs do too, but with the asymmetry of needing local bind clauses or anonymous nesting of data to function inputs.
+* _scoping_ is a poor design for relating things. `{a b}` (`a` & `b` together) and `a b` (`b` applied to `a`) are fine notations for relation. scope _enables_ things to be related. ...what is that about? why would not everything be able to be related? if i say that alice is related to bob, then they are. why would any mechanism prevent me from relating those things? the answer is that scope is used in reductionist languages; scope limits _data_ (of which there are many and no datum is an idea, being only a literal value) to be _passed_ to _functions_; rather than _symbols_ (which are abstract and implicitly define ideas) being _related_ to other ideas by a _predicate_.
+  ** though factor is reductionist, at least it's without scope; all things are in the stack, which is manageable because they're related positionally, which suggests the present program state, as opposed to applangs, which throw around identifiers in confusing ways: we assume (sometimes incorrectly) that a bound identifier is used within the scope of its binding clause, but we do not know where nor how frequently. we do not know when the program is done considering using it, unless coders particularly limit all binds' clauses to the smallest valid scope. but that would be a huge pain. that would mean no `let*` clauses unless all of its binds are used in exactly the same statement—unlikely! to approach a stack's datum/scope relations elegance would require a glut of bind clauses, making the code unreadable and severely bloated. in a stack, you _know_ when some datum is no longer used; it's not used if it's not in the stack! it's used soon if its near the top, and used later if near the bottom!
+* use ragged relations (equivalent to document stores)—relations whose attribute set is not static, and is implied by facts e.g. `v@n∈r.` to declare a value at a given name in a relation. `v@p∈r?` asks rather than declares. being that code will be computable, messy or redundant ragged relations will be consolidated so we get the decoupling—declaration/definition from usage; frankly, declaration/definition statements are foolish; we never know what something is, or whether it even exists at all; we may suppose that it does but find that that conception was fallacious or redundant. in fact, _things_ is not even proper; _stuff_ is. all partitions of stuff into things is arbitrary and any rigidity of those partitions creates needless coupling and coding trouble!
+  ** note that in relalg `v@p∈r` would mean `select v from r where n`. there would be no reason for imperative `.` nor interrogative `?`; in relalg the expression just refers to a set, and the contents of the set would need to be literally specified rather than abstractly specified by a prediacte.
+* any [relation] declarations/definitions should be assertions—facts to be included in the fact set, checked for correctness or implication, just like any other facts!
+* *just as humans query a logical fact db, the canonicalizer should tell the coder the implications or better interpretations of what they're saying! the computer should not wait for a human to ask; it should tell, inform the coder of what they're saying _as they're saying it_, so that they can update their specs with realtime wisdom!*
+* relations allow us an always-valid empty value: simply omit the item from a list. a function on any relation returns a relation. unless the function uses `union`, an empty relation input guarantees an empty relation output. this is _conditional insert_ and is not supported by sql; in sql one either hardcodedly inserts a row or not; only the row values may change, and the only empty row value is `null`. a `null` that propogates is always valid, though one may need to convert it to or immediately use another empty value like `0` or `""`, to correctly make it a coproduct identity or a product identity. in sqlite, `null` itself is a product identity; its inclusion in any [non-comparison] function guarantees that the function outputs `null`. this is akin to multiplying by 0. basically you must choose whether to error, halting the program; or ignore the lack of valid value *while still maintaining the functional-set model* by having the return value be ∅; or have the error invalidate the expression that, without especially accounting for `null`, uses it. appreciate how the set/relational model naturally handles a lack of valid values: `nth` usually works on a list and halts on the empty list. in the relational model we must say `v@i=n`, which will return ∅ for the empty relation or otherwise when index is out of bounds. certainly one should be able to insert an assertion thereafter to, only for debugging reasons, halt or print an error if e.g. `v [ i n = ] @ # 0 =`, but that is not _natural_, as is obvious when considering that i/o & errors do not exist in the relational algebra, or in pretty much any algebra! errors are usually due to our implementing model not exactly fitting the spec of the abstract model (there are exceptions, e.g. div by 0, which can be considered an error in some abstract models.)
+* forget first-class functions, or really functions altogether; like factor, prefer quoted programs. in applicative langs functions maps parameter [values] to their locations within expressions. in factor programs are functions because this mapping is moot & implicit.
+* one must importantly consider sql's scope! `select x,sum(y) from x group by x%2=0 having sum(y) > 20;` works and this is nice b/c `y` is in the scope of `having`'s expression! sql would be much better if we could manage scopes across expressions so that we'dn't need to have redundancies across `select` statements or other expressions!
+* forget _sequences_; consider only sets which may permit multiple orders
+* sql views are not parameterized and so are not functions; were sql to have `eval`, they'd be able to read parameters from a mutable table whose name would be hardcoded into the view
+  ** at least prepared statements support variables in their predicates, though not supporting variable tables or select statements. with relations corresponding to functions (at least in a logical language, wherein that's appropriate because the empty value is `∀x.x` rather than `∅`, unlike in sql) a view with variable tables should correspond to a higher order function. 
+* sql generalizes apl by removing the ordering constraint. but often apl uses that constraint for succinctness; this wip lang should allow forms succinct like apl for convenience. these expressions should generalize [refactor] easily. succinct expressions do not necessarily require special _syntax_; they merely must make implicit or assume symmetries. one example is sequence literal notation, which is a syntax, and the terseness over sets is that text [syntax] and the sequence itself share order; the syntax is joined [relalg] with semantics on this linear ordering symmetry. however, one could use a set literal then pass that set to word `seq` which would endow the set with the fact that its order is irrelevant, which would, for example benefit, enable an optimizer to sort the set by an order that makes its traversal efficient, given its relation to other expressions entailed in a query.
+* why do a _nested loop_ when you can do a single loop over a lazily computed filtered cartesian product? a-haaaa~
+* remember that you can get around stack ordering difficulties by using tuple accessor & putter words, which are implicit in the context of any given table.
+* sql syntax `select a from S where p` is subset selection. `a` takes subset of columns and `where p` takes subset of rows
+* stack model & syntax should be used to encode programs. that prevents nesting/ordering creep at least in syntax alone.
+  ** quotation & eval should be used as often as in factor? except that this is all constraints, so how can such a thing exist, right?
 * like unison [lang], no function names; instead only hashes (though they can be known my many names). other things proven are like stored e.g. stack effect or type. we must do much better than this, but it's an improvement on names. caching results of pure fns is nice, too. storing words &al data in a db is obviously good. we can think of sql triggers for keeping code consistent after renamings. consider that hashes are different from uids: they're effectively alternate encodings, as opposed to an associated arbitrary unique datum.
   ** hashes are not too good; they're still arbitrary; they do not enable us things that we should have: similarity measures, orders, and good searches for expressions.
   ** still the unison model of hashes demonstrates how stupid names-as-identifiers are. these observations should be applied to filesystems and anything else that uses names!
-* again, we must balance optimization vs dynamicism
-* macros have the problem that they hide and expand to ugly code; that is the very purpose of a macro! this makes live debugging difficult! so avoid macros; prefer elegant code, and if you must make the language elegant (and perhaps data-only), then do so!
 * the erlang model is correct for concurrency. it apparently is good for dynamicism, too! that's not a coincidence!
 * the ability to fix something as it's running is usually better than trying to ensure that it's perfect then shipping it without the ability to modify it. obviously there's nothing easier to modify than a db.
-* _all_ programs should be interactive & live-modifiable!
-* all code should have visualizer(s).
-* *we must get do better than text code*
-* you should never to deal with details beyond a program's spec; that's the optimizer's business!
-* haskell functions whose paramaters are still free is like prolog vars still free, but how different b/c only beta reduction? compare with factor, too.
-* also, should we use quoting & eval (first-class program data), or e.g. apl style hook/filter? what about forth? consider flat structures vs recursive [nested] ones. cf metaprogramming
-* after considering prolog, i see all languages as severely limited by their doing only beta reduction as opposed to algebraic consideration of vars. can such ability be done easily in factor? it ought to be, seeing how dynamic & small factor is.
-* programming is divided not into "code & data." that is inappropriate because code is data (as are all things) and code can connote data or instructions (as code means "data encoded by an encoding"). honestly code & data are the same. code & information is more appropriate: data is encoded information (data being used as a mass noun like information.) what people really mean is that _some data are instructions_; they would say that `[1,2,3]` is data and that `cons` is code. then is `cons 1 [1,2]` code? it _evaluates_ to a datum. ah, i suppose that people mean that code is data that can be evaluated. but what is evaluation? typically it's β-reduction: simply a re-expression. `cons 1 [1,2]` is equal to `[1,1,2]`; the only reason that they're presumed different is because non-algebraity is assumed i.e. that `cons 1 [1,2]` is an an _expression_ (relation of abstract symbols), but merely a _parameterized unidirectional map_ for rearranging data, including arithmetic. thus "code" "expressions" are treated as though they aren't data! they're treated as the result of their β-reduction! thus "functions" as commonly used in programming discussions are just syntactic sugar! they should be called _reductions_, not _functions_. the meaning of _procedure_, _subroutine_, and _function_ varies by context, but they're all the same at least up to scoping rules; namely most commonly some or all of _functions_ inputs are explicitly noted and are called _formal arguments_, and _procedures_ aka _subroutines_ may be defined of any vars in its scope, which may include any formal args or not. _state_ means any arguments outside the formals. the flaw of distinguishing functions from procedures is the assumption that there's meaningful difference between formal args and non-formal ones. such distinction exists only because functions are arbitrarily (and senselessly) defined by only one statement in one place, or in multiple places (e.g. haskell) but formals are static. remove the constraint/association between a function and a formals vector, and remove scope, and now you have functions being a set of sequences of mutations of arbitrary subsets of program state. now that functions are found to equal procedures, they're just state manipulations: changing a physical value (e.g. one in ram or filesystem), or re-expressing an abstract value (e.g. the cons example.) the physical changes cannot be expressed by abstract re-expressions, but only concurrency primitives must be expressed by physical changes/values. because most programs are re-expressions of abstractions, using only abstractions that emulate physical changes is quite stupid, needlessly limiting. if you have symbolic expressions, then _use them as such_ like a computer algebra system would! _reduce & rearrange_ the symbolic expressions, and only after that should you bind free vars to values for re-expression! we see this as programs re-expressing to simplified equivalents; then seeing those programs becoming less abstract when given non-abstract inputs e.g. a datum literal; in this case the program is an abstract re-expression that is _applied_ to a non-abstract value to an outputs that is _related_ by the program to the inputs (the program is seen as a relation of inputs & outputs.) however, if the inputs or outputs are abstract, then the program is just a system of constraints that is further constrained by the inputs (the inputs, being abstract, must be constraints/predicates: qualified/constrained symbols); thus specifying the abstract inputs or outputs is a constraint system endomorphism; the new system can be reduced and and solved for a set of constrained relations of inputs & outputs. we see programs then as constrained systems of variables, where freeness or boundedness of any vars is a matter of representation. the system may contain non-abstract values called _constants_ e.g. `2`; a constant is formally defined as a constraint that, when joined with any other constraints, has the same value e.g. `∀p 2 : p => 2`.
-  ** stack langs, which haven't λs, degenerate λ-calculus and procedures into a single model: stack programs are just sequences of mutations of implicit state. by not having variables they appropriately describe mutation sequences without misleadingly resembling symbolic expressions.
-    *** reductions & procedures will be henceforth known by the single concept called _mutation sequences_
-  ** mutation sequences are often useful but are a poor universal model of computation! they should be thought of as macros [text editors, microsoft excel]: playing back a mutation sequence. symbolic expression endomorphisms is the only sensible way to write programs, as it's the only sensible way to reason about math or logic. why does programming, which is strongly associated with logic, math, and grammar, not enjoy such an old & obvious technique, instead having only reductions/mutations? i suspect that the popularity of turing's machine encouraged reasoning about mutation sequences rather than programs as abstract algebraic expressions. functional programming seems to try to take the turing model in the direction of algebra, but of course the two models cannot be simultaneously used, though a turing machine can be used just fine to implement an programmatic algebraic system (pas.) *bottom line: decent programs must be constraints/relations of symbols or constraints/relations*—`type Rel := Pred({Symbol | Rel})`, which sees predicates as n-ary, parameterized by a set of symbols or relations; however, note that, as with any recursive structure, it may be flattened, here into a set of constraints e.g. `and(even?(Y),>(X,4))` to `{even?(Y), X > 4}` (or flattening a recursively defined tree into a list of branches.) this is what prolog does; the program execution then, as with reductions, is done simply by specifying inputs (or, unlike reductions, any subset of inputs or outputs may be given.)
-
-TODO: revise this document's comments about indices; an index is just an instantiation of a variable [prolog], which is an arbitrarily specific variety of *constraint* on a variable, generalized to a set of indices. `thing(i,v)` means a value `v` of thing at index `i`; then `thing(i,v), in(i,0,4)` is a subset of `thing` determined by predicate i∈[0,4], and `?- thing(4,v)` is `thing` at index 4: `{v = <some value>}`. this generalizes to `thing(index,...,output)`. we see that inputs, outputs, and indexes are all the same: just specifications of a relation's variables.
-
-TODO: cf sql notes & _best paradigms_
-
-BUZZWORD SUMMARY: information soup (data are not particularly partitioned; "all matter is interaction"), [equivalent under] information content, parser, select, index (all non-sets must be indexed!), bound | free symbols, dynamic implementation, implicit definition/relation, inherit from context, virtual relations [sql], factor oop (tuples to store needed information and generic computations).
+* all code should have visualizer(s)
+* we should do better than using text to represent relations
 
 * all structures being virtual, operations on them are cheap; they affect only how the structure is accessed or modified.
 * a fact's a/symmetry about an axis [index, property] is whether its truth varies with subsets of the axis.
-* facts are defined of things free or bound and thus have some degree of abstraction. for a thing to be useful it must eventually be totally bound.
-  ** interpretation does not change abstraction e.g. the pair [0,b] as a sequence still consists of only two things, though we must associate it with a state to identify the seq's current elt/index. factor's `sequence` protocol is good.
-* a program being a continual modification of stack, registers (map from reg name to value), or fact set makes easy serialization, metaprogramming, and live modification (pausing, changing, then resuming the program as it runs.)
 * plurality is assumed. aggregates are the exception. a word is defined as an aggregate or not. aggregates return a singleton set. this allows word composition e.g. `[ # f ] [ g ] bi ×` where `#` is an aggregate and `f` is a non-aggregate will apply f to the length of a relation then cartesian prod with the application of `g` to that set. all words here are assumedly selections without puts.
 * `x [ f ] map` is expressed [conceptually] as ∀i.f(x[i]). because we're using an array lang, there's no need for `map`; it's implicit. however, this demonstrates the role of [free] indices: they're logical objects that implicitly affect other expressions. like all linguistic objects in this paradigm, they do not reduce to data literals, though data literals can, in any contexts, be calculated from the context and rules concerning indices. cartesian products are expressed as `{ x[i] y[j] }` and are as `lzip` in factor; rather than thinking of × as a set, think of it as an accessor function, because that's literally what it is. it's a virtual sequence: just a map from an index to a value.
   ** setting at given indices is just like sql: `set prop of rel where pred`, where pred can be `index in <set>`.
 
-currently known best tech:
+* virtual: all code is logical/algebraic symbols supporting more than mere symbol substitution
+* avoid ordering
+  ** nesting is a variety of ordering. prefer flat structures, namely sets, which may permit multiple orders.
+* both knowledge and dataflow should be supported, with arguable interoperability, because each is commonly useful and neither elegantly substitutes for the other.
+* aside from being terse for its own elegance, there's the particular need for selective relation or separation/exclusion of codes, so that code can be considered in manageably-sized subsets, then, after being understood, allowing oneself to consider more code, starting with the most-related code. being confronted with a large mass of code can be dispiriting! even if code is neatly formatted, things like nesting & indentation systemically create extra work for the parser (human (both mind & eyes. it's even worse for blind people!) or computer.) comments can be about the spec or implementation, and it'd be very good to have those clearly separated! also comments take the most characters, and should be hidden when not needed. in fact, all code that isn't being presently concerned should be hidden. most importantly, though, code must be automatically related, reduced, & otherwise organized, as enabled by the code being computable.
+  ** in our organization (incl categorization) of code, the code must be able to belong implicitly to multiple (predicate-defined) sets.
+  ** the automatic canonicalization & reduction of code is imperative, and likely the single most important code operation.
+  ** specifying a predicate _on_ the program is done just as predicates are specified _in_ the program
+  ** current tech: put comments like ;1 above fndefs. in kak, select then pass to a script that looks-up that id in a comment db, then opens that in a new kitty window.
 
-* prolog (logic programming)
-* factor (stack (implicit, single, uniform, plurality-agnostic state), concatenative, dynamic vars, duck typing (*virtual* things), quotes generalize functions as data, currying, and composition; therefore there's no need for `apply` [lisp] in factor. also `call` generalizes `unquote-splice` and `eval`)
-* relational algebra (plurality agnostic, set theoretic, indexed)
-* information (bit twiddling, encoding schemes, everything is select & put, no cells [assumed separation of data])
+.flatness
 
-the best ideal that i currently know is:
-
-* code:
-  ** virtual: all code is logical/algebraic symbols supporting more than mere symbol substitution
-  ** flat
-  ** metaprogrammable: code is data computable by the underlying model
-  ** for knowledge, facts
-  ** for dataflow, concatenative, stack with locals
-  ** both knowledge and dataflow should be supported, with arguable interoperability, because each is commonly useful and neither elegantly substitutes for the other.
-* model: deductive, array, relational/set-theoretic (e.g. supporting multisets)
-
-the currently known nearest implemenation of such an ideal is . apl/stack hybrids like lang5, xy &c are not good; the apl array model is far worse than the relational or prolog models: it is not set-theoretic, has not joins, intersections, &c, and so is not logical; instead it's ordered & anonymous data. that being said, one could say that logical programming is better than stack, as the stack is ordinal & anonymous whereas logical is unordered and everything is named. so _are_ relations better than apl arrays? why? and how does metaprogrammability of a stack+array language work, considering that's separate models for code and data? *consider this wrt indexes as described elsewhere in this document.*
-
-programming must be concatenative or better, namely unions (unordered concatenations) like in prolog. programs must also be *flat*. say `y = x + 2; except y=2*x when x=4` instead of `y = case x [4 2*x] [else x+2]`. the flat version decouples definition from exception, and makes both refactoring and metaprogramming easier. in fact, it makes storing the program in a database easier, too. *code facts, not structures; queries, not computations (words, functions).* another example: it's more sensible to break `[if even? i then f x else g x | x <- xs]` into `even? i => f x; odd? i => g x`, which describes separate *rules* for evaluating x by its elements instead of merging the two rules into a conditional branch inside a loop.
+`y(x,v). y(4,8). y(x,x+2).` is better than `y = case x [4 2*x] [else x+2]`. the flat version decouples definition from exception, and makes both refactoring and metaprogramming easier. in fact, it makes storing the program in a database easier, too. another example: it's more sensible to break `[if even? i then f x else g x | x <- xs]` into `select x call from xs join values(even?,f),(odd?,g) as p,f on x p`, which describes separate *rules* for evaluating `x` by its elements instead of merging the two rules into a conditional branch inside a loop. NEXT: translate sql into predicates. i used a mix of factor & sql syntax. we can reduce the syntax for 1-column relations: `select x from x` becomes simply `x`, and `select x f` is just `x f`, which is really just `f` since it's pointfree when not applied to `x`, and applying to `x` is implicitly applying to all in `x`. if functions (predicates/relations) were supported like this is sql, that would enable joins on applying them to columns selected from other tables being joined.
 
 context is a set of named relations (e.g. prepositions, which, btw, are usually binary) each of whose arguments are variably free or bound. meaning exists only in context; therefore to discuss forms is inherently foolish. again, *the only defining questions are how we select & put data from & to a thing.* this is all that programs virtualaly are: selecting & putting. all the rest of programming concerns efficiency of these operations, which is the perogative of a solver, not a programmer.
 
-GUIDING PRINCIPLE: if there are multiple ways to encode an expression, then either 1. your computation model is too complex, or 2. your code model is too complex and the choice of implemenation should be deferred to a solver, hidden from the programmer. this is too true of structure; if you use ad-hoc polymorphism, do not use a code model that allows the programmer to select a class instance that's inefficient for their use, e.g. accessing a linked list by positional index. allowing the programmer to choose a type class's instance is the primary failure of ad-hoc polymorphism. good ad-hoc polymorphism makes choosing implementing types available only to the engine, not the programmer. then again, structures should not be defined; they should be calculated in each instance to most efficiently satisfy each object's usage (select, put).
+GUIDING PRINCIPLE: if there are multiple ways to encode an expression, then either 1. your computation model is too complex, or 2. your code model is too complex and the choice of implemenation should be deferred to a solver, hidden from the programmer. this is also true of structure; if you use ad-hoc polymorphism, do not use a code model that allows the programmer to select a class instance that's inefficient for their use, e.g. accessing a linked list by positional index. allowing the programmer to choose a type class's instance is the primary failure of ad-hoc polymorphism. good ad-hoc polymorphism makes choosing implementing types available only to the engine, not the programmer. then again, structures should not be defined; they should be calculated in each instance to most efficiently satisfy each object's usage (select, put).
 
 _encodings_ are maps to/from bitstrings.
 use constraint solving to encode programs.
 make fn : information content -> encoding. e.g. ci english characters -> 5-bits.
 the expr 2x+3y+4z can be expressed <[2,],X> (`2 lfrom { x y z } >list lzip list>array v.`) which generalizes & simplifies the original expression, and can be said to have 4 pieces of information: 2, <,>, X, and [,]. associativity, commutativity, &c affect amount of information, too.
-
-SYMBOL RELATIONS: `xᵢ f` means `x f` ∀i, where "has subscript i" is a single-argument relation between a variable symbol and the symbol i, i.e. (_,i,subscript). this is the general relational model like sql. _indices_ are exactly things by which a thing is uniquely referenced. _queries_ generalize indices; they're more powerful but require more computation. generally a program is just a collection of relations—effectively a metaprogrammable relational database. programs are thus queries & puts.
 
 generalize & specify asymmetries e.g. all follow this rule except x. this is encoded as x -> { ... [ t ] x } cond.
 

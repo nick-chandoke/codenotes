@@ -19,6 +19,8 @@ TODO: explore prolog vs SAT & SMT solvers and theorem provers; how can prolog, w
 
 ==== wrt relalg
 
+see `DatabaseProlog.pdf`.
+
 [options="header"]
 |=====================
 | prolog    | sql
@@ -89,3 +91,14 @@ sillily, the main feature that makes prolog so powerful is that it uses _symbols
 * predicates specifications and queries are both ended by a dot. a predicate without parens is nullary.
 * commas denote product of two (sub)goals e.g. `father(paul,X), father(X,Y)` such goals are called _compound queries_
 * `[fp]` imports filepath `fp`
+
+=== examples
+
+.elem
+[source,prolog]
+----
+elem(x,h,t) :- x=h.
+elem(x,h,t) :- not(empty?(t)),=(t,cons(h2,t2)),elem(x,h2,t2). -- =(t,cons(h2,t2)) is effectively pattern match. it RELATES t to a predicate with free vars that satisfies t
+----
+
+TODO: why or not should `elem(x,h,t)` have an associated output or not? would having an output value for a thing that "returns" a boolean be redundant? why am i even _thinking_ in terms of _returning_ something? also how does prolog handle AND? does it short-circuit or not? if not, how would this `elem` be expressed?

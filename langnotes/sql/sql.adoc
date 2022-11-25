@@ -1,100 +1,165 @@
 == sql
 
+this document discusses sql for sqlite. all other sql engines are not concerned.
+
+sql is a bit of an interesting and probably redundant (and therefore inelegant) mix of predicates & sets. i've yet to study the relational algebra to see how it compares to set theory and predicate logic. consider `select x from t where p`. that means _get subset of `t` that obeys `p` then get only the `x` attribute of that set_. _relations_ are basically sets of tuples with named cells. firstly, were everything sets, then relations would just be sets of sets, considering tuples as sets (alists.) though we could (and probably should) consider not tables, but only columns—a column is just an array version of an identified datum (array variable instead of single variable.) so why arbitrarily group things into tables? because it associates/groups each datum with other data. this is not a worthwhile benefit; we can achieve the same thing without introducing simply by indexing all columns then associating columns by joining on indices. this seems asymmetric, though, since grouping things is done by table schemata and prolog predicates.
+
 "a wrt b" is sql `select a from x join y on x.a like y.b`. cartesian product is like join w/union; left join is like join w/intersection. "a wrt b" means "the subset of a that's related to b, and return a & b."
 
 [TODO]
-* what're windows? cf local binds?
+* see link:file:///home/nic/codenotes/langnotes/sql/sqlite-doc-3390200/optoverview.html[optimizations page] to see what sql reduces to; this more describes sql's essence/primitives.
+* see <file:///home/nic/codenotes/langnotes/sql/sqlite-doc-3390200/c3ref/create_function.html>
 * how to organize/encode data: relations are basically their headers. thus make a table for each shape. whatever data have a common shape belong in the same table.
 * cf j/k db
-* partition this module into relalg, working with data, common exprs (e.g. exists, case), useful compound patterns, and techniques for deriving solutions to given problems
-* does sql have any short-circuiting mechanisms? `case` has certain evaluation order but is not short-circuiting; if one branch is taken, there's no guarantee that the other branches' predicates aren't evaluated.
+* partition this module into relalg, working with data, common exprs (e.g. `exists`, `case`), useful compound patterns, and techniques for deriving solutions to given problems
+* is relalg isomorphic with linalg? can today's gpus already compute relalg programs easily?
 
-sql is an array-based proglang whose sole data structure—the table—generalizes maps and arrays to matrices any subset of whose columns can be indexed. like APL, a table's cell's value can itself be a table. 1D arrays in sql are represented by single columns. objects [structs] are represented by single rows, and arrays of objects are represented by tables. features:
+=== sql technique
 
-* slicing
-* concatenation
-* sorting
-* partitioning
-* folds
-  ** map
-  ** filter
-* generators
-* set-theoretic operations—a very unique feature for arrays!
-* extremely efficient; much easier to reason about performance than using linked lists, hash maps, arrays, etc
-* link:https://www.sqlite.org/json1.html[native JSON support] (introduced in the SQL 2016 standard)
-* null propogation (e.g. `select 45/null` returns `(null)`)
-* declarative
-  ** query-based
-  ** reactive programming via triggers
-* clear separation of ad-hoc and symmetric relations: symmetric across rows (with implicit map over rows, and explicit map over tables by `group by` and aggregates) and ad-hoc relation of attributes of each given row.
+.quickref
 
-but lacks metaprogrammability! for queries to not be manipulable nor generated then executed is a big lack! that'd be like if factor didn't support composing quoted programs then ``call``ing them!
+* types: scalars, row values, or relations of null, integer, text, real, or blob.
+* select | expr. everything else is only for persistent data, not calculation.
+  ** triggers and views are available only on non-transient tables
+* from, join: adjoin table to query scope
+* `with`: fold
+* don't worry about relation schemata much; they're pretty arbitrary. that's why we have `join` (couple) & `select` (decouple) operators. single-attribute relations are good because they're decoupled, but lack coupling. both coupling & decoupling are double-edged swords.
+* *exploit*: row values; numbers & strings; [builtin] [non-]aggregate ("core") [window] fns; `join`, `select`.
+  ** `coalesce` is short-circuiting `or` like in lisp
+  ** you can encode strings especially to exploit `ltrim`, `rtrim`, `trim`, or `substr`, even creating indexes on these
+* use `upsert` instead of `insert`, `update`, `replace`
+* sqlite can replace record editors such as awk. sqlite cannot be used for general text; for that, prefer `kak -f`
+
+the need for both `from` & `join` is asymmetric. it can be framed as `from` accepting one table and `join: Table -> Table -> Table`, but it can also be framed as `join : Query -> Table -> Query`, acting on `from table`. 
+
+''''
+
+the best way to use sql regardless of orthodoxy. this is to replace most sql notes. it's written in nov 2022.
+
+firstly, there are _statements_ & _expressions_. the `select` statement is the only real thing in sql; the other statements are just stateful `selects` e.g. `create table` corresponds to expressions that return (transient) tables, `delete` corresponds to `except`, `insert` corresponds to `union`. non-select statements are just for mutative/persistent & named, instead of pure & anonymous, manipulations. therefore i'll consider only `select` and `expr` forms. one should use pure (non-mutative) sql for general computation; one should save data persistently only if it's to be used later, stored for the sake of keeping data, not for the mere sake of facilitating computation!
+
+first, though we must discuss how sqlite handles data. it uses _scalars_ and _row values_. scalars are relations with a single attribute. row values are relations with 2+ attributes. _relations_ are sets of row values. i haven't seen a reason to distinguish between scalars and row values; why not just say that row values are 1+ values?
+
+.row values
+
+* row values plainly represent the concept of grouping. this is separate from relations, which are array variables instead of single data; the difference is that each of a row of values is particularly, certainly identified, whereas those in an array var are non-particular, anonymous. this is quite similar to how tuples vs lists are handled in haskell. indeed, lists/relations may be empty, but row values may not be empty!
+* a row value's _size_ is the count of its attributes
+* row values may be syntactically expressed as `(v,...)`. note the lack of `values` which denotes _relation_ literals, not row value literals.
+* any binary operations on row values require row values of the same size
+*  `<`, `<=`, `>`, `>=`, `=`, `<>`, `is`, `is not`, `in`, `not in`, `between`, and `case` are such binary operators that accept 2 same-size row values (or 2 scalars)
+  ** these evaluate pointwise on row values from left to right, stopping on one of 3 conditions:
+    *** all row values are evaluated; retval is as expected
+    *** value is encountered that determines retval regardless of remainder of row values e.g. `(1,null) < (2,null)` is known to be true after evaluating `1<2`, so the nulls aren't even considered
+    *** a `null` is encountered; then retval is `null`
+  ** it's not always so simple. e.g. `(1,2,3)=(1,null,4)` returns `0` because 3≠4 regardless of the other values. yet `(1,2,3)=(1,null,3)` returns `null` because the retval 0 or 1 depends on what the `null` would be. remember that sqlite considers `null` as a lack of information. like sigfigs, a lack of information must propogate.
+* `update` (not talking about `update from` here) expects a row value on the rhs
+  ** `update t set a=x,(b,c)=(select ...) where ...` works
+* `<rowv> in <rel>` tests whether a row value is a member of a relation. `<scalar> in <rowv>` works, too.
+  ** given that other binops work on row values, `in` should be parameterized by a binop; then we'd have `any` instead of `in`
+* wrt an `order by` clause, when a relation is not a multiset, then rows can be indices; use them instead of `offset` because that's more efficient
+* use row values in a predicate clause instead of `and` or `or` e.g. `where (x,y) between (0,10) and (3,100)`
+* table names are often directly syntactically usable instead of `select * from t`
+* select statements that return a single row eval to row values, so `(select a,b from t1) > (select x,y from t2)` is valid & sensible.
+
+NOTE: `is` & `is not` are `=` & `<>`/`!=` but produce 0 or 1 instead of `null` if either of their args is `null`.
+
+* to test whether x is a subset of y: `x y \ ∅ =`
+ ** this generalizes x∈y. that generalization is good because it makes everything sets (no "naked" elements)
+* to test whether any of x is in y: `x y ∩ ∅ =`
+
+[TODO]
+* do these binops work on relations as well as row values?
+
+==== expr
+
+_expression_ means _relation_. singleton values as relations have one row & one attribute. some expression forms evaluate to a singleton relation, and others an empty relation. the context in which the expr is used may mandate constraints on the expr e.g. the number of attributes or rows that it has.
+
+obvious ones like datum literals or operators/functions thereon aren't here enumerated.
+
+* symbols bound in query's scope
+* absolute symbol reference ([schema.]rel.attr)
+* (expr,...)
+* like/glob/regexp/match
+* `is [not] [distinct from]`
+  ** `is` & `is not` are sqlite-specific terser forms of sql standard `is not distinct from` & `is distinct from`. holy golly, man.
+  ** `isnull`, `notnull`, both equivalent to `is null` & `is not null`. no idea why these especially specific forms exist.
+* `[not] in` (see note below)
+* `[not] exists` (emptiness test; considers whole relation so can be interpreted as an aggregate fn)
+* `case when` is short-circuiting / lazy eval, unlike `iif`. see _§first-class functions and conditionals_ for thorough discussion.
+  ** `case` is an expression, not a table. `select case when 1 then (values(3),(4)) end;` is correct; there's no `from` clause.
+  ** in `case when p then y end`, both `p` & `y` must be single-attribute relations, and only the relations' 1st values are used. 
+    ** if the chosen relation is empty then `case` returns `null` as a scalar
+
+see best-paradigms-lang.adoc. `where` is implicit in predicate logic; it's the same as predicate unification/evaluation. the `expression` grammar's `[not] in` subgrammar is set membership/intersection, which is is equivalent to testing against a predicate. therefore `a in b` = `exists a where b` = `exists a intersect b` except that `a where b` is incorrect in sql since therein `b` must be a relation which sql considers distinct from a predicate; however, theoretically, by predicate-set correspondence, the three are equivalent. the equivalence can be seen by `a [not] in b` (or `a like b` &al) being set membership if `a` is a row value and `b` a relation, or set intersection if both `a` & `b` are relations. *however, `[not] in` has one characteristic: it also accepts a scalar lhs with a row value rhs. this is a blatant asymmetry in how sql considers groups of data.* the symmetric solution would be if scalar were equal to a row value with a single datum and a row value equal to a relation with one row. indeed, this would imply that a scalar equal a singleton, single-attribute relation, which _is_ true almost always, but not in `[not] in` and perhaps in some few other contexts.
+
+sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed in predicate logic as (∨,∧,¬,⊥). one of sql's troubles is that it is not symmetric; it considers predicates distinctly from sets, and sometimes considers elements distinctly from sets. also, though this model seems appropriate, one must be careful to distinguish between expressions that act per row vs aggregates, which act per relation. also, and again usefully so, `null` is the empty row value whereas an empty relation is an empty set. `null` has short-circuiting/null-propogation semantics whereas an empty set is the identity for union but a short-circuiting operator for `intersect`. these semantics can be a bit confusing, but they are elegant!
+
+* where / between (uses index)
+* join (or where/filter & union) (general filter)
+* intersect, except
+* `exists` predicates on a relation's emptiness; `where exists ...` makes one relation's emptiness imply this relation's emptiness.
+
+==== select
+
+* `from` merely binds symbols for the query
+* `where` & `having` are both the same concept—"such that"—but one is applied to row values and the other to groups of row values. if sql were more symmetric, then `having` should apply to the whole query (the single group) just like aggregates do. however, most people would consider that more like a guard [list monad].
+* we can use `like` with a single-column table e.g. `where x like (select y from t)` to ormap `like x` (curried) over `table`. in fact, we can use multiple values for both: `where x like y` tests the emptiness of `x join y on x like y` (with tables `x(x)` & `y(y)`).
+
+===== window functions
+
+see `windowfunctions.html`.
+
+a _window [frame]_ is a subset of a relation. the only thing that distinguishes it from a `select` expression is that each subset is associated with a row. this is much more powerful than otherwise: join, which associates each row being with exactly one other; or aggregate functions, which evaluate to a scalar, albeit one per group when `group by` is used. therefore window functions are extremely powerful but more particular versions of aggregates on `group by` that give aggregate outputs per row rather than just per group of rows.
+
+* aggregate window functions' window frame is determined by a predicate given to the `order` clause. also the window's contents may be ordered.
+* aggregate window functions don't present the bare columns problem.
+* even non-aggregate window functions effectively implement stateful loops (folds). aggregate winfns implement stateful loops that would be a pain to implement with a fold because their state isn't easily expressed by a single accumulator value, as is the case for aggregate functions on a rolling window e.g. selecting a value and the sum of its immediate neighbors. this is easily defined by a for loop in c, but not by `reduce` in factor, or especially by a fold in racket, haskell, python, &c.
+
+all binary functions are foldable i.e. usable as aggregates. only in typed langs is this not true, for they often use types like `a -> b -> c` or `a -> b -> b -> a` or `a -> b -> b`, instead of `a -> a -> a` or `a -> (b -> a) -> a` &c. all unary fns are mappable & applicable, and all binary fns are applicable and foldable. sql has only numbers (integers & floats) and strings (strings & blobs.) all other "typing" is done by relations & row values. thus sql meets my personal requirement for using only relations of types primitive to a physical cpu. therefore, excepting lack of metaprogrammability and the arguably bad & arbitrary constraint of needing to group all columns as tables, *the ability to define aggregate window functions should be all that's needed to make sql a perfect language*, even if its syntax is verbose.
+
+NOTE: because winfns' results are not per-row, window functions cannot be aliased then used in `where` clauses.
+
+====== examples
+
+.difference of adjacent elements
+
+this example's essence is `log`.
+
+[source,sql]
+----
+create table x(x);
+insert into x values(1),(10),(100),(2);
+with t(x) as (select x-lag(x) over (order by x) as d from x) select * from t where x is not null;
+----
+
+returns a column `x` of `1 8 90`.
+
+''''
 
 NOTE: sql is case-insensitive!
 
 * though tables' attribute sets are mostly fixed (though they can be updated by `alter table`), creating new tables on the fly is easy: just use `select` to get a subset of attributes or `join` to adjoin!
 * it's appropriate that sql forces everything to be in tables; that's symmetric treatment of singletons & collections. however, a table that implicitly stores global variables like lua's `_G` would be nice.
 
-=== (no) lambdas
+=== λ's
 
-TODO: revise this section remembering that views are effectively functions, except on a fixed rather than variable table. also discuss fns as parameterized data.
+tl;dr: sql's functions/lambdas are queries—relation endomorphisms. queries may be composed, but only pointedly. the points are attributes, not data; or the points are arrays of data. mutate one of the input tables to change the function's input. sql does not support higher-order functions. one difference between sql's functions and lambdas is that sql identifies arguments only by name, not positional order.
 
-firstly let's identify what a _lambda_ is. a λ is a relation of inputs and outputs. picolisp's λ syntax makes this obvious: `((arg ...) (body ...))`. it's not even special syntax, really; the pil interpreter knows to process an sexpr as a λ if its first element is a list. the best λ syntax (without regard to function composition viz apl trains &c) is clojurescript's shorthand: e.g. `(%1 + %2)/%3`, which generalizes apl's dfns syntax to multiple parameters; these achieve brevity by identifying arguments by ordinals instead of names. a _function_ is exactly a λ, though commonly in programming (namely in languages not supporting λ's), it refers to a special linguistic construct that is _effectively_ just a λ bound to an identifier. as such, in such languages, _functions_ [programming] are just poor implementations of functions [math] i.e. λ's, where the poorness is by senseless asymmetry of how data are treated viz treating functions differently from other data.
+a λ is a relation of inputs to outputs. the relational algebra uses relations generally, not partitioning attributes into inputs & outputs. sql is still reductionist, however. queries are sql's functions. their inputs are expressions following the syntax `select`. `from` does not concern inputs _per se_; it only scopes inputs. obviously queries' outputs are relations. queries thus relate relations. a query's inputs can be adjusted by mutating tables of that query's `from` clause e.g. pseudocode `def f(a,b,c) := (a+b)/c; f(1,2,3)` as sql `create view f as select (a+b)/c from params; insert into params values(1,2,3); select f`. sql does not support storing functions/queries/subprograms in tables. see _§first-class functions and conditionals_ for how to code without higher order functions.
 
-fns' advantage is their variability: the locations of both their args and output vary with each invocation, and may even be unnamed (in the cases of an input being a literal or the output of another fn.) thus fns achieve composability. purely tacit langs like joy are purely function based, and thus every arbitrary substring of these programs is a valid function (cf concatenative langs, generally for which any substring of a program is a valid program, but not necessarily a function.) fns can be also seen as a scoping mechanism: `f(a,b)` is seen as variables `a` & `b`, whose meaning is relative to each invocation of `f`. this can be encoded in sql as a table `f(a,b,e)` where each invocation of `f` is a row, and `e` is the location where the output should go. `a`, `b`, and `e` may each be literal values or addresses. this has the side effect of making computation lazy by implicit memoization (namely when `e` is not an address, and it's just stored right there in the table.)
+in sql, queries are functions are subprograms. queries are evaluated by default, since that's all that a sql engine does. if a subprogram were stored as a relation or string or by any other encoding then we'd need `eval` to evaluate it; the use of `eval` sees queries as subprograms. if queries were encoded as relations, then queries (subprograms) would be modifiable by other queries and sql would thus then be metaprogrammable. the _factor_ language does not have lambdas; instead it has only quoted subprograms and eval (called `call`.) naturally these quoted programs can be modified; the quoted program is just a list of other subprograms. this is similar to a variety of sql that would use relations to encode programs. the point is that evaluable subprograms are superior to lambdas/functions. in this model the only separation of "data vs code" is that `eval` is the only code, and is not data (since that'd be redundant,) and everything else is data.
 
-usually λ is an asymmetric linguistic primitive; once a λ is created, it cannot be modified, and no operations exist on it aside from β-reduction by application of provided inputs (which is always at invocation time in strict-eval langs.) aside: apl is one of few languages that actually supports truly first-class functions [verbs] which support modification [by adverbs]. this is needless restriction. we _just_ said that λ's are merely relations of inputs & outputs. so why not express them as such?
+the ability to modify subprograms then evaluate them is an ability that lambdas lack! lambdas are mere reductions, not true functions, anyway; we can't discuss the inverse of a λ as freely as we discuss a function's inverse in math. this is because mathematical functions may be implicitly defined by characteristic constraints whereas λ's are necessarily definite, explict relations of inputs & outputs. a λ's input symbols are mere stand-ins for literal data, not a predicate-quantified set of possible inputs. the fact that λ's definitions cannot be examined (except in picolisp) exemplifies their reductionist nature; functions can only be applied and composed; no other operations with them are supported. therefore lambdas do not enable anything new; they're worth is their convenience: they're function literals. they relieve one of the need to use crufty syntax to define a function, which is ironic because applicative languages still require data to be named unless it's used exactly once, in which case it can be inlined.
 
-* picolisp does this; once a λ is defined, it does not become a black box; it remains exactly the list of 2 lists that it ever was. see _fexprs_ in pil docs.
-* some functional langs use currying as an isomorphism of a list: (a -> b -> c) -> (a,b) -> c, which corresponds to (a b c) = (a . (b . (c . ())))
+fns can be interpreted as a scoping mechanism: `f(a,b)` is seen as variables `a` & `b`, whose meaning is relative to each invocation of `f`. this can be encoded in sql as a table `f(a,b,e)` where each invocation of `f` is a row, and `e` is the location where the output should go. `a`, `b`, and `e` may each be literal values or _addresses_—values supporting join with another table.
 
-we've now restructured λ's as some `eval`-type fn on a relation [of data]. so let's talk about `eval`.
-
-`eval` takes syntax as an argument, whether that syntax be encoded as an sexpr (viz lisp) or a string (e.g. bash). instead, let's generalize `eval` from a single function that evaluates syntax to a set of functions that each evaluates some specific form of data. oh, wait, look at that: those are just ordinary functions! so `eval` should really not be considered unique at all. yet `eval` isn't user-definable! why?
-
-`eval` being not user-definable expresses a serious flaw in the design of languages: asymmetry in the form of functions being treated differently from data! yes, even functional languages, in which λ's are "first-class", are really no better than a non-functional language like C! they're only more _convenient_. if λ's were really data, then we'd be able to modify them—ya know, like _any other data_. instead, functions are *not* first-class; instead the language merely supports a _still-special syntax_ for _inline functions_. to summarize, _first-class_ is used to mean:
-
-. declared/declarable inline by some special syntax
-. can be bound to multiple identifiers
-  .. passable to other functions (thus binding the λ to one of that function's parameters)
-
-thus enabling one to express the full λ-calculus, which basically means function _composition_. it does not entail function _modification_!
-
-now try to imagine _first-class_ data: you can declare the data, and you can pass them to functions—no mutation—that's purely-functional programming. so how is it that even non-pure functional programming retains the same non-mutation limitation, but only for functions instead of other data?
-
-this restriction is not necessary. we can have functions and mutation. again, functions are only relations; let's express them as such, and not in some special linguistic, asymmetric way. the only way to do that is for literally _everything_ to be mere relations. in the usual dictonomy of "data and code", this means all data and no code.
-
-i know: "no code?! that implies no evaluation, and thus no program!" so there must be _some_ code. the question is: what? anything will do, so let's choose the least-constrained solution. thus the solution is β-reduction/evaluation of a relation—basically, effectively a lambda, only now we aren't thinking of _lambdas_ as their own concept, really; now we see just the evaluation of particularly-structured relations. now the necessary linguistic construct is not the `lambda` builtin, but instead `eval`, which now means "evaluate this relation" instead of "evaluate this syntax."
-
-we have now achieved a language model where all data except `eval`, which is the only code, and is _not_ a datum, since that'd be redundant.
-
-so how does this relate to sql? sql is made for relations. a fold can be expressed by a fn called `fold` that parses a [probably single-element] table of header `(init,s,op)` where `init` is the initial value, `s` is a relation (probably `select * from t` for some `t`) and `op` is a relation of inputs and outputs, expressed by `select body(arg,...) from t` where `t` contains all the args, where each column name practically is a locally-bound identifier of a function parameter. the only problem is that sql does not support variable `t`! `t` must be an absolute identifier! this is sad. however, at least it identifies the exact fault that makes sql non-composable—the single lack of variability that it'd need to be as capable as any language could be. such functionality can be easily implemented in a small language that merely converts a simple syntax into sql statements. i suggest making a dsl in factor [lang]. the lang would generate nonce identifiers to satisfy sql's requirement that every of its lingustic elements must be named.
-
-.sql metaprogramming example
-
-TODO: given that we can define fns as views, if we permit paramerizing the query, then metaprogramming = non-meta-programming?
-
-pseudocode `def f(a,b,c) := (a+b)/c; f(1,2,3)` is sql `create view f as select (a+b)/c from params; insert into params values(1,2,3); select f`.
-
-there are an infinite number of alternative expressions for defining & invoking functions, but ultimately we must group (fn id, param vec, output expr), and be able to invoke the function. to make regular programming into metaprogramming, simply make the function identifier an ordinary datum, e.g. a string; that way function names (and table and column names too) can be computed from any data. in fact, for full metaprogrammability _every_ _semantic_ (not necessarily _syntactic_) element must be computable. in lisp this is decently easy via `eval` or macros, and in scheme it's more difficult because of they hygeine constraint. hygeine is a concern only because of scope. because all scopes in sql are tables, which all must be named, accidental shadowing is impossible, so hygeine isn't a concern. furthermore, functions may be identifiable by more than a mere string; they may be stored in a table with arbitrary attributes, and we may filter as per usual (e.g. `select * from fns where name = ? and other_attr = ?`) to disambiguate.
+within function definitions local data are stored on the stack (for stack langs) or in a function-local namespace (for applicative langs); in sql local data can be stored as array variables as attributes of a locally-scoped relation bound by a `with` clause. or you can just leave the local data in the query's output; the using query can use it if it needs; if not, there's no extra cost.
 
 NOTE: scoping is a concern in sql queries, e.g. how a table alias (by `as`) is usable in a `where` clause. also, subqueries have access to outer queries identifiers.
 
 as an ending aside, note that a side-effect of data-only programming is that all computation is delayed, since all computations are only data until explicitly passed to `eval`.
 
-.λ's aren't needed for aggregates in sql
-
-haskell `map (\x -> x+4) xs` is `select x+4 from xs`, which returns a fresh, unnamed table; `select` is basically lambda. haskell `foldl + 0 xs` is sql `select sum(x) from xs`. indeed, lambdas would benefit folds in sql, though their benefit would be only be a bit of efficiency or syntactic elegance; general folds can be expressed in sql by using `with recursive ... select`, using the tables locally bound by `with` to store fold state. at the end of the fold, all that remains is the output of the fold; the temporary tables are garbage-collected.
-
-.where λ's would be nice in sql
-
-update clauses: _update_ (cf _put_ or _set_) connotes modifying a value already present, which is a fn of the value to be updated. λ's would be especially useful in triggers that update per row! altirnatively it'd be very nice to be able to automatically select a table of rows that caused the trigger!
-
-furthermore, though tangential, association or lack thereof is encoded in such phrases as `x,y` where, if `x` is a single value, then it's associated with all in `y`, akin to `let x = 4 in map (\y -> f x y) y`. the (lack of) association between memebers of different sets (viz {x} and y) implicitly tells how they must be scoped & sequenced. in this case, `x` must be in `y`'s scope when we compute `f` over all in `y`, but `x` is only associated with `y`, not there being a unique association between some `x` with every element of `y`.
-
-.when `join` cannot alternatively express `where` (maybe. this is a tough-to-identify thought that needs investigation)
-
-commonly `select a from t where a=(select b from u)` can be re-expressed as `select a,b from t join u on a=b where p`. but if there's nothing to join on, because one of the queries returns empty,...well then we can still use coalesce or exists maybe?
+NOTE: the need for lambdas in `update` clauses is covered by old.attr & new.attr. see the sqlite docs for `update`.
 
 === what is sql
 
@@ -177,9 +242,9 @@ sql does not support updating multiple rows by a map. instead we must set a set 
 
 [source,sql]
 ----
-create table x(x);
-insert into x values(1),(2),(3);
-select x,x*10 from x join x using (x);
+create table t(x);
+insert into t values(1),(2),(3);
+select x,x*10 from t;
 ┌───┬──────┐
 │ x │ x*10 │
 ├───┼──────┤
@@ -187,13 +252,15 @@ select x,x*10 from x join x using (x);
 │ 2 │ 20   │
 │ 3 │ 30   │
 └───┴──────┘
-update x set x =         (select x*10 as fx from x join x using (x)); -- wrong: sets all in x to 10
-update x set x = fx from (select x as id, x*10 as fx from x join x using (x)) where x=id; -- correctly sets each x to f(x)
+update t set x =         (select          x*10 as fx from t);            -- wrong: sets all in x to 10
+update t set x = fx from (select x as id, x*10 as fx from t) where x=id; -- correctly sets each x to f(x)
 ----
 
 the 1st form would be correct were sql to see `x` as a free symbol. unfortunately sql is limited to using literal data sets only.
 
-`update from` is a non-standard yet commonly supported form. instead of `update t set a = expr` we do `update t set a = expr from t2`. were our sql engine (sqlite) not support `update from`, we'd need to execute an `update` statement for each row in a table e.g.
+`update from` is a non-standard form yet commonly supported by sql engines. plain `update` can assign only one value to many rows. `update from` selects many rows then pointwise matches them to rows to be updated by the predicate given to `where`, effectively setting `t` to `t join (select ...)`.
+
+were our sql engine (sqlite) not support `update from`, we'd need to execute an `update` statement for each row in a table e.g.
 
 [source,factor]
 ----
@@ -204,6 +271,16 @@ each
 
 `where x=?` is the pointwise association of `x` with `f(x)` and `each` represents `∀x`. ideally, for efficiency, we'd collect all queries into a list then run them together in a single transaction.
 
+==== no `zip`, _per se_
+
+there appears to be no way to zip [n..] with an arbitrary relation. zipping is possible only by `join on`. `join` cannot work becasue that's cartesian product, which is not pointwise association. however, for `join on` to work, there must be a common attribute upon which to join, but no such attribute exists unless the relation is already indexed by [n..]!
+
+neither recursive `select` nor `update` helps, either; to associate an index with a value would still require the value to already be indexed.
+
+relalg is based on sets, not sequences; indexing rows would be a primitive. indeed, is sql it's accounted for by special attribute modifier `autoincrement`! thus we never need to zip; we can effectively implicitly make all sets sequences with order by nth insert. with the set being a sequence, it fulfills the requirement that allows it to be joined by index. it can thus be effectively zipped. really, though, it never makes sense, in general, to systematically order a set by arbitrary indices!
+
+the `autoincrement` value is set to the nth insert; you may prefer `insert into t(id,x) values((select max(id)+1 from t),x)`. if a row is removed, then you will be left with a sequence with a missing element. how to handle that is your choice. for example, you may mark the removal by not actually removing the row, but by setting its value to `null`; or you may truly remove the row then update all of the indices greater than it to be each one their lesser.
+
 === design
 
 match data's logic's invariants with sql invariants e.g. attribute sets, sql column or table constraints. all symmetric data belong in rows, sql's only symmetric aspect.
@@ -212,15 +289,16 @@ match data's logic's invariants with sql invariants e.g. attribute sets, sql col
 
 ==== encoding schemes (relational algebra)
 
-* if you want to store a one-to-some map, e.g. parent -> {child1,child2,...}, then you can (but should not) use a `dependent` attribute. the attribute has multiple values, which may be encoded by multiple rows, e.g. `insert into t(...,dependent) values(...,1),(...,2),...`, but that's quite redundant. a more efficient encoding is to use `parent` instead of `dependent`: `insert into t(...,parent) values(...,1),(...,1),...`. this method inserts each of the parent and all its dependents only once, and all of the dependents' `parent` attributes are the same. in the `dependent` version, all of the parent's attributes except for `dependent` must be redundantly specified per each dependent!
+* if you want to store a one-to-some map, e.g. parent -> {child1,child2,...}, then you can (but should not) use a "dependent" attribute. the attribute has multiple values, which may be encoded by multiple rows, e.g. `insert into t(...,dependent) values(...,1),(...,2),...`, but that's quite redundant. a more efficient encoding is to use `parent` instead of `dependent`: `insert into t(...,parent) values(...,1),(...,1),...`. this method inserts each of the parent and all its dependents only once, and all of the dependents' `parent` attributes are the same. in the `dependent` version, all of the parent's attributes except for `dependent` must be redundantly specified per each dependent!
   ** this doesn't generalize to multiple "parents" (tables referencing the "child" table), as that'd mean adding to the referenced table a column per referencing table.
   ** consider `s(id)` & `t(id,s references s(id))`. this is redundant; we can leverage the fact that `t` already has an `id`. this is the parent pattern again; if we were to describe this as JSON, then type `t` would contain subobject of type `s`. in sql it's better to have subset `s` reference superset `t`: `t(id)` & `s(t references t(id))`, which uses only one `id`. i use `references` (foreign keys) here when the referenced attribute is a primary key. if it isn't a primary key or even isn't unique, then we can still `join` on it and use triggers instead of trigger-like foreign key constraints such as `on delete [...]`.
     *** one fewer attribute upon which we'd join means one fewer index, too.
     *** this makes insertion order a bit more intuitive: rather than needing to insert the subsets firstly so that the superset can reference them, we insert the superset firstly, then the subsets secondly.
     *** this scheme is not possible if the superset may have a value other than a foreign key, e.g. `t(s)` where `s<0` is just a number, but `s>0` is a foreign key. the closest way to use the subset-references-superset encoding with this schema is for the subset to have an attribute for the superset's value, e.g. `t:{s:<int|{a:int,b:string}>}` (adt `T = S Int | AB Int String`) as `t(s)` & `s(id,s integer,a integer,b string)` constrained to `s is null or (a is null and b is null)`. the former version would require joining on a `case` clause, which would not use indexes, whereas the latter would join on `id` which, if indexed, would make for a much more efficient [left] join; the `case` would be deferred to after the join, performed on the joined table.
-* using `like` is dubious. using `regex` is almost cetainly bad; you probably want a db designed specifically for text searching.
+* using `like` is dubious. using `regex` is almost cetainly bad; you probably want a db designed specifically for text searching. string pattern matching does not use indexes and is thus does not make efficient queries.
 * the semantic meaning of an attribute can depend on other attributes e.g. in `person(age integer,alive boolean)`, if `alive` then `age` means number of days alive; else it means number of days since death. furthermore, any of a row's attributes may be used or not depending on its other attributes' values.
 * compress information as much as possible e.g. Y-M-D as just days since some arbitrary start date; that means that dates require only one column. the type `A or B` where A & B are both natural numbers can be encoded as a single integer whose sign determines whether A or B.
+  ** you can, at least in sqlite, exploit `cast` for booleans; to interpret anything as a boolean sqlite ``cast``s it to an integer then checks equality with 0. thus you can make a string's first character /[1-9]/ to mark it as true; any other character will interpret the string as false.
 * do not move from one table `a` to another `b` by `insert into a ... where p; delete from b where p`; instead, store all in one table `t`, and have an attribute that designates whether a row would belong to `a` or `b`; then filter on that to effectively get virtual subtables `a` & `b` from `t`.
 * consider encoding schemes' supported partitioning schemes e.g. integer primary key can be generalized to indexed reals. reals can be partitioned by floor.
 * unless uniqueness is required by some algebraic properties of your data, then feel free to see rows in a table as elements of a [multi]set. elements can be grouped [partitioned] by attributes (general prodicate, not just equality), which generalizes "thing at index" to "things with a given property", and set-theoretic operations can be performed for all predicates, and all predicates can be defined of multiple attributes [columns]
@@ -229,8 +307,7 @@ match data's logic's invariants with sql invariants e.g. attribute sets, sql col
   ** solution 2: in sqlite (and maybe other sqls) by using `returning` (non-standand sql), though the returned value is not available as a sql expression; it's usable only by a client program e.g. `(let (rid (sql "delete from parent where id=? returning fk" pid)) (sql "delete from referenced where id=?" rid))`
   ** `on delete cascade` cascades when the *parent* (the referenced table, the one with [that must have] the primary key) row is deleted, not the child! e.g. with `create table a(a primary key, v); create table b(a references a(a) on delete cascade)` means that deleting one of `a`'s rows will implicitly delete one of `b`'s, but not _vice versa_; for the inverted case, you'll need a trigger; however, if you're considering that, you may want to reconsider how you're structuring your data; you should be able to use foreign key cascades. particularly, remember that it's better to have a `parent` attribute rather than `children`. using this design will help you better decide whether either of your tables should have a primary key. remember that foreign keys are one-to-many relationships; many in `b` may have common foreign keys; deleting their corresponding row in `a` will delete all those corresponding in `b`.
 
-===== TODO's
-
+[TODO]
 * how can we encode logical constraints as sql constraints or relations? common constraints are types, lengths, [recursive] predicates
 
 ==== sensible querying
@@ -270,12 +347,14 @@ select a,b,case when c is not null then c else 20 end as 'c or 20' from x join y
 
 then use `where` to select a particular row. another possible condition is, instead of `c is not null`, `c>0` where `c<0` denotes an element of a sum type but `c>0` denotes that `c` is a product type, which in sql is encoded as a datum upon which we can join with a table of named tuples.
 
+NOTE: `case <expr> when ...` uses a _base expression_; in this case, rather than predicates being tested against 0 or 1, they're tested against the base expression's result. `case x when y then r1 when z r2` is better than `case when x=y then r1 when x=z then r2` because it's terser and guarantees that `x` will be evaluated only once. the base expression form is to `case` [scheme] as the non-base-expr form is to `cond`.
+
 ''''
 
 * suppose that table `t(x)` has one row and table `s(y)` has many rows. if you want to x+sum(y), do `select min(x)+sum(y) from t join s` (or use `max` instead of `min`); `x` will be `count(y)` duplicate rows, but to avoid bare columns, we select one of `x`'s rows, and only `min` and `max` select one row without regard to other rows.
 * using a `distinct` query whose result attribute set contains an attribute having a primary key is redundant
 * `distinct` means inefficiency in the form of pruning a query; we've asked for data, then discarded some of it—so why did we ask for it, then?! good schema & query design sees that `distinct` should not be used often.
-* `having` should be used for aggregates only
+* `having` is a predicate applied to groups produced by `group by` or aggregates which may implicitly be over one group of the whole set
 * refactor nested queries, _(top-level,nested)_, into a flat one with join.
   ** this is ostensibly possible generally when _nested_ is:
     *** `from` one table (i.e. _correlated_)
@@ -336,10 +415,10 @@ according to sqlite v3.39's `select` docs, §2.4, `group by` associates each row
 * a ⊂ b (i.e. all a are in b) is said as `a in b`
 * x ∈ a ∧ x ∈ b (i.e. at least one of a's elements is in b) is rephrased into x ∈ a ∩ b, which is `x in a intersect b` in sql
 * use views to act as recursively-defined tables by defining the view in terms of `with recursive ... select ...`
+  ** see sqlite docs' `lang_with.html` page, §3 for exact details
 * rather than store filepaths, store their contents as blobs; this way deleting an item from the db actually deletes the file, as one would probably expect.
 
-===== TODO's
-
+[TODO]
 * how to (especially efficiently) produce a shuffle of a table?
 * suppose i've a table `t(a,b,c,...)`, and i want to effectively `with x(x) as (select * from t where p) select sum(a)/x,sum(b)/x,sum(c)/x,... from t`; how to do this for arbitrary number of `a,b,c`, and how to effectively do `(apply / '(sums union all x))`?
   ** we'd need to store a,b,c,... in rows....
@@ -640,6 +719,8 @@ union tables' rows. valid only for tables of equal column sets. `union` returns 
 
 ==== `with` & recursion (common table expression (CTE) subquery refactoring)
 
+NOTE: see §3 of the sqlite docs' `lang_with.html` page for exact description of recursion structure & evaluation.
+
 this is how we do local binds.
 
 TODO: cf normal aliases
@@ -651,6 +732,7 @@ TODO: cf normal aliases
 * repeated aggregations, e.g. avg of maxes
 * "overcome constraints such as what `select` has, e.g. non-deterministic `group by`"
 
+.`let*`
 [source,sql]
 ----
 with
@@ -670,14 +752,15 @@ produces
 
 could use `values` instead of `select`; `values` is just `select` but more efficient and without a limit on number of supported rows.
 
-.generator example
-
+.`letrec` generator example
 [source,sql]
 ----
-with recursive t(v) as ( values(1) union all select v+1 from t ) select v from t limit 5;
+with recursive t(v) as (values(1) union all select v+1 from t where v < 5) select v from t;
 ----
 
-TODO: why does this not produce (1)++(2),(3)++(3),(4),(5)++...? i'd think that `select` would return the whole table (since there's no `where`) on each iteration.
+NOTE: despite the SQL99 standard spec, sqlite appropriately does not require `recursive` in order for a cte to be recursive.
+
+this does not produce (1)++(2),(3)++(3),(4),(5)++.... `select` does not return the whole table on each iteration; as described in `with§3`, one item is taken from a queue (step 2a); `select` is a misnomer in recursive queries.
 
 produces a column `v` with five rows of values 1 through 5, effectively equal to haskell `take 5 (Data.List.NonEmpty.unfoldr (\n -> (n, Just $ n + 1)) 1)`. the definition of `t` is unbounded; the bound is in `limit 5`; therefore locally bound tables (at least when bound with `recursive`) are not stricted evaluated before the body of the `select` statement.
 
@@ -739,6 +822,8 @@ select * from y;
 │ 7  │ 6    │ 1000 │
 └────┴──────┴──────┘
 ----
+
+see §3.[3-5] for very useful graph/traversal considerations.
 
 ===== insert
 
@@ -986,12 +1071,12 @@ insert into db2.table1 select * from main.table1 limit 1; -- table1 of file "db2
 
 .quoting
 
-|===
+|===================================================================================================
 | single quotes | string literal
 | double quotes | identifier (used to, e.g. use a keyword as a symbol
 | brackets      | (non-standard) identifier, same as double quotes. used by MS-SQL server and sqlite
 | backticks     | (non-standard) identifier. used by MySQL and sqlite
-|===
+|===================================================================================================
 
 see link:https://www.sqlite.org/lang_keywords.html[sqlite's documentation] on parsing quoted strings.
 
@@ -1005,18 +1090,25 @@ use package `csvs-to-sqlite`. you'll probably want to use options `pk`, `d` or `
 
 it's likely in your best interest to add csvs as tables into a db, then use sql to create a new table, rather than doing this all at once programatically.
 
-.list all tables
+.pragmas useful for implementing metaprogramming 
 
-|===
-| sqlite | .table
-|===
+usage notes:
 
-.describe a table
+* all pragmas may be more usefully used as relations e.g. instead of `pragma table_info("t")`, use `select * from pragma_table_info("t")`.
+  ** any typo in a pragma will silently do nothing (e.g. `pragma table_infos("t")`); however, the virtual table form will fail appropriately if there's a typo *in the pragma name* e.g. `select * from pragma_table_infos("t")` will say "no such table pragma_table_infos." however, as the table name is just a string literal, if you give a table name that does not exist, then the empty relation will be returned.
 
-|===
-| sqlite | `pragma table_info(tableName);` //NOTE: no effect if tableName ∉ db
-| mysql  | `describe tableName`
-|===
+pragmas:
+
+* pragma `table_list` gives more info than `.tables` and can be used in `sqlite3_exec` instead of only in a repl
+* describe a table: `table_info("n")`. no effect or empty relation if n ∉ db.
+  ** `table_xinfo` is the same but also shows hidden columns
+* `function_list`: all functions (and their types) available on current db connection!
+  ** `s` means per row; `w` means aggregate.
+  ** narg<0 denotes variadic fn
+  ** nullary functions must have trailing parens e.g. `random()`, `pi()`. the trailing parens distinguishes them from column names.
+    *** some nullary functions are usefuly only as window functions, e.g. `percent_rank()` or `cume_dist()`
+
+for functions to accept args instead of relations is foolish design.
 
 === reldb programming
 
@@ -1104,7 +1196,7 @@ select json_group_object(key,fullkey) from json_each(j), d where k="j"; -- {"a":
 
 === triggers
 
-triggers are very powerful. they enable reactive programming aka _hooks_. the excellence of this design pattern is freedom to not concern scope, and so nor code structure.
+triggers are very powerful. they enable reactive programming aka _hooks_.
 
 [source,sql]
 ----
@@ -1158,7 +1250,7 @@ select ps from acc order by id desc limit 1;
 * i'ven't yet ``explain``ed this query to see its efficiency
 * we can't use aggregate functions in predicates; therefore `where id=max(id)` is not a valid alternative to `order by id desc limit 1`
 
-of course, this fold is more easily done by the aggregate `group_concat`, but this example serves generally, when an aggregate may not be already written for it.
+of course, _this_ fold is more easily done by the aggregate `group_concat`, but this example serves generally, when an aggregate may not be already written for it.
 
 .functions
 
@@ -1203,6 +1295,210 @@ with scope(a) as (values(20)) -- local scope(a) shadows global one for duration 
 * by naming tables `scope` i mean that tables are scoping mechanisms
 * `with` is not properly its own clause; it's a clause of the `insert` statement, as well as `select`, `delete`, & `update`
 
-sql binds cannot be , e.g. in a `create trigger` statement's final clause where it takes a sequence of statements, each statement may have each its own local binds, but local binds over all statements are not supported. instead, you'll need to create a (global) table then have the body statements use it, then drop or reset it as the last body statement, if appropriate. the table may be created before the trigger (being just a global table used only in the trigger) or may be created as the first statement of the trigger's body.
+sql binds cannot be <what?>, e.g. in a `create trigger` statement's final clause where it takes a sequence of statements, each statement may have each its own local binds, but local binds over all statements are not supported. instead, you'll need to create a (global) table then have the body statements use it, then drop or reset it as the last body statement, if appropriate. the table may be created before the trigger (being just a global table used only in the trigger) or may be created as the first statement of the trigger's body.
 
 the ability to choose either demonstrates that local binds, like all scoping mechanisms, are not necessary, but instead exist only as a namespace management tool, namely to allow multiple homonomic data across different contexts. sql is unique in that all data must exist in tables, and tables are scoped, so namespacing is more of a constraint than an option. in contexts with homonomic data, sql gives us `as` clauses to disambiguate.
+
+.cond/case
+
+alists are obviously encoded in sql by schema `alist(k,v)`. then `select v from alist where k=?`
+
+.find
+
+`find p xs` = `first? (filter p xs)`. in sql: `select x from t where p order by i limit 1`
+
+.one-to-many relations
+
+to associate e.g. each song with many tags, `[(song,[tags])]`, use sql schemata `song(songid integer primary key, songname string)` & `tags(songid integer, tag string)`: `select song,group_concat(tag,",") from song join tags using (songid) group by song`. in sql `(k,[v])` is encoded as `[(k,v)]`. `group by` and/or aggregate [window] functions work well with 1:n relations.
+
+remember that we cannot use `rowid` as a foreign key because `rowid` is not a primary key.
+
+remember to state everything in the singular; this will help you remember that everything is flat/array in sql.
+
+NOTE: metadata may not need to be exact e.g. though we can tag songs with multiple tags and certainly have correct results, we may tolerate `tags` as a string of delimited tags and `select song where tags like ?`. this isn't exact, but if the user is going to manually look through the results of a query and modify or curate it, then being exact isn't really beneficial. as another example, if instead of songs we've a database of titled text documents, `docs(title string, body string)`, then although we may have tags (like is usefully done in factor's docs), there's hardly any sense in tagging an article with tags that're already present in its title or body; if you're searching through docs, you'll probably search through the title, body, and tags altogether, ordering by some match strength measure. in fact, there may be only miscellaneous facts that don't belong to any article; in this acse `title` may be null and they may have only tags! tags are good for searching, and titles for displaying! if your db is huge, though, then you can't well index on tags as delimited strings, so still be sensible. you also can't add tags just by ``insert``ing; you'll need to use `update` & `||`.
+
+anyway, *don't waste time adding redundant information to your database. schema are hard to change or work with, but queries are very flexible & simple to construct & modify! however poor your schemata, thorough understanding of queries will make schemata elegance inconsiderable.* this applies also to the efficiency statement at the end of the prior paragraph: if your db grows large, just create a new table with appropriate schema or add an index and populate the table with an `update` statement. there's really no such thing as sunk cost in sql, so don't worry.
+
+.plurality
+
+a common interpretation of a thing is that the thing is single yet composed of multiple things, e.g. an xml element may have many children. in sql we not say that the element contains children, but instead that the "children" are just a set of things that support a predicate that groups them. an obvious predicate is `id=?` where all in the set share a common value for the `id` attribute. in sql this cannot be done by a primary key, since each row must have a unique primary key value. we must therefore use what's conceptually a primary key as technically not a primary key. this is fine, since foreign keys & primary keys don't add any ability; they only check constraints and enable cascading mutations, but `unique`, indexes, and triggers are perfect alternatives.
+
+.first-class functions and conditionals
+
+TODO: summarize this section and its solutions, and compare salutions. identify algebraic ideals and sql's limitations.
+
+our conditionality options in sql are `case when` and `where`. for conditional relations `where` assumedly produces a relation of 1 or 0 rows. `case when` is evaluated per row and does not affect the count of the resultant relation.
+
+`if p t f` generalizes to `if p1 t1 p2 t2 ... [f]` (as is defined in arclisp) which is more regularly expressed as in factor: `{ { [ pi ] [ ...] } ... { [ t ] [ ... ] } } if`. the factor version clearly communicates a 2-ary relation: `if` as an assoc map, not a special form. the factor version is the most general: predicates are stack effects, which may affect later predicates; and the predicates may overlap. however, if predicates are not specified of related state and do not overlap, then we may evaluate them in any order, but treating the `else` branch especially, since its predicate is `const t` which overlaps with all predicates. thus the general pure conditional form in sql is of form `select t from ifrel where p union all values(f) limit 1`. we must use `union all` instead of `union`, just as we must use early-exit `or`. in prolog this pattern is seen as accepting the first true rule _else_ backtracking to the next. note that, unless predicates overlap, `and` does not need to be early-exit; it may be commutative. as always, if rows are related then use `with recursive`; for conditional branching this is equally powerful as factor's `cond`, though obviously not as elegant when `cond` fully exploits the stack and higher order words. `select * from case when exists (select * from ifrel where p) then t else f end` is malformed syntax because `case when` is of the `expression` grammar but only the `table-or-subquery` grammar is valid after `from`. that form would've been less elegant and probably less efficient than the `union all` version anyway. also each branch of the `case` must return a single-attribute relation. this makes `case when` like coproduct types and relations like product types. _naturally_ if none of your predicates match then your result will be the ∅. in most langs the lack of a matching predicate without an `else` clause produces `nop : void`. of course that value does not exist in sql. sql's natural empty value is ∅, which, unlike `void`, has algebraic properties (as 0 in ring (+,×,-,0)).
+
+NOTE: generally the predicate generalizes from 0 & 1 to any integer, so that we can group rows by the predicates that they satisfy, assuming that all predicates are mutually exclusive.
+
+so we compute a whole relation then select a predicate from it by `where`. therefore what in most langs is a complicated tree of nested `cond` blocks where only relevant statements are evaluated, in sql, as in apl, all possibilities are calculated, some of which may have a `null` value if they've no sensible definition depending on which predicates match or not, perhaps theoretically the cond tree is more efficient since it eschews irrelevant computations, but jumping (e.g. `jle`) greatly slows a program because the program loaded must try to anticipate which code of the binary's _executable_ section must be loaded, and i/o is hella slow. the sql version computes more but:
+
+. they may be small computations
+. there's no jumping but traversing a relation takes time
+. invalid branches may contain `null`, which makes any computation O(1) by null propogation
+. logic is obvious: all branches are flatly enumerated
+  .. the program is simpler to reason about or study formally
+  .. the flatness implies ability to parallelize computation. indeed, the relational algebra can be easily handled by a specialized processor, which is the ultimate speedup.
+
+the solution (2) is to use bit vectors in cpu registers to avoid jumps and heap access.
+
+perhaps mare formally we know that we can express if in terms of ∧ & ∨, and that those are product & coproduct respectively, which means that they correspond to ∩ & ∪. using simple term rewriting & implication instead of philosophical reasoning:
+
+`(if p x y)` = `(or (and p x) y)` ≅ `p × x + y` ≅ `p ∩ {x} ∪ {y}`. `p ∩ {x}` = `{x} s.t. p`, which implies that commonly `p ∩ {x}` ≠ `∅` i.e. `p ⊆ p ∩ {x} ∧ {x} ⊆ p ∩ {x}`. we generalize `x` & to sets for power & symmetry: `p ⊆ p ∩ x ∧ x ⊆ p ∩ x`. say `t := p ∩ x`; then `p,x ∈ t` i.e. `select p,x from t`, which sees `p ∩ x` as a 2-relation, which is equivalent to `p join x on π`. `π` is a nonce here b/c p=π, which means that `p join x` = `select x from x where p`. (this is a case of a ∩ a@p as a redundant version of a@p.) to be sensible, `p` must be `p(x)` i.e. each `p` must vary with `x`. in sql `where` accepts only one predicate, and we want one `p` per `x`; therefore we must use the 2-relation if(`p`,`x`).
+
+we see `limit 1` as "here are the valid solutions; take 1." we can see branches propogate like `μ` for the list monad. again, we filter branches with falsy (`0`) or empty (`null`) values, and traversal of branches terminates when branch set is ∅. this is similar to flattening a tree of conditional forms into a stack, then looping until the stack is empty, executing the top of the stack on each loop, where those computations may push more to the stack.
+
+`where` is just predication, which is obviously `if`, since `if` is the only primitive of any language that accepts a predicate, as `where` is the only grammar in sql that accepts a predicate. `if`:one::`filter`:many, and `where` filters. therefore it's clearly insensible to discuss `if` anymore; we should use relations instead, which generalize `if` to `cond` by multiplicity then re-express `cond` from a special form to a loop over a sequence of duples `[(p,x)]` which is reduced to a loop over `(filter p x)`.
+
+let's use this knowledge to translate:
+
+[source,scheme]
+----
+(let-values ([(at-least-as-attractive? more-attractive ext oppext) (if (> count 0)
+                                                                       (values <= min low high)
+                                                                       (values >= max high low))])
+  (and (or (sql-null? stop)
+           (if (sql-null? TABLEXT)
+               (unless (at-least-as-attractive? stop oppext)
+                 (query-exec D "update orders set stop = null where oid = ?" oid))
+               (let-values ([(newext test-limit?) (if (>= (abs (- TABLEXT oppext)) (abs stop))
+                                                      (values sql-null #t)
+                                                      (values (more-attractive TABLEXT ext) #f))])
+                 (query-exec D "update orders set ext = ? where oid = ?" newext oid)
+                 test-limit?)))
+       (let ([most-attractive (more-attractive open limit)])
+         (and (at-least-as-attractive? ext limit)
+              `(,most-attractive . ,o)))))
+----
+
+first, let's reduce for simplicity:
+
+[source,scheme]
+----
+(let-values ([(f g a b) (if (> count 0)
+                            (values <= min low high)
+                            (values >= max high low))])
+  (and (or (sql-null? x)
+           (if (sql-null? y)
+               (unless (f x b)
+                 (query-exec D "update t set x = null where z = ?" z))
+               (let-values ([(newext test-limit?) (if (>= (abs (- y b)) (abs x))
+                                                      (values sql-null #t)
+                                                      (values (g y a) #f))])
+                 (query-exec D "update t set a = ? where z = ?" newext z)
+                 test-limit?)))
+       (let ([most-attractive (g open limit)])
+         (and (f a limit)
+              `(,most-attractive . ,o)))))
+----
+
+so sql/apl's array/set compute/select conditional branching method is better than nested conditional jumps. that leaves the question of how's sql's alternative to functions as data. firstly, let's, as always, not think of functions but quoted programs; rather than say that sql does not support functions as data, say that it does not support quoted expressions/subprograms. anyway, subprogram variables is a topic related to conditional branches: they're both conditional/variable, but conditional branches are ad-hoc and expressed by 2-relations, whereas subprograms are quantified over an infinite set specified by a predicate, namely a function type or expression grammar.
+
+variable/quoted subprograms have 3 uses:
+
+. immediately applied to arguments, in which case there's no point in it being variable or first-class
+. being passed to another subprogram (which does not need to be quoted) which, after being passed around across subprograms, is ultimately applied to some arguments, at which point, again, it may as well not be variable.
+. being modified before execution (metaprogramming)
+
+variables are the same as conditions, just symmetric (predicates, namely types or grammars) instead of ad-hoc (literal data). if subprograms are all specified statically (cf dynamically i.e. during execution) then we can statically translate to a non-variable form. unfortunately this is a form of needless coupling. the benefit, though, is that we get to do everything in sql. so instead of a relation of predicates and functions, we'll need a relation of predicates and the values obtained by applying functions to their arguments:
+
+invalid but ideal: `insert into r1(f,g,a,b) case when count>0 values(<=,min,low,high) else values(>=,max,high,low) end`. pure (non-mutative), still invalid form: `select (values(<= as f, min as g, low as a, high as b)) where count>0 union all values(>=,max,high,low) limit 1`. to make valid we must identify each of `f`'s & `g`'s arguments:
+
+* f: values(x,b),(a   ,limit)
+* g: values(y,a),(open,limit)
+
+assume that `open` & `limit` are in scope. `a` & `b` are already associated with `f` & `g`; combine `let-values` & `if` into a single relation `t(p, f_x_b, f_a_limit, g_y_a, g_open_limit)`:
+
+[options="header"]
+|==============================================================
+| p | f_x_b     | f_a_limit     | g_y_a       | g_open_limit
+| 1 | x <= high | low  <= limit | min(y,low)  | min(open,limit)
+| 0 | x >= low  | high >= limit | max(y,high) | max(open,limit)
+|==============================================================
+
+then making the attribute names sensible, especially considering that `stop_at_least_as_attractive_as_oppext` is only used before a `not`:
+
+[options="header"]
+|===========================================================================================================================
+| p | stop_less_attractive_than_oppext | ext_at_least_as_attractive_as_limit | more_attractive_of_y_or_ext | most_attractive
+| 1 | stop > high                      | low  <= limit                       | min(y,low)                  | min(open,limit)
+| 0 | stop < low                       | high >= limit                       | max(y,high)                 | max(open,limit)
+|===========================================================================================================================
+
+it's more coupled, which i, before i translated the scheme code to sql, thought would be bad, but i actually prefer this because i can see _all_ of the places in which `f`, `g`, `a`, & `b` are used immediately rather than needing to read through nested code to find where & how each is used! this is appropriate because these data _are_ coupled! it's not like i'm defining separate functions in a library. i'm using `let`, binding particular data & functions for a particular purpose, for them to be used together in a small block of code. they are defined for each other, naturally coupled. not only that, but this tabular formatting is clean.
+
+you may think that we'll join this table with the table that provides `high`, `low`, &c `on p=count>0`. let's see how that looks with a simpler table, `things(x,y,z)`:
+
+[source,sql]
+----
+select *, case when p then v1 else v2 end as v1, case when p then v3 else v4 end as v2 from
+  (select *,x>z as p from things) -- query with conditional logical value
+join
+  (select     x>z as p, y+z as v1, max(x,y) as v2 from things) -- values for p, condition #1
+using (p)
+join
+  (select not x>z as p, y*z as v3, max(y,z) as v4 from things) -- values for not p (the else clause, or condition #2)
+using (p);
+----
+
+that's bad for two reasons: 1. i need to join using p for each conditional branch and 2. i still need to use `case when` for each attribute, so i may as well skip the joins and just inline the conditionals:
+
+[source,sql]
+----
+select *, case when x>z then y+z else y*z end as v1, case when x>z then else max(x,y) end as max(y,z) from things
+----
+
+or shorter by using `iif` instead of `case when`:
+
+[source,sql]
+----
+select *,iif(x>z,y+z,y*z) as v1, iif(x>z,max(x,y),max(y,z)) as v2 from things
+----
+
+to make this work as nicely as we want, either `case when` would need to allow returning multiple-attribute relations, or we need something other than join, since join unions relations' attribute sets, but for each row we don't want all the possible values! we want only values that match the predicate. `union` should do the trick! rather than `join on`, we'll filter by `where` then union the results. `union` does not care about attribute names and will allow us to choose v1 vs v3 & v2 vs v4:
+
+[source,sql]
+----
+select * y+z as v1, max(x,y) as v2 from things where x>z
+union all
+select *, y+z,max(x,y) from things where not x>z
+----
+
+now the redundant part is specifying the same table twice.
+
+i suppose that generally the ideal would be `group by` to determine predicate case value, then joining on that with a table of something effectively select statements with variables. this is the point where sql's limitation binds us; there are many solutions but all of them require changing sql. TODO: how would this be encoded in prolog, and then how to translate that into sql? precisely, generally, how limited is sql, or what must be done in sql in order to encode things, inelegantly? also describe the conference of union & join in algebraic terms then discuss how sql is more limited than just pure data OR how to encode everything in relations in such a way that, constrained to sql operations, we can express any computation. is this result decent & pragmatic?
+
+so let's finish the translation by translating the query (the `let-values` body). first notice the `query-exec`'s; those're queries executed for effect. to do those in sql we use triggers. both triggers are conditional and share a common triggering event, though that event is not specified in this example.
+
+(and (or (sql-null? x)
+           (if (sql-null? y)
+               (unless (f x b)
+                 (query-exec D "update t set x = null where z = ?" z))
+               (let-values ([(newext test-limit?) (if (>= (abs (- y b)) (abs x))
+                                                      (values sql-null #t)
+                                                      (values (g y a) #f))])
+                 (query-exec D "update t set a = ? where z = ?" newext z)
+                 test-limit?)))
+       (let ([most-attractive (g open limit)])
+         (and (f a limit)
+              `(,most-attractive . ,o))))
+
+[source,sql]
+----
+create trigger T1 after <some event> on orders when ext isnull and stop_less_attractive_than_oppext begin update orders set stop = null where oid = oid; end -- the `on` clause brings order's attributes into query scope
+case when x isnull or (case when y isnull then end) then _ else _ end
+----
+
+=== constraint solving
+
+a constraint solver is possible in sql just as in a logic language. however, sql works on literal values, not predicates which may represent infinities of values. to account for this, we must use ranges of values in sql. for all sets of ranges {(a,b)} ∃ min(a) & max(b). thus predicates like x≥4 can be expressed in a limited but useful capacity as [4,max(b)]. intervals may be considered as 1D boundaries. [a,b] generalizes to a subset of [a,b]×[c,d], etc. these are subsets of cartesian products—the very same definition as joins. thus the n-dimensional geometry model obviously corresponds to sql joins. of course we can take geometric intersections, which is the same as set intersection, which is available plainly in sql as `intersect`. aside from intersection obviously there's the shortest distance between two geometries.
+
+a really cool property of intersection & union is that they tend toward convergence or divergence—a nice interpretation of their dualism!
+
+=== statistics
+
+=== literature
+
+writing a nonfiction book, commonly a reference.
