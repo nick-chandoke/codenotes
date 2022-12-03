@@ -3,10 +3,9 @@
 this document discusses sql as understood by sqlite, and its underlying model.
 
 [TODO]
-* see link:file:///home/nic/codenotes/langnotes/sql/sqlite-doc-3390200/optoverview.html[optimizations page] to see what sql reduces to; this more describes sql's essence/primitives.
-* see <file:///home/nic/codenotes/langnotes/sql/sqlite-doc-3390200/c3ref/create_function.html>
+* see `optoverview.html` to see what sql's primitives
 * how to organize/encode data: relations are basically their headers. thus make a table for each shape. whatever data have a common shape belong in the same table.
-* is relalg isomorphic with linalg? can today's gpus already compute relalg programs easily?
+* is relalg easily expressed by linalg? can today's gpus already compute relalg programs easily?
 
 === sql technique
 
@@ -22,13 +21,26 @@ this section is for those who've already read the rest of this document.
   ** triggers and views are available only on non-transient tables
 * `join`/cartesian product: adjoin table to query scope. `join` is a primitive; else you'd need ∈, thus not only using sets, but using elements, too, thus affecting the ring algebra. `join` breaks sets into elements then relates elements.
 * `with`: fold/scan/loop
-* don't worry about relation schemata much; they're pretty arbitrary. that's why we have `join` (couple) & `select` (decouple) operators. single-attribute relations are good because they're decoupled, but lack coupling. both coupling & decoupling are double-edged swords.
+* relations represent spaces. columns represent axes. rows represent points. don't worry about schemata much; `join` (couple) & `select` (decouple) are powerful enough that no difference in schema affects a significant difference in ease of querying. this being said, there are 2 simple rules that you must follow in order to have sensible schemata:
+  ** that the space is the cartesian product of the axes, that rows have sensible values for each of their elements. 
+  ** that one-to-many relations are stored in separate relations e.g. if i've a table `drug(prodname, chemname text primary key, dosage)` then it can't have a property `sideeffects`, since each drug has multiple. i must have a separate table `sideeffects(drug references drug(chemname), effect)`.
 * *exploit*: row values; numbers & strings; [builtin] [non-]aggregate ("core") [window] fns; `join`, `select`.
   ** `coalesce` is short-circuiting `or` like in lisp. like `iif` it's just a more convenient representation of `case when`
-  ** you can encode strings especially to exploit `ltrim`, `rtrim`, `trim`, or `substr`, even creating indexes on these
+  ** you can encode strings especially to exploit helpful string functions (see below), even creating indexes on these
 * use `upsert` instead of `insert`, `update`, `replace`
 * recursive queries generalize literal relations just as horn clauses with symbols generalize horn clauses of only value literals. recursive queries are equivalent to horn clauses or functions. this power is of relating symbolic expressions. a recursive `select`'s expressions (of its many clauses) are related to the result of applying those expressions on the prior iteration; as in other reductionist langs, the expressions are transitively related by evaluating expressions on prior-output values.
 * sqlite can replace record editors such as awk. sqlite cannot be used for general text; for that, prefer `kak -f`
+
+helpful string functions:
+
+* substring: `substr`, `ltrim`, `rtrim`, `trim`
+* index: `instr`
+* `length` (number of characters for strings, or number of bytes for blobs)
+* `min` & `max`
+  ** unary is aggregate; else it's per row
+* `lower` & `upper` (load icu extension for non-ascii)
+* `replace`
+* the concatenation operator, `||`
 
 using sql with another language:
 
@@ -69,7 +81,7 @@ all under the same notation^*^, and with equal arities regardless of interpretat
 
 ^*^actually the predicate and relation forms would include the output value alongside the inputs: `f(a1,a2,u)` & `g(b1,b2,v)`. i glossed-over this in `select v from g ...`; `v` was actually not in `g` as i'd declared `g`! again, as always, `u`/`v` may be specified as datum literal or expression that evaluates to a literal, per row.
 
-to conclude i answer the prior-posed question: to most elegantly express horn clauses despite the asymmetry, we use recursive queries, which generalize literal relations just as horn clauses with symbols generalize horn clauses of only value literals. the symbolic expressions are in the recursive `select`'s attribute list, `where`, `group by`, &al clauses.
+to conclude i answer the recently posed question: to most elegantly express horn clauses despite the asymmetry, we use recursive queries, which generalize literal relations just as horn clauses with symbols generalize horn clauses of only value literals. the symbolic expressions are in the recursive `select`'s attribute list, `where`, `group by`, &al clauses.
 
 ==== primitives
 
@@ -125,11 +137,8 @@ obvious ones like datum literals or operators/functions thereon aren't here enum
 * symbols bound in query's scope
 * absolute symbol reference ([schema.]rel.attr)
 * row values
-* like/glob/regexp/match
-  ** `%` is regex `/.*/`
-  ** `_` is regex `/./` 
-  ** regex-style character classes are supported
-  ** we can use `like` with a single-column table e.g. `where x like (select y from t)` to ormap `like x` (curried) over `table`. in fact, we can use multiple values for both: `where x like y` tests the emptiness of `x join y on x like y` (with tables `x(x)` & `y(y)`).
+* like (`%` for regex `/.*/`, `_` for `/./` ) or glob (`*` for `/.*/`, `?` for `/./`). (`match` & `regexp` aren't usefully defined; they exist for the user to define those functions, so they're useless.)
+  ** `like`/`glob` requires single-attribute relations. if left arg has multiple rows, only its first is used; `(values(x),(y),...) like (values(a),(b),...)` = `x like a`.
 * `is [not] [distinct from]`
   ** `is` & `is not` are sqlite-specific terser forms of sql standard `is not distinct from` & `is distinct from`. holy golly, man.
   ** `isnull`, `notnull`, both equivalent to `is null` & `is not null`. no idea why these especially specific forms exist.
@@ -155,8 +164,11 @@ sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed i
 
 * `from` merely binds symbols for the query
 * `where` & `having` are both the same concept—"such that"—but one is applied to row values and the other to groups of row values. if sql were more symmetric, then `having` should apply to the whole query (the single group) just like aggregates do. however, most people would consider that more like a guard [list monad].
+* `where` is scoped to all expressions following `select` e.g. `select 4 as x where x%2=0;` is valid
+* `where`'s expression cannot use aggregates. this leads to the unfortunate workaround of duplicating majority of queries in a `with` clause e.g. `with ml(ml) as (select max(length(body)) from docs where title="trailing stops") select * from docs,ml where title="trailing stops" and length(body)=ml;`. for _selection_ we can `order by length(body) limit 1`, but that does not work if we want to update or delete a row with a most extreme attribute value. i wonder if there's a better solution, perhaps using `group by` & `having`?
 * `group by`, `having`, and `window` support [window] aggregate functions, what would be expressed in an ml-style lang as `map (foldl1 f) . filter p2 . partition p1`
   ** `group by <expr>` evaluates `<expr>` for each row; the number of groups is the number of unique values of `<expr>`
+  ** `group by x` is the dual of distributing `(x,)` over `[y]`
 * `order by` & `limit [offset]` enable [sub]sequencing. along with `union all` this is the only way to guarantee ordering.
 
 ===== window functions
@@ -208,6 +220,8 @@ in summary: as always you can exploit natural structure of integers and (bit)str
 ==== select & expr together (common compound tech)
 
 ===== conditionality
+
+TODO: having identified `group by` as dual to distribution of tupling, can't i express these *columns* by a distribution? what about rows? (a,[b]) in sql is stored as two tables: a list of b per element a.
 
 i would prefer the term _choice_ instead of _conditional_ or _branch_ because _branch_ implies control flow, which is an unnatural interpretation in a declarative paradigm. _conditional_ is technically correct but needlessly technical; _choice_ is the common term. however, even _choice_ is perhaps not ideal; we're dealing with sets and sql, here. choice is choosing from a set of choices; we may choose one or multiple things. this is the same as _selecting_ one or multiple rows or columns, which is just done in a common `select` statement.
 
@@ -303,6 +317,8 @@ NOTE: the need for lambdas in `update` clauses is covered by old.attr & new.attr
 
 === primary & foreign keys
 
+see `rowidtable.html` and `withoutrowid.html`.
+
 . a table A may have a primary key (uniquely identifying set of attributes), and may have a set of attributes that, in another table B, is a primary key; then: this attribute set is called a _foreign key_, B is called the _child_ table, and A is called the _referenced_ or _parent_ table. foreign key is its own concept (as opposed to a column that we can `join` on) because it can be used as a constraint in a table's schema, which enforces only proper now insertions & updates.
 . primary keys are strange; they enforce uniqueness of each row. however, a row, like any single thing, generalizes to a group of things, which could be encoded as multiple rows sharing a common key. therefore i discourage primary keys but encourage indexes.
 . foreign keys reject inserts that would violate the pk/fk relationship [constraint], called maintaining _referential integrity_. they add neither functionality nor efficiency; one can use `check` (table constraint) and triggers instead.
@@ -382,6 +398,8 @@ update t set x = fx from (select x as id, x*10 as fx from t) where x=id; -- corr
 ----
 
 the 1st form would be correct were sql to see `x` as a free symbol. unfortunately sql is limited to using literal data sets only.
+
+in `update from`, pointwise relation is done by `x=id`. we could've given `fx` as a literal, without naming it: `update t set x = x*10 from (select x as id from t) where x=id;`. `update t set x = x*10 from t;` fails because `x` is ambiguous.
 
 `update from` is a non-standard form yet commonly supported by sql engines. plain `update` can assign only one value to many rows. `update from` selects many rows then pointwise matches them to rows to be updated by the predicate given to `where`, effectively setting `t` to `t join (select ...)`.
 
@@ -670,13 +688,6 @@ NOTE: *for the love of god, use `BEGIN TRANSACTION` &al*
     * generally all operations are on the entire table
 * if both args to `/` are integers, then `/` is integer division. `cast(expr as real)/cast(expr as real)` to ensure floating point division. however, it's best to use rational arithmetic (`numeric` or `decimal sql` types, if supported) or fixed point arithmetic, instead of floating point.
 
-==== insert tricks
-
-* `select <cols> into <new_tbl_name> [in <external_db>] from ...` is equivalent to a sequence of `create table` and `insert` statements (not available in sqlite)
-  ** remember that you can use `as` to rename the columns. they'll retain their column constraints.
-  ** `select * into <newtable> from <oldtable> where 1 = 0;` creates a new empty table with the same schema
-    *** `insert into <dest> select <cols> from <src> ...;` is the same but for a table that already exists. both tables must be of the same schema.
-
 === joins
 
 all joins are refinements of cartesian product. `join` (or comma) is cartesian product. `join on <pred>` filters cartesian product to those matching `pred`. `join using attrs ...` is shorthand for `join on t1.attr=t2.attr ...`. `natural join` is shorthand for `join using X` where `X` is the intersection of tables' attributes.
@@ -716,7 +727,14 @@ in `a left join b`, all of `a`'s rows are present, but some of their correspondi
 
 === syntax
 
-comments: `-- ... ` for single line, `/* ... */` for multiline
+* comments: `-- ... ` for single line, `/* ... */` for multiline
+* single quotes for string literals
+* double quotes for identifiers that may contain spaces or be reserved words
+* neither standard nor sqlite-specific, but specifically of the `sqlite3(1)` repl, are _dot-commands_. see `cli.html#dotcmd` and _§sqlite everywhere_.
+* blob strings can be specified as hex by a leading `x`. they must be byte-sized; `x'a'` is an unrecognized token; you must do `x'0a'`.
+* escape sequences e.g. `\n` are unsupported; `'hello\njello'` is literal. a single quote repeated, `''`, represents a single quote in a string literal. however, you can say `'hello' || x'0a' || 'jello'`.
+* integers may be specified in hex by leading `0x`
+* float literals may be specified in engineer's notation
 
 `table.attr` disambiguates when `attr` is shared by multiple tables; otherwise attr is resolved against the table of the `from` clause.
 
@@ -935,7 +953,7 @@ alists are obviously encoded in sql by schema `alist(k,v)`. then `select v from 
 
 .one-to-many relations
 
-to associate e.g. each song with many tags, `[(song,[tags])]`, use sql schemata `song(songid integer primary key, songname string)` & `tags(songid integer, tag string)`: `select song,group_concat(tag,",") from song join tags using (songid) group by song`. in sql `(k,[v])` is encoded as `[(k,v)]`. `group by` and/or aggregate [window] functions work well with 1:n relations.
+to associate e.g. each song with many tags, `[(song,[tags])]`, use sql schemata `song(songid integer primary key, songname string)` & `tags(songid integer, tag string)`: `select song,group_concat(tag,",") from song join tags using (songid) group by song`. in sql `(k,[v])` is encoded as `[(k,v)]`. `group by` and/or aggregate [window] functions work well with 1:n relations; in fact, `group by k` is the dual of distribution of `(k,)` over `[v]`.
 
 remember that we cannot use `rowid` as a foreign key because `rowid` is not a primary key.
 
@@ -1058,13 +1076,16 @@ end
 
 ok, looks like the triggers was actually one trigger (see 1st note below) and it didn't use the view! instead it inlined the view's expressions and identified them by comments!
 
+NOTE: triggers have scope, and their scope is limited to the table that triggers the trigger. however, trigger's only clause that uses scope is `when`; triggers' bodies' statements are all top-level and unrelated to the table that triggers the trigger. this usually isn't a concern because a `when` condition can be put inside the `where` clause of `delete`, `insert`, or `update` anyway.
+
 . i combined the two `query-exec`'s, which was possible because they're both ``update``s of the same table. i exploited that `update set x=y where p` is equivalent to `update set x=iif(p,y,x)`.
   .. for `update` we can use `iif` instead of `where` to effectively have a `where` per attribute.
-. i needed the `iif` anyway! triggers cannot gain scope by using `join`! their scope is limited to the table being modified (i.e. the argument of the `on` clause) which triggers the trigger. oh, well. at least, that `stop_lat_ccoppext` is used only once, in the trigger condition implies that i don't need it in the view `v1`.
+. i inlined `stop_lat_ccoppext` anyway! may as well inline it rather tahn define it in a view, arbitrarily coupled with other data.
 . `were oid = oid` is redundant! it was needed in the scheme version only b/c the order was pulled from the db, then used in scheme code, then i needed to identify it in the db again; here, since all logic is done in sql exclusively, each order is already identified uniquely by ordinary implicit row-by-row traversal through a relation.
 . sqlite supports only `for each row` (it's implied if not syntactically specified); `when`'s (not featured in this example) predicate is evaluated per row *that is modified in the triggering table. this is generally unrelated to which rows we're modifying in any of the statements in the trigger's body, and we must specify predicates for both `when` in the trigger and `where` in each of the trigger's body's statements!*
   .. `when` was not featured in this example; that's because the trigger evaluates per update of `orders` (per statement, actually; see next note). however, `update`'s predicate is evaluated for each of `orders`'s rows _after_ the insert into `orders`.
   .. because these should be per-statement triggers, i may use another language (scheme in this case) to control flow. the program is semantically equivalent regardless of whether the trigger is run per row or per trigger because the `update`'s new value is not in terms of that same attribute's old value.
+. you can't use relations bound by `with` across multiple statements within a trigger, but you can create a table to hold that value, then update the table across a trigger's statements.
 
 the scheme code returns a value (namely false or a pair.) values are only useful when passed as arguments to other functions, which must ultimately be passed to some effectful (i/o) function. sql triggers are actions; they occur when a (named) table is modified and always have the _effect_ of modifying another table. as it turns-out, this code's return value is passed to a function that passes it to a sql query; thus the trigger actually invokes another trigger, but that's outside the scope of this example.
 
@@ -1267,12 +1288,9 @@ returns
 * easily parsed:
   ** `list` (default)
   ** `json`
-  ** `csv`
-* special output:
   ** `html`
-  ** `insert`: sql insert statements; good for copying from one table to another, but not for duplicating table schema. for that you'll likely want `.clone` or using a system shell to copy the db then use sql to modify the copy.
-
-all except `list`, `csv`, `insert`, `html` force headers to be displayed. other modes aren't good.
+  ** `csv`
+  ** `line` (best for reading long outputs in terminal)
 
 === performance
 
@@ -1451,3 +1469,97 @@ so we compute a whole relation then select a (usually singleton) subset from it 
 
 the solution (2) is to use bit vectors in cpu registers to avoid jumps and heap access.
 
+=== interfacing with sqlite
+
+firstly, i imagine that every desired extension to sqlite can be accomplished via its c api. yet c is compiled and a poor language. sqlite is extensible and can dynamically load functionality, but coding that functionality is still crufty! our sqlite interface options:
+
+* `sqlite3(1)`, which includes a sql repl and many useful specialty functions
+* direct c funcalls
+* wrapped funcalls (for non-c langs like lua, lisp, &c)
+* command line
+
+* all support multiple statements (you can use heredocs for multiple statements on the command line—even pragmas or those with leading dots.)
+* all except the command line keep a connection open after executing a sequence of sql statements.
+* only the c interface can be used to extend sqlite's functionality e.g. defining new [window] functions or virtual tables
+  ** is this really true? why can't <the c things needed to implement these> be wrapped for another lang, then implement the wrapper in that lang? rather, that _is_ possible, but what would it take? the output must ultimately be a shared object file, if we want dynamic loading, wihch is ideal.
+
+i've yet to find or implement a non-interactive socket interface with an open sqlite connection, which would enable remote control from other programs without needlessly opening & closing db files. basically the solution is to use factor as the computer interface language, but use its connection to a sqlite db to leverage most computation. this being said, we're afforded pretty decent interaction simply by:
+
+* `.output`
+* `edit`
+* `.read`
+* `readfile`
+* outputting as `csv` or `list`
+* csv virtual tables
+
+you can pretty print single-expression selections by `.mode list`, where your text is formatted using hex blob strings for formatting e.g. with a table `articles`,
+
+┌─────────┬─────────────────────────────┐
+│  item   │            point            │
+├─────────┼─────────────────────────────┤
+│ topic 1 │ my first point              │
+│ topic 1 │ another enlightening point! │
+│ topic 2 │ just one thing              │
+└─────────┴─────────────────────────────┘, we query into a pretty string: 
+
+[source,sql]
+----
+select item || x'3a0a' || group_concat(x'092a20' || point, x'0a') from articles group by item;
+----
+
+produces the literal text:
+
+----
+topic 1:
+	* my first point
+	* another enlightening point!
+topic 2:
+	* just one thing
+----
+
+i tried using `black circle, u+25cf`, but obviously that's 2 bytes, not one, so sqlite didn't print it properly. idk if there's an extension that can print non-ascii chracters.
+
+for more general pretty print, csv output can easily be passed to a line editor e.g. `awk(1)`, or you can use `.mode list` then `select '' from (select edit("a string value","cat"))`. again, though, `sqlite3` always exactly opens a connection, execute a sequence of statements, then closes the connection.
+
+=== sqlite everywhere
+
+this section discusses using sqlite as an alternative to anything conceivable.
+
+* sqlar: sql archive format, alternative to `zip` &c
+* `sqlite3` works on zip archives, too, regardless of filename extension (works on e.g. odp files). see `cli.html#zipdb`.
+* pass query results to `fzf --preview 'sqlite3 db 'select * from t where x like "{}"'`. again, though, this is preferably done without opening & closing each time that the cursor moves. this quoting is horrible, btw.
+
+==== `sqlite3(1)`
+
+.useful dot commands
+|==============================================================================================================================================
+| dot-command                                           | description
+| `.changes`                                            | sanity check mutative queries
+| `.headers`, `.separator`, & `.mode`                   | modify output (namely `list` and `csv` output)
+| `.nullvalue`                                          | for modes of csv,html,tabs, outputa string instead of ''. not used for `json` output.
+| `.schema`                                             | show tables' & views' definitions
+| `.trace`                                              | debug
+| `.indexes`, `.databases` & `.tables` (includes views) | see what of the db is queryable
+| `.recover`                                            |
+| `.output` & `.once`                                   | incrementally (in interactive prompt) or at once (in script) to a file
+| `.read`                                               | read a file (or a proccess's output, when prefixed with `|`) of sqlite3(1) commands
+| `.import`                                             | create a relation by reading from supported formats^*^
+| `.dump`                                               | write a sql source code file that generates the currently-loaded db
+|==============================================================================================================================================
+
+^*^see `.help import`. input format is specified by `.mode`, the output format, unless overridden by `--ascii` or `--csv`. *the latter allows importing csv files without `.load csv`*! this makes extremely easy the querying of a db, passing to an editor, modding only part of the output, then updating the db with new values.
+
+the following in-repl extension functions are useful:
+
+* `readfile`. useful for inserting blobs into relations. you'll probably want to use `.cd` with this
+* `writefile` as an alternative to `.once`
+* `edit`. writes selected value to a temporary file, then passes its filepath to the given program *as the sole command line argument*; it does not pass the path via stdin!
+
+read the docs; `sqlite3` is enabled by its ability to interface with other programs or the environment.
+
+==== useful virtual tables
+
+these ought be implemented if they'ven't yet been.
+
+* env
+* fs
