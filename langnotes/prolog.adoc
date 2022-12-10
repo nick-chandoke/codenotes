@@ -21,6 +21,15 @@ TODO: explore prolog vs SAT & SMT solvers and theorem provers; how can prolog, w
 
 see `DatabaseProlog.pdf`.
 
+benefits over sql:
+
+* terse
+* metaprogrammable
+* recursion is just as easy as non-recursion
+* horn clauses are all uniform, whereas in sql some horn clauses must be defined as views and others as tables and value insertions.
+
+TODO: compare deductive vs relational dbs.
+
 [options="header"]
 |=====================
 | prolog    | sql

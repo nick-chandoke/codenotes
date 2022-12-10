@@ -2,8 +2,6 @@
 
 using an enum/number enforces mutual exclusivity. consider `(or a b)`; the first non-falsy is chosen; however, `a ∧ b` may be true. if you want to help ensure that `a xor b` is true, then have a single number called. why integers? most types work; we need for all elements of the type to be unique. integers are a good choice because they obey that property, and are machine words, and support bit twiddling. the point of this pattern is doing `case x v1: ...; v2 ...; ...` instead of `cond`, since `x` must have exactly one value, whereas `cond` statements, while more general (i.e. supporting general predicates instead of mere equality), must be carefully ordered, and may be not mutually exclusive.
 
-TODO: discuss C unions
-
 why?
 
 . fun like number theory, which it practically _is_, but in binary
@@ -57,6 +55,62 @@ the real polynomial example shows us that we get total elegance: efficiency *and
 
 bits are a data structure that lives entirely on 1+ register(s). they can be traversed and mutated incrementally, and thus support some common or uncommon algorithms.
 
+=== intuitive programming with an improvement on blinkenlights
+
+it'd be good to have, rather than programs as text, programs as graphics. the limitation of text is that the bits of the codepoint corresponding to each glyph is not represented in the glyph itself, excepting ascii majiscule/miniscule case, denoted by the 6th bit. contrastingly, an arbitrary graphical display of code can use any properties that it wants: geometric (2d or 3d) orientation (rotation, position, reflection, skew, size, or any other affine properties that i missed), color (each of h,s,v), size, shape (e.g. polyhedra), line thickness, &c. this is basically a symmetric version of reading blinkenlights, where every independent bit of information is displayed independently e.g. changing color does not change number of degree of a regular polygon, which contrasts with toggling _any_ bit of a codepoint resulting in a completely unrelated glyph! with a small & regular set of primitives (namely arithmetic and set & seq ops), this should make subconscious/intuition-based debugging quite easy. btw, this kind of programming should be done because it leverages the particular power of the human brain, much more efficient, liberating, and creative than trying to reason by constraint. let the computer deal with constraint and the human with play & investigation, to each their particular strengths.
+
+i'm inspired by encrypted "garbage" like `ehJH~=SxY}^!昹9},u@?յaO}?>~#`, which looks like j for all i know, and i think about how powerful that terseness is. but by using codepoint-glyphs (ad-hoc assignment of bits to glyphs) instead of glyphs composed of in/dependent, a/symmetric information relations (symmetric relation of information to glyphs), we can encode _far_ more information in each glyph, and use "custom" glyphs which are actually just natural consequences of their latent information.
+
+=== you may as well use bits
+
+an example compound encoding scheme that does not use bits is {pairity,sign,abs(x)>=1000,v^*^}. actually, pairity is a predicate on the lsb; `x&1` discards all but x's lsb, which is 0 for even, 1 for odd. the same is true of sign (in 2's complement) too, except thet sign is determined by the msb. ^*^_v_ is x's value not including 1000; if x>1000 then we subtract 1000 from it, since the 1000 isn't really x's value, but instead connotes other information. this implies that x's value is in [0,1000). the `if(x<1000,x,x-1000)`. rather than 1000 (10^3), though, we could use x>=2^n, which is easily toggled by toggling the nth bit. this is not a general encoding for subsets, though; toggling only applies to bits e.g. you can't _toggle_ the nth digit of a base-5 digit string; you can choose one of 5 values for each digit. anyway, choosing a given digit of any any-radix number is overconstrained; we want to easily express subsets by arbitrary numbers—again, like x>1 & x>4. btw, the use is that when `1` & `4` are arbitrarily chosen to represent given properties and one property implies the other, then that corresponds to that x>4 implies x>1.
+
+==== branching by filters
+
+TODO: incorporate about how e.g. abs is a piecewise fn `if x < 0 then -x else x, also interperable as a filter (filters-out the sign). min & max are low- & high-pass filters, too. filters/piecewise fns are alternative(s) to control flow; they're both asymmetry primitives. also the type trinity is numbers, strings, and sets because they represent {mass, countable: {ordered, unordered}}. numbers are mass in that e.g. 1 + 2 yields 3, but given 3 we cannot know which addends produced it. the big point when designing an encoding scheme is which functions use which information; for example, a function defined of positive numbers is equal to a function of the absolute value of positive numbers; this allows us to adjoin the sign information without affecting the value of the function. we generally want our scheme to meaningfully affect some operations but not affect others. another example is that we may let character case encode e.g. genders per names, without affecting a case-insensitive sort. we may use bitwise operations as filters (corresponding to their electronic gate counterparts) to implement logic or control flow. another example of predicate satisfaction is whether a datum is within a given range; you can use basic comparison operators for subsets; x>4 is a subset of x>1.
+
+min, max, & abs are all piecewise: abs(x)=if(x<0,-x,x); min(x,y)=if(x<y,x,y); max(x,y)=if(y<x,x,y). min0:=min(x,0)=if(x<0,x,0). max0:=max(x,0)=if(x>0,x,0). -x=0-x. min0/max0 is a coproduct of the identity and constant functions; it passes-through or discards its value. we don't need both min & max, nor > & <. in fact, we need only (min,max,-,+,0), notably lacking ×; × is useful with `+` when predicates return 0 or 1, but i want to code more like lisp, using values if truthy, alternatives if falsy, and short-circuiting if falsy and no alternatives. `abs` is not a primitive: abs(x)=max(x,-x). -abs(x)=min(x,-x). `/` is the unit-change operator, and `%` is expressed by `/` & `-`: x%y = x-x/y, or in factor, `dupd / -`. anyway, `min`, containing the information of `id`, `const`, and `<` or `<=`, seems a good canditate, alongside `+` to choose alternatives.
+
+using this algebra, let's re-express `if(x<n,x,x-n)` by (min,max,-,+,0). if x<n then min(n,x)=x=v and max(0,x-n)=0. else min(n,x)=n and max(0,x-n)=v. x=min(n,x)+max(0,x-n).
+
+[source,sql]
+----
+with t(x) as (values(1200),(40)) select min(1000,x),max(0,x-1000) from t;
+┌─────────────┬───────────────┐
+│ min(1000,x) │ max(0,x-1000) │
+├─────────────┼───────────────┤
+│ 1000        │ 200           │
+│ 40          │ 0             │
+└─────────────┴───────────────┘
+----
+
+...ok, so somewhat of the way there. i know that i didn't want to use predicates as logical values, but i can get to that by cheating here by using integer division: x>n = min(x/n,1) and 1-p for ¬p, though i could have used xor with 1 instead (i think):
+
+[source,sql]
+----
+with t(x) as (values(1200),(40)) select (1-min(x/1000,1))*min(1000,x) + min(x/1000,1)*max(0,x-1000) from t;
+┌─────────────────────────────────────────────────────────────┐
+│ (1-min(x/1000,1))*min(1000,x) + min(x/1000,1)*max(0,x-1000) │
+├─────────────────────────────────────────────────────────────┤
+│ 200                                                         │
+│ 40                                                          │
+└─────────────────────────────────────────────────────────────┘
+----
+
+quite frankly, i don't know what i'm doing, but i feel that these things should be researched, and ultimately an algebra system that refines predicates to numeric properties and gates on them should be designed.
+
+we can use min & max to make something a predicate, too: `x>y` is expressed as `min(1,max(x-y,0))`, derived from the observation: x<y <=> x-y<0 <=> max0(x-y)=0. we can then use that with the standard branchless form: `if(x>y,a,b)`=`(x>y)*a+(1-(x>y))*b`=`(min(1,max(x-y,0)))*a+(1-(min(1,max(x-y,0))))*b`.
+
+with min & max, we can toggle whether a value will be discarded, by negating it. e.g. assuming x>0, max0(x)=x and max0(-x)=0. then max0(x)+max0(y) will give either x, y, or x+y. similarly min0(x) will choose 0 or -x depending on whether x<0. we can negate the output of min0 or max0, or negate their inputs.
+
+if(x>y,a,b)=min(1,max(x-y,0))*b+a.
+
+[TODO]
+* consider min & max wrt lattices, and how prolog's predicate unification uses a lattice. obviously using min & max on reals with 0 & 1 is stupidly limited compared to using them against other reals. how can we usefully generalize the boolean ring?
+* consider `sign` gives 3-valued boolean logic.
+
+''''
+
 === entropy & encoding
 
 TODO: read about encodings, e.g. huffman, hugh-tucker, and wavelet trees; and hilbert curves.
@@ -99,6 +153,12 @@ the _order_ of an encoding is the number of bits that each datum encodes, assumi
 efficiency is obtained by exploiting symmetry and/or coincidence.
 
 ===== lattices
+
+TODO: unify < & min, or explain why that's impossible.
+TODO: consider how x can be split into information |x| & sgn(x)
+TODO: consider complex numbers.
+
+NB. sgn(x-y)min(z,|x-y|) (or something like it) is a terse form of iff(x>y,min(z,x-y),max(-z,x-y)).
 
 a common problem is choosing of `(<,max,high)` or `(>,min,low)`. this is simpler encoded as `(<,max,high)` under negation or not; min(a,b) = -(max(-a,-b)). thus the `<` & `>` lattices are opposites. one's min is the other's max.
 

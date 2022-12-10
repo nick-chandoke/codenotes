@@ -6,6 +6,36 @@
 * cf link:https://forth-standard.org/[forth] viz wrt efficiency
 * check-out vocabs: `models`
 
+why does this error:
+
+[source,factor]
+----
+USING:
+accessors ! >>command
+! arrays
+combinators
+command-line
+io ! write
+io.encodings.binary
+io.files
+io.launcher
+kernel
+namespaces ! get-global
+prettyprint ! .s
+sequences ! last
+;
+IN: gpghere
+
+: main ( -- )
+<process> command-line get-global last ! sqlite tmp file path
+! good example of keep: don't affect stack, but store a value
+{ "gpg" "-er" "nic" "--output" "-" } over suffix swap .s clear ! >>command binary <process-reader>
+! binary [ write flush ] with-file-writer
+; MAIN: main
+----
+
+? if i replace `clear` by `drop drop drop` then `.s` does nothing. wtf? i can replace it all by `. . .` which prints the stack with tap of stack printed first.
+
 .common mistakes
 
 * builtins can't be found. you need to import them. for `cond`, `USE: combinators`. for `+` (yes, fucking *plus*) you must `USE: math`. for basic stack words, you `USE: kernel`. never assume that _anything_ does not require using some vocab.
@@ -146,7 +176,7 @@ the lesson is that `if` is the primitive selective evaluator and is perfectly si
 * you must import `kernel` when running scripts. yeah, even `drop` must be imported.
 * _quotation's stack effect does not match call site_ is an inconsiderable runtime error displayed when a script finishes with a non-empty stack. even `MAIN:` is hard-coded to check against `( -- )`. either put `clear` at the end of your script or make your script have stack effect `( -- )`. this is probably the most idiotic thing i've seen factor do yet.
 * `save` saves the entire program state to a file. this is useful for scripts, since they're usually re-evaluated on each run. of course, for programs that do not need re-evaluation, it's best to use the ui deployment tool (`deploy-tool`) to make native, speedy executables.
-* command line args: `USE: command-line command-line get-global`
+* command line args: `USE: command-line command-line get-global`. *arg0 (program name) is not included!*
 * envars: `USE: env`; then singleton `env` is an assoc
 
 see factor handbook > the language > vocabulary loader > vocabulary roots. you can get there by searching for `vocab-roots`.
@@ -193,7 +223,9 @@ NOTE: _ciif_ := "code in input field"
 
 * see `DEFER:` for mutual recursion
 * scope is not often a consideration. however, `set` is scoped only within a source file (b/c files are parsed with `with-scope`)
-* strings are sequences of unicode code points, not of bytes. factor supports encodings well. writing bytes is merely a matter of using the correct encoding
+* strings are sequences of unicode code points, not of bytes. factor supports encodings well. writing bytes is merely a matter of using the correct encoding (namely the `binary` encoding)
+  ** bitstring literals are enterable by `B{`, the byte array literal syntax. you can use `B{` with `write` e.g. `path binary [ B{ 96 0xa 65 } write ] with-file-writer`
+    *** `0x` syntax is directly supported by factor. no need for even number of hex digits, btw.
 * pushing quotations does not use memory
 * `f` is the false value; all others are truthy
   ** `t` is the canonical truthy value
@@ -362,15 +394,20 @@ primitive & tuple classes use >> & << (but not derived ones?)
 
 .`sequence` vocab
 
-* `nth`: elem at index or error
+* `nth`: elem at index or error. `nths` is like mapping curried `nth`
+* `set-nth`. mutative, so whereas `CHAR: c 1 "-s" set-nth` leaves the stack empty, `"-s" CHAR: c 1 pick set-nth` leaves "-c" atop
 * `?nth`: elem at index or `f`
 * `prefix`, `suffix`: adjoin at head or tail
+  ** `prefix?` & `suffix?` are not defined; instead use `subseq-start 0 =` for `prefix?` and `[ subseq-start ] [ [ length ] bi@ swap - = ] 2bi` for `suffix?`
+    *** regarding `subseq-start` &al, the factor docs use _subsequence_ to mean _substring_
 * `insert-nth`: insert at provided index, moving latter elements rightward by one index
 * `prepend`, `append`: concatenate 2 topmost sequences
 * `concat`: concatenate elements of a sequence of sequences
 * `join`: intercalate then concat
 
 a complement of n-array (e.g. `2array`) &c is `match-cond`. see §_pattern matching_.
+
+example: find 1st element matching some predicates: `[ preds 1&& ] find nip` e.g. `{ "kak" "file" 36 41 } [ { [ number? ] [ even? ] } 1&& ] find nip` returns `36`.
 
 ==== pattern matching
 

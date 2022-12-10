@@ -14,6 +14,10 @@ this document discusses sql as understood by sqlite, and its underlying model.
 this section is for those who've already read the rest of this document.
 
 * types: scalars, row values, or relations of null (which i'll call ⊥ to reduce confusion about null's varied meanings in other contexts), integer, text, real, or blob (which i'll call bytes, short for bytestring, which obviously is similar to text). i define type str := bytes | text, and num := ℤ | ℝ.
+  ** `0.0/0.0` gives `null`, not infinity. for positive & negative infinity, use the string `"+infinity"` or `"-infinity"` for an attribute typed as `real`. for literals: `cast("-infinity" as real)`.
+    *** because strings are ordinally superior to numbers, both `x < "infinity"` & `x < "-infinity"` are true for all `x`. `select substring(cast("-infinity" as real),0,6)` returns `0.0` whereas `select substring("-infinity",0,6)` returns `-infi`.
+    *** real literals vary with external language e.g. in racket scheme `(require db) (define c (sqlite3-connect #:database 'memory)) (values (query-value c "select 4<?" -inf.0) (query-value c "select 4<?" +inf.0))` gives `(values 0 1)`.
+  ** see `floatingpoint.html`
 * colmns/attributes/axes, rows/attributes/points
   ** the axes & points interpretation is best
   ** values are symmetric along axes. each point is an ad-hoc relation.
@@ -25,7 +29,8 @@ this section is for those who've already read the rest of this document.
   ** that the space is the cartesian product of the axes, that rows have sensible values for each of their elements. 
   ** that one-to-many relations are stored in separate relations e.g. if i've a table `drug(prodname, chemname text primary key, dosage)` then it can't have a property `sideeffects`, since each drug has multiple. i must have a separate table `sideeffects(drug references drug(chemname), effect)`.
 * *exploit*: row values; numbers & strings; [builtin] [non-]aggregate ("core") [window] fns; `join`, `select`.
-  ** `coalesce` is short-circuiting `or` like in lisp. like `iif` it's just a more convenient representation of `case when`
+  ** `coalesce` is short-circuiting `or` like in lisp. like `iif` it's just a more convenient representation of `case when`.
+    *** `coalesce` returns the first non-null, or if all null, then returns `null`. it works with aggregates e.g. `select coalesce(sum(x),0) from t` returns scalar `0` for empty `t`.
   ** you can encode strings especially to exploit helpful string functions (see below), even creating indexes on these
 * use `upsert` instead of `insert`, `update`, `replace`
 * recursive queries generalize literal relations just as horn clauses with symbols generalize horn clauses of only value literals. recursive queries are equivalent to horn clauses or functions. this power is of relating symbolic expressions. a recursive `select`'s expressions (of its many clauses) are related to the result of applying those expressions on the prior iteration; as in other reductionist langs, the expressions are transitively related by evaluating expressions on prior-output values.
@@ -100,6 +105,16 @@ to conclude i answer the recently posed question: to most elegantly express horn
 ^*^ i.e. sql is an array language; ordinary (non-aggregate) expressions are specified in terms of attributes, but each attribute represents a set of values. `map` is implicit in sql, or `filter-map` for queries featuring a `where` clause.
 ^**^ triggers that trigger themselves until their condition no longer holds are equivalent to `while` loops. looping by triggers is declarative; the control flow's literal path is implied by implicitly sequenced rules—trigger conditions. by contrast, `with`'s control flow is literally given as a sequence of `select` forms, always ultimately accumulating a relation.
 
+==== null
+
+* null propogates; `is` can stop propogation
+* `case when` & `iif`, and `where` consider `null` a failure just like `0`
+  ** you can exploit this for elegance & brevity e.g. what in most langs would be `(if (or (null? x) (> x 0)) y z)` is in sql `iif(x>0,y,z)`, since a null `x` will cause `x>0` to evaluate to `null`, causing the `iif`'s failure result to be returned. other example: this code is silly: `case when x is null then x when count>0 then min(x,y) else max(x,z) end`. the non-redundant version is `case when count>0 then min(x,y) else max(x,z) end`, since `min` & `max` return `null` if any of their args is `null`.
+* `count` counts non-nulls
+* `x not in (select a from t)` may return ∅ if the `select` returns a set containing `null`; the whole query would translate to `x not in (b,...,null)`, which is equivalent to `not(x=b or x=... or x=null)`. in 3-valued logic, which sql uses, `x=null` is an expression involving `null`, so the whole expression evaluates to `null`. the solution is to use `exists`, which uses 2-valued logic. other solutions are `except`, `where x is not null`, or, if your sql engine supports it, `left outer join`
+* there are no illegal values in sql; what would usually be an illegal value (and so a runtime exception) in other langs is `null` in sql
+* aggregate functions may handle `null` asymmetrically; e.g. `sum` treats nulls as 0 rather than making the whole sum `null`.
+
 ==== row values
 
 * row values plainly represent the concept of grouping. this is separate from relations, which are array variables instead of single data; the difference is that each of a row of values is particularly, certainly identified, whereas those in an array var are non-particular, anonymous. this is quite similar to how tuples vs lists are handled in haskell. indeed, lists/relations may be empty, but row values may not be empty!
@@ -124,7 +139,7 @@ to conclude i answer the recently posed question: to most elegantly express horn
 
 NOTE: `is` & `is not` are `=` & `<>`/`!=` but produce 0 or 1 instead of `null` if either of their args is `null`.
 
-* to test whether x is a subset of y: `y x \ ∅ =`
+* to test whether x is a subset of y: `y x \ ∅ =`, or `x y ∩ x =`
  ** this generalizes x∈y. that generalization is good because it makes everything sets (no "naked" elements)
 * to test whether any of x is in y: `x y ∩ ∅ =`
 
@@ -141,29 +156,34 @@ obvious ones like datum literals or operators/functions thereon aren't here enum
   ** `like`/`glob` requires single-attribute relations. if left arg has multiple rows, only its first is used; `(values(x),(y),...) like (values(a),(b),...)` = `x like a`.
 * `is [not] [distinct from]`
   ** `is` & `is not` are sqlite-specific terser forms of sql standard `is not distinct from` & `is distinct from`. holy golly, man.
-  ** `isnull`, `notnull`, both equivalent to `is null` & `is not null`. no idea why these especially specific forms exist.
-* `[not] in` (see note below)
-* `[not] exists`. definable as `count(*)=0`.
+  ** `isnull`, `notnull`, both equivalent to `is null` & `is not null`. no idea why these especially specific forms exist. `isnull` is a binary function in ms sql server, and has different behavior in other sql engines, so given that it's not standand, i can't imagine why it's included in sqlite.
+    *** prefer `is [not] null` for compatibility with other sql engines
+* `[not] in`.
+  ** `e1 in e2` requires that `e1` & `e2` have the same number of attributes e.g. `[...] where (x,y) in s` works if `s` has two columns. it then uses `=` on row exprs. use subquery for use with single attributes e.g. `[...] where x in (select a from s)`
+  ** see note below.
+* `[not] exists` is conceptually equal to `having count(*)=0`. but the two have different uses; `exists` is used for subqueries, not an aggregate of the current query. also hopefully, being a special syntax, `exists` optimizes queries like `exists x intersect y` to not actually compute the full intersection, but return when any of `x` is found to be in `y`.
 * `case when` is short-circuiting / lazy eval, unlike `iif`. see _§first-class functions and conditionals_ for thorough discussion.
   ** `case` is an expression, not a table. `select case when 1 then (values(3),(4)) end;` is correct; there's no `from` clause.
   ** in `case when p then y end`, both `p` & `y` must be single-attribute relations, and only the relations' 1st values are used. 
     ** if the chosen relation is empty then `case` returns `null` as a scalar
 * builtin numeric functions include trig, ceil, &c; see `pragma function_list` for complete set
-* builtin bitwise functions are syntax: `&`, `|`, `>>`, `<<`, `^`, `~`
+* builtin bitwise functions are syntax: `&`, `|`, `>>`, `<<`, `~`. idk if xor is supported. `^` isn't working.
 
 see best-paradigms-lang.adoc. `where` is implicit in predicate logic; it's the same as predicate unification/evaluation. the `expression` grammar's `[not] in` subgrammar is set membership/intersection, which is is equivalent to testing against a predicate. therefore `a in b` = `exists a where b` = `exists a intersect b` except that `a where b` is incorrect in sql since therein `b` must be a relation which sql considers distinct from a predicate; however, theoretically, by predicate-set correspondence, the three are equivalent. in sql we'd need to unify sets & predicates by saying `exists a intersect select * from b where b`. the equivalence can be seen by `a [not] in b` (or `a like b` &al) being set membership if `a` is a row value and `b` a relation, or set intersection if both `a` & `b` are relations. *however, `[not] in` has one characteristic: it also accepts a scalar lhs with a row value rhs. this is a blatant asymmetry in how sql considers groups of data.* the symmetric solution would be if scalar were equal to a row value with a single datum and a row value equal to a relation with one row. indeed, this would imply that a scalar equal a singleton, single-attribute relation, which _is_ true almost always, but not in `[not] in` and perhaps in some few other contexts.
 
 sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed in predicate logic as (∨,∧,¬,⊥). one of sql's troubles is that it is not symmetric; it considers predicates distinctly from sets, and sometimes considers elements distinctly from sets. also, though this model seems appropriate, one must be careful to distinguish between expressions that act per row vs aggregates, which act per relation, for logical reasons, even though they're of the same grammar, both accepting expressions as inputs and returning a relation/expression as an output. also, and again usefully so, `null` is the empty row value whereas an empty relation is an empty set. `null` has short-circuiting/null-propogation semantics whereas an empty set is the identity for union but a short-circuiting operator for `intersect`. these semantics can be a bit confusing, but they are elegant!
 
-* where / between (uses index)
-* join (or where/filter & union) (general filter)
-* intersect, except
+* `where`/`between` (these use indexes)
+* `join` (or `where` [filter] & `union`) (general filter)
+* `intersect` (common elements), `except` (asymmetric difference). symmetric difference isn't a sql primitive; you must do `select * from x except select * from y union all select * from y except select * from x`. yikes. if `select * from` were assumed if omitted, and symbols were supported instead of english words, then the statement would be expressable as `(x\y)∪(y\x)`. note the need for parentheses here, which are not needed in the verbose syntax. the symmetry is obvious in the symbolic version! in factor this is `[ diff ] [ swap diff ] 2bi union`, again showing the symmetry.
+  ** `select from x,y where x not in y and y not in x` (or anything involving join) is incorrect because we aren't concerned with cartesian products, elementwise-pairing, nor combining column sets.
 * `exists` predicates on a relation's emptiness; `where exists ...` makes one relation's emptiness imply this relation's emptiness.
 
 ==== select
 
 * `from` merely binds symbols for the query
 * `where` & `having` are both the same concept—"such that"—but one is applied to row values and the other to groups of row values. if sql were more symmetric, then `having` should apply to the whole query (the single group) just like aggregates do. however, most people would consider that more like a guard [list monad].
+  ** if the expression supplied to `having` is an aggregate, then it's run over the group's rows. if it's non-aggregate, then it's applied to an arbitrary row of the group.
 * `where` is scoped to all expressions following `select` e.g. `select 4 as x where x%2=0;` is valid
 * `where`'s expression cannot use aggregates. this leads to the unfortunate workaround of duplicating majority of queries in a `with` clause e.g. `with ml(ml) as (select max(length(body)) from docs where title="trailing stops") select * from docs,ml where title="trailing stops" and length(body)=ml;`. for _selection_ we can `order by length(body) limit 1`, but that does not work if we want to update or delete a row with a most extreme attribute value. i wonder if there's a better solution, perhaps using `group by` & `having`?
 * `group by`, `having`, and `window` support [window] aggregate functions, what would be expressed in an ml-style lang as `map (foldl1 f) . filter p2 . partition p1`
@@ -171,9 +191,22 @@ sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed i
   ** `group by x` is the dual of distributing `(x,)` over `[y]`
 * `order by` & `limit [offset]` enable [sub]sequencing. along with `union all` this is the only way to guarantee ordering.
 
+.common algebraic patterns
+
+* a ⊂ b (i.e. all a are in b) is said as `a in b`
+* x ∈ a ∧ x ∈ b (i.e. at least one of a's elements is in b) is rephrased into x ∈ a ∩ b, which is `x in a intersect b` in sql
+* use views to act as recursively-defined tables by defining the view in terms of `with recursive ... select ...`
+  ** see sqlite docs' `lang_with.html` page, §3 for exact details
+* rather than store filepaths, store their contents as blobs; this way deleting an item from the db actually deletes the file, as one would probably expect.
+
+[TODO]
+* how to (especially efficiently) produce a shuffle of a table?
+* suppose i've a table `t(a,b,c,...)`, and i want to effectively `with x(x) as (select * from t where p) select sum(a)/x,sum(b)/x,sum(c)/x,... from t`; how to do this for arbitrary number of `a,b,c`, and how to effectively do `(apply / '(sums union all x))`?
+  ** we'd need to store a,b,c,... in rows....
+
 ===== window functions
 
-see `windowfunctions.html`.
+see `windowfunctions.html` for both a description of the window function design/mechanism, *and a list of the bulitin window functions.*
 
 a _window [frame]_ is a subset of a relation. the only thing that distinguishes it from a `select` expression is that each subset is associated with a row. this is much more powerful than otherwise: join, which associates each row being with exactly one other; or aggregate functions, which evaluate to a scalar, albeit one per group when `group by` is used. therefore window functions are extremely powerful but more particular versions of aggregates on `group by` that give aggregate outputs per row rather than just per group of rows.
 
@@ -278,13 +311,17 @@ NOTE: short-circuiting is not a problem in sql because all computations are vali
 
 NOTE: if you need related conditions, such as are available in factor [lang] by using its `cond`, then you can use `with [recursive]` to pass state across calculations of predicates.
 
-TODO: when would i use `exists`? within a clause? or in `select case when exists (select * from R where p) then t else f end`?
-
 NOTE: that `case when` is short-circuiting is a bit concerning; it makes me doubt that it or `iif`'s values are computed in parallel, which could have some performance penalty.
 
 .derivation of these techniques for expressing choice in sql
 
 recall that general branchless form is Σ[(p,x)]p×x, where `p` are [expressions that evaluate to] logical values (0 or 1) and `x` are associated values. re-expressed by ring isomorphism, that's ⋃ [(p,x)∈R] (p∩x). again, though, this is not quite appropriate; the logical version, ⋁ p∧x, is, but the set version isn't because p∩x where `p` is a logical value is actually `select x from R where p`. generally ⋃ [x∈S] p(x) is equivalent to {x∈S|p(x)}, which is always a subset of S. X ∩ Y also always produces a subset of both X and Y, so this is how intersecting a predicate with a set p∩X is a re-expression of {x∈X|p(y)}∩X, which is always a subset of X. in summary, `select x from R where p` is equivalent to `cond` [lisp] that returns multiple values where `R` is an alist. to add an else value `y`, use `select x from R union all values(y) where p limit 1`. like in factor, sql can return multiple values by returning a relation of multiple attributes. this shows `limit` as a sub__sequence__ operator, unusual in a _set_-based language.
+
+==== state machines & mutation
+
+* `changes()` tells the number of rows modified by the last `delete`, `update`, or `insert` statement.
+* `total_changes()` tells the sum of `changes()` since a db connection was opened
+  ** you can track the sum of changes since an event by keeping a singleton relation, say `c(c)`, `update c set c=total_changes()` upon an event (probably set within a trigger), then `select total_changes()-c from c` to see the number of changes since the last event.
 
 === λ's
 
@@ -332,10 +369,11 @@ create table t(id integer primary key autoincrement,
                x,
                dep integer,
                foreign key (dep) references t(id));
-create index tdep on t(dep); -- make the upcoming join efficient
-insert into t values(null,20,null); -- null is given to autoincrement columns, to use the autoincrement feature
-insert into t values(null,40,3); -- fails b/c there's no record in x whose id is 3
-insert into t values(null,40,1); -- succeeds b/c we've successfully inserted one row already
+create index tdep on t(dep);                        -- make the upcoming join efficient
+-- null `id` uses autoincrement
+insert into t values(null,20,null);                 -- reference checking isn't done for null foreign keys
+insert into t values(null,40,3);                    -- fails b/c there's no record in x whose id is 3
+insert into t values(null,40,1);                    -- succeeds b/c we've successfully inserted one row already
 select x.x,y.id from x join x as y on x.dep = y.id; -- returns one row: {x=40,x=20}
 ----
 
@@ -414,7 +452,7 @@ each
 
 `where x=?` is the pointwise association of `x` with `f(x)` and `each` represents `∀x`. ideally, for efficiency, we'd collect all queries into a list then run them together in a single transaction.
 
-=== zipping/joining of non-indexed relations is impossible 
+=== zipping/joining of non-indexed relations is impossible in relational algebra
 
 there appears to be no way to zip [n..] with an arbitrary relation. zipping is possible only by `join on`. `join` cannot work becasue that's cartesian product, which is not pointwise association. however, for `join on` to work, there must be a common attribute upon which to join, but no such attribute exists unless the relation is already indexed by [n..]!
 
@@ -423,6 +461,15 @@ neither recursive `select` nor `update` helps, either; to associate an index wit
 relalg is based on sets, not sequences; indexing rows would be a primitive. indeed, is sql it's accounted for by special attribute modifier `autoincrement`! thus we never need to zip; we can effectively implicitly make all sets sequences with order by nth insert. with the set being a sequence, it fulfills the requirement that allows it to be joined by index. it can thus be effectively zipped. really, though, it never makes sense, in general, to systematically order a set by arbitrary indices!
 
 the `autoincrement` value is set to the nth insert; you may prefer `insert into t(id,x) values((select max(id)+1 from t),x)`. if a row is removed, then you will be left with a sequence with a missing element. how to handle that is your choice. for example, you may mark the removal by not actually removing the row, but by setting its value to `null`; or you may truly remove the row then update all of the indices greater than it to be each one their lesser.
+
+however, we can use the window function `row_number`:
+
+[source,sql]
+----
+select row_number() over (order by rowid rows current row) as uid,* from mylist;
+----
+
+will give unique row numbers to each item in `mylist`. suppose that mylist is a relation of variables, and you select a function of those variables, and you want to unit test whether each output is correct for the given inputs. then you'd need to join a table of expected outputs with the actual values; you must join on a common value, and you're not about to specify all of the function inputs as the join value. you can assign each row a uid, then see which uids correspond to which inputs & outputs, then manually specify a table to join on, of schema (uid,expected). i'm unsure whether `order by rowid` is redundant, but i know that specifying it guarantees deterministic uid/row association. note, however, that `with expected(uid,e) as (values...) select row_number() over (order by rowid rows current row) as uid,*,fn(...),e from mylist join expected using (uid);` is incorrect; that'll produce a row number for all in the selected table—the join of `mylist` & `expected`! we want `row_number()` to run only for rows of `mylist`; therefore `with expected(uid,e) as (values...) select * from (select row_number() over (order by rowid rows current row) as uid,*,fn(...) from test) join expected using (uid);` is correct.
 
 === [anti]patterns
 
@@ -516,8 +563,9 @@ NOTE: `case <expr> when ...` uses a _base expression_; in this case, rather than
   ** in sqlite at least, bare columns' values are deterministic if only one of `max` or `min` aggregate functions is selected
   ** see §2.[4,5] of sqlite docs for `select`
 * because sql table identifiers are not first-class (i.e. we cannot, in sql, programmatically generate a table name then reference it i.e. table names must be literal syntax rather than expressions), the only way to keep lisp-grade flexibility [dynamicism] is to use the lisp encoding or something that does not require creation, modification, or reference of a dynamic identifier.
-* `x not in (select a from t)` may return ∅ if the `select` returns a set containing `null`; the whole query would translate to `x not in (b,...,null)`, which is equivalent to `not(x=b or x=... or x=null)`. in 3-valued logic, which sql uses, `x=null` is an expression involving `null`, so the whole expression evaluates to `null`. the solution is to use `exists`, which uses 2-valued logic. other solutions are `except`, `where x is not null`, or, if your sql engine supports it, `left outer join`
 * predicate evaluation order is nondeterministic e.g. in `isint(a) and a > 0` may fail with "can't apply > 0 to string" since that may be evaluated before `isint`. cte's are not a solution; they suffer from the same non-deterministic evaluation order. `case` is a solution because it has definite evaluation order.
+* `update t set x = f(x) returning g(x)` returns `g(f(x))`
+* `returning e` in a `delete` statement returns `e` for all deleted rows
 
 .grouping & bare columns examples
 
@@ -549,20 +597,7 @@ according to sqlite v3.39's `select` docs, §2.4, `group by` associates each row
 * `in` is more efficient (b/c it uses indexes) than `or` *when the `in` list contains only constants*. e.g. `x=1 or x=2` is better as `x in (1,2)`
 * columns that you'll join should be indexed
 
-==== recepies / particular use cases
-
-* a ⊂ b (i.e. all a are in b) is said as `a in b`
-* x ∈ a ∧ x ∈ b (i.e. at least one of a's elements is in b) is rephrased into x ∈ a ∩ b, which is `x in a intersect b` in sql
-* use views to act as recursively-defined tables by defining the view in terms of `with recursive ... select ...`
-  ** see sqlite docs' `lang_with.html` page, §3 for exact details
-* rather than store filepaths, store their contents as blobs; this way deleting an item from the db actually deletes the file, as one would probably expect.
-
-[TODO]
-* how to (especially efficiently) produce a shuffle of a table?
-* suppose i've a table `t(a,b,c,...)`, and i want to effectively `with x(x) as (select * from t where p) select sum(a)/x,sum(b)/x,sum(c)/x,... from t`; how to do this for arbitrary number of `a,b,c`, and how to effectively do `(apply / '(sums union all x))`?
-  ** we'd need to store a,b,c,... in rows....
-
-==== attributes with multiple values (wip)
+=== attributes with multiple values (wip)
 
 NOTE: developing this example is halted until i thoroughly study relational algebra, and take a course in sql from a seasoned professional. also consider the dependents/parent fact stated above.
 
@@ -677,7 +712,7 @@ NOTE: *for the love of god, use `BEGIN TRANSACTION` &al*
 
 === common semantics
 
-* sqlite stores table schemata as strings rather than as tables (despite the style of `pragma table_info(t)`'s output); this is a design oversight that must be dealt with in a hacky way (see the `alter table` docs)
+* sqlite stores table schemata as strings rather than as tables (despite the style of `pragma_table_info(t)`'s output); this is a design oversight that must be dealt with in a hacky way (see the `alter table` docs)
 * `0` is falsy in sqlite. a value's truthiness is determined by whether its coercion to an integer produces `0` or not. `null` is null, a value that represnts a lack of sensible information; it's neither truthy nor falsy. `select x from t where x` will select truthy `x`; `... not x` will select where `x=0`. in neither case will any `x` with `null` values be returned.
 * when a sqlite db can be opened read-only, we can still create and modify temporary tables
 * everything is a table (multiset of tuples whose positions may be bound to, in a given conext, a name) viz the results of statements, which can be enclosed in parens, e.g. `select * from (select * from mytbl) t`
@@ -856,11 +891,11 @@ select * from y;
 
 see §3.[3-5] for very useful graph/traversal considerations.
 
-=== compound or miscellaneous/general sql examples
+=== miscellaneous sql examples
 
 never assume design patterns; instead, only consider the axes and whether they're related e.g. with data `x`, y`, & `z`, is the idea of a `(x,y,z)` point sensible?
 
-.folds
+==== folds
 
 a fold is a stateful traversal. in reldbs, state is obviously stored, as is everything, in relations. a recursive `with` may be more efficient, however. even more efficient is a fold written as a runtime-loadable extension written in c, loaded by sqlite from a shared library.
 
@@ -896,7 +931,7 @@ select ps from acc order by id desc limit 1;
 
 of course, _this_ fold is more easily done by the aggregate `group_concat`, but this example serves generally, when an aggregate may not be already written for it.
 
-.functions
+==== functions
 
 views (especially defined by cte) can represent fns. `create view f(f) as select sin(x + y) from t` is the sql version of `f x y = map (\[x,y] -> sin x y) sql(conn,"select x,y from t")` haskell-like pseudo-code. yes, `f` is the name of the view and the name of its single column. if you've ever defining a fn in code that's using a sql connection, think about how easily you could express that fn as a sql view. views are a sort of variety of prepared statement, except that they're standard sql and are stored by the sql engine internally.
 
@@ -920,7 +955,7 @@ with weight(weight) as (select 1.0/count(*) from things) select name, weight, we
 
 notice that the ordinary join (cartesian product) of a single value with a row of values is effectively equivalent to scalar expansion (or w/e it's called) in apl `0.25 × values`.
 
-.local binds
+==== local binds
 
 [source,haskell]
 ----
@@ -943,15 +978,15 @@ sql binds cannot be <what?>, e.g. in a `create trigger` statement's final clause
 
 the ability to choose either demonstrates that local binds, like all scoping mechanisms, are not necessary, but instead exist only as a namespace management tool, namely to allow multiple homonomic data across different contexts. sql is unique in that all data must exist in tables, and tables are scoped, so namespacing is more of a constraint than an option. in contexts with homonomic data, sql gives us `as` clauses to disambiguate.
 
-.cond/case
+==== cond/case
 
 alists are obviously encoded in sql by schema `alist(k,v)`. then `select v from alist where k=?`
 
-.find
+==== find
 
 `find p xs` = `first? (filter p xs)`. in sql: `select x from t where p order by i limit 1`
 
-.one-to-many relations
+==== one-to-many relations
 
 to associate e.g. each song with many tags, `[(song,[tags])]`, use sql schemata `song(songid integer primary key, songname string)` & `tags(songid integer, tag string)`: `select song,group_concat(tag,",") from song join tags using (songid) group by song`. in sql `(k,[v])` is encoded as `[(k,v)]`. `group by` and/or aggregate [window] functions work well with 1:n relations; in fact, `group by k` is the dual of distribution of `(k,)` over `[v]`.
 
@@ -963,15 +998,17 @@ NOTE: metadata may not need to be exact e.g. though we can tag songs with multip
 
 anyway, *don't waste time adding redundant information to your database. schema are hard to change or work with, but queries are very flexible & simple to construct & modify! however poor your schemata, thorough understanding of queries will make schemata elegance inconsiderable.* this applies also to the efficiency statement at the end of the prior paragraph: if your db grows large, just create a new table with appropriate schema or add an index and populate the table with an `update` statement. there's really no such thing as sunk cost in sql, so don't worry.
 
-.plurality
+==== plurality
 
 a common interpretation of a thing is that the thing is single yet composed of multiple things, e.g. an xml element may have many children. in sql we not say that the element contains children, but instead that the "children" are just a set of things that support a predicate that groups them. an obvious predicate is `id=?` where all in the set share a common value for the `id` attribute. in sql this cannot be done by a primary key, since each row must have a unique primary key value. we must therefore use what's conceptually a primary key as technically not a primary key. this is fine, since foreign keys & primary keys don't add any ability; they only check constraints and enable cascading mutations, but `unique`, indexes, and triggers are perfect alternatives.
 
-.first-class functions
+i suggest the relation naming convention that plurality corresponds to each row. for example, a relation named `widget` should be a relation each of whose row is a widget. a relation named `widgets` should have each row represent some aggregate expression of the `widget` relation.
+
+==== first-class functions
 
 there are no first-class functions in sql; _all_ function use is pointed. the only way to "compose functions" is `f(g(a))`; all functions are tied to their literal arguments. therefore whereas in functional code you may find a function to an identifier then use it in various places on various args (shape (f,[args])), in sql you must enumerate all function & arg pairs (shape [(f,[args])]). notice that this is the same pattern that sql uses to encode lists: what is most langs is (f,[a]) is expressed in sql as that but distributed: [(f,a)].
 
-.conditionality/branching/choice
+==== conditionality/branching/choice
 
 technique for expressing conditionality is covered in _§sql technique_; this section expresses some real-world scheme code (which also uses some sql) as sql so that you can compare the two.
 
@@ -1025,7 +1062,10 @@ because `alat_stop_ccoppext` is used only before `unless`, i.e. `when . not`, it
 |=================================================================================
 
 with _lat_ abbreviating _less attractive than_ and _alata_ abbreviating _at least as attractive as_.
+
 it's more coupled, which i, before i translated the scheme code to sql, thought would be bad, but i actually prefer this because i can see _all_ of the places in which `at-least-as-attractive?` `more-attractive` `ccext`, & `ccoppext` are used at once rather than needing to read through nested code! this is appropriate because these data _are_ coupled! it's not like i'm defining separate functions in a library. i'm binding particular data & functions for a particular purpose, for their copuled use in a small block of code. also the tabular formatting is clean.
+
+i'm actually questioning whether abstraction is a good idea. it certainly, practically by definition, reduces redundant information by factoring [algebra] code. however, by so doing, it introduces complexity when reading the code. with too many concepts, the whole of a program can be hard to see. i guess that abstraction is good for writing libraries, but bad for writing programs (effectful sequences). i suggest that bit twiddling methods (see codenotes/bit-twiddling-and-encoding.adoc) offer compression and elegance better than linguistic abstraction.
 
 anyway, that table is, in sql:
 
@@ -1063,12 +1103,12 @@ next we finish the translation by translating the conditional `query-exec`'s by 
 [source,sql]
 ----
 create trigger update_stop after insert on orders
-begin update orders set (stop,ext) = (iif(stop notnull and ext isnull
+begin update orders set (stop,ext) = (iif(stop notnull and ext is null
                                                        and iif(count>0, stop>high, stop<low) -- stop less attractive than ccoppext?
                                          ,null  -- set stop to null
                                          ,stop) -- don't change stop (literally set stop to itself)
                                      ,iif(abs(ext - ccoppext) >= abs(stop), null, iif(count>0, min(ext,low), max(ext,high)))); -- whichever of ext or ccext is more attractive
-      -- <some action> about *,iif(count>0, min(open,limit), max(open,limit)) from orders where stop isnull or ext isnull or abs(ext - ccoppext) >= abs(stop)
+      -- <some action> about *,iif(count>0, min(open,limit), max(open,limit)) from orders where stop is null or ext is null or abs(ext - ccoppext) >= abs(stop)
                                                                                                 and iif(count>0, low<=limit, high>=limit); -- ccext is at least as attractive as limit
       -- see comment below about scheme returning values
 end
@@ -1093,21 +1133,181 @@ sql, being declarative and symmetric over data (i.e. it's an array language) gre
 
 *any of sql's ugliness is well worth sql's model's simplicity & elegance, because it makes easier both reasoning (designing the program) and specifying the logic as code, and its implicit control flow removes a great class of common coding (again, both reasoning and specifying as code) errors.*
 
-.constraint solving
+==== `filter (any p) xs`
+
+given a table `t`:
+
+┌──────┬────┐
+│  x   │ y  │
+├──────┼────┤
+│ cat1 │ 40 │
+│ cat1 │ 20 │
+│ cat2 │ 81 │
+│ cat2 │ 40 │
+│ cat2 │ 3  │
+│ cat3 │ 5  │
+└──────┴────┘
+
+* to select categories containing any odd numbers: `select x from t group by x having count(iif(y%2<>0,1,null))>0`
+* we can delet from that set, too: `delete from t where x in (select x from t group by x having count(iif(y%2<>0,1,null))>0)`
+* to select the number of adds per category: `select x,count(iif(y%2<>0,1,null)) as c from t group by x having c>0;`
+  ** remember that `count` counts non-nulls; the `1` may as well have been any non-null value, though i prefer `1` because it's the standard notation for "unit."
+
+===== `concatMap head`
+
+since we're dealing with sets, we're really selecting a element, which may be arbitrary or particular. of course, in sql `concatMap` is done by `group by`.
+
+`group by`: `select x,y from t group by x` works. remember that `x` is not a bare column, because it is the column used for grouping. `y` is a bare column. you can use any aggregate function to make it proper sql, since selection of `y` is already arbitrary. a fine default is selecting the `min` of each group. if you want an aggregate function over a set of data whose elements have a 1:1 map with a group, then you can use nested ``select``s e.g. `with e(e) as (select min(y) from t group by x) select sum(e) from e`,...or maybe a window function? it'd be nice to be able to do it with one `select`.
+
+====== selecting multiple attributes of a common row per group
+
+if you're selecting multiple items, then the above technique will not work. consider a variant of the above table:
+
+┌──────┬────┬───┐
+│  x   │ y  │ z │
+├──────┼────┼───┤
+│ cat1 │ 40 │ 6 │
+│ cat1 │ 20 │ 8 │
+│ cat2 │ 81 │ 4 │
+│ cat2 │ 40 │ 5 │
+│ cat2 │ 3  │ 2 │
+└──────┴────┴───┘
+
+then how do we select an arbitrary row per distinct x? well...we can `select * from t group by x;`, though a correct result isn't guaranteed by sql semantics, even though sqlite does the sensible thing of just selecting the first rows for each unique `x`:
+
+┌──────┬────┬───┐
+│  x   │ y  │ z │
+├──────┼────┼───┤
+│ cat1 │ 40 │ 6 │
+│ cat2 │ 81 │ 4 │
+└──────┴────┴───┘
+
+sensible as that is, it's probably good to identify a method that's guaranteed to give a correct answer as per sql's semantics. we can't `select min(x),max(y),max(z) from t group by x;`, since that gives
+
+┌────────┬────────┬────────┐
+│ min(x) │ max(y) │ max(z) │
+├────────┼────────┼────────┤
+│ cat1   │ 40     │ 8      │
+│ cat2   │ 81     │ 5      │
+└────────┴────────┴────────┘
+
+notice that 40 & 8 are returned in a common row! i want an arbitrary row from the original table! no row in `t` has y=40 & z=8! i suppose that the most elegant solution is to select distinct primary key then join that with the original table e.g, assuming that `t` as an autoincrement integer primary key called `id`: `select x,y,z from t join (select max(id) as id from t group by x) using (id)`:
+
+┌──────┬────┬───┐
+│  x   │ y  │ z │
+├──────┼────┼───┤
+│ cat1 │ 20 │ 8 │
+│ cat2 │ 3  │ 2 │
+└──────┴────┴───┘
+
+* notice that it gives correct results regardless of whether we use `min` or `max` in the nested query.
+* as always, if you'ven't a primary key, let's say because you're using a transient table, then use window function `row_number()` to assign unique row ids.
+
+otherwise we can recurse through `select distinct x from t`, unioning with `select from t where x= limit 1`. ideally we want a `group by` or `join` with an aggregate predicate e.g. that count(*)<=1 so that each thing joined or grouped has an upper size limit.
+
+==== thinking in sql/relalg
+
+i was writing a factor program. i wanted to branch on whether the command line array contained any of a given list of arguments. being in factor-mind, my first thought was to use `any?`. i wondered about using `member?` vs `any?`; they seemed to connote the same idea! indeed, `member?` is defined as `[ = ] with any?`. then though `[ { "-l" "-clear" "-ui" } member? ] any?` seems correct, it also seems oddly redundant to use a function nested inside a function of that function. then i realized that "any of x is member of y" is x∩y=∅, which is obviously symmetric (a proprety that i hadn't even considered when coding now), and is also flat, so i don't need to consider how to traverse, namely here being nesting order. its naïve runtime is constantly equal to its worst-case sensible runtime, both O(mn). the sensible version would stop once it's found a common element, and would know to halt there because of `∅ =`. the naïve version computes the intersection then compares it against ∅, which in sql is marked by the special symbol `exists`, so i should be able to safely assume that this optimization is done by any decent sql engine.
+
+anyway, intersect is fine here in factor, and i can use it here. factor and other non-relational languages don't have support for `join` nor query optimization, but at least they've set-theoretic operations. for few data they should be fine to freely use; for large data we can use a sqlite binding, relying on its query planner.
+
+it's cool that we can compute x∩y once then compare it against `x` or ∅ to determine whether any or all of x is in y. generally a function that partitions x & y into (x\y,x∩y,y\x) would be most useful because it's computed in O(n) (if x & y are commonly ordered) and expresses all needed relations of x & y.
+
+==== constraint solving
 
 a constraint solver is possible in sql just as in a logic language. however, sql works on literal values, not predicates which may represent infinities of values. to account for this, we must use ranges of values in sql. for all sets of ranges {(a,b)} ∃ min(a) & max(b). thus predicates like x≥4 can be expressed in a limited but useful capacity as [4,max(b)]. intervals may be considered as 1D boundaries. [a,b] generalizes to a subset of [a,b]×[c,d], etc. these are subsets of cartesian products—the very same definition as joins. thus the n-dimensional geometry model obviously corresponds to sql joins. of course we can take geometric intersections, which is the same as set intersection, which is available plainly in sql as `intersect`. aside from intersection obviously there's the shortest distance between two geometries.
 
 a really cool property of intersection & union is that they tend toward convergence or divergence—a nice interpretation of their dualism!
 
-.statistics
+==== statistics
 
 TODO
 
-.literature
+==== literature
 
 writing a nonfiction book, commonly a reference.
 
-.units
+==== encrypted password database
+
+NOTE: the official AES sqlite encryption extension is not free, licensed only. 
+
+===== the easy way
+
+to write to the db:
+
+. open & write a plaintext sqlite db in volatile memory by e.g. in linux, opening a file in `/dev/shm/creds.db`
+. open a text file in volatile memory (assumedly named `/dev/shm/inserts.sql`); put `insert into creds(service,user,pass,comments)` with plaintext values there. do not write the file yet, since if you do, then your sensitive creds will be readable by any running process!
+. in one line of script (for whichever script you use):
+  .. write `/dev/shm/inserts.sql`
+  .. `sqlite3 /dev/shm/creds.db '.read inserts'`. we use `.read` because sql statements entered interactively in the repl are stored in `~/.sqlite3_history`, and there's no way to prevent this (see _§the hard way_ below)
+  .. `gpg -er <your name> --output ~/creds.db /dev/shm/creds.db`
+  .. `rm /dev/shm/inserts.sql /dev/shm/creds.db`
+
+to read from the db, just decrypt to volatile memory then read from it as per the usual repl stuff (except that you can't use rlwrap because it disrupts gpg's tui password reader) then delete the decrypted file when you're done with it. it's actually most appropriate to do this all in a script instead of interactively so that the decrypted file doesn't exist any longer than it has to.
+
+this method's disadvantage is that plaintext data is ever stored in a manner where it's readable by other processes. that's insecure by principle, though that may not matter if you aren't a target and you're the sole user of your system.
+
+===== the hard way
+
+this achieves the ideal result—encrypting & decrypting only the concerned information—even if we need to pull teeth to achive it.
+
+====== the successful way
+
+====== unsuccessful methods
+
+to arrive at a working solution, i went through many failing solutions.
+
+.sqlite3_history
+
+the only way around it is non-interactive statement execution by `.read`. the history file is trouble because it makes sensitive commands available for reading by other processes. 
+
+* removing write permissions for `~/.sqlite3_history` causes sqlite3 to crash upon launch.
+* replacing `~.sqlite3_history` by a soft link to a location is in volatile memory fails: sqlite3 overwrites the link with a regular file, storing history there as usual.
+
+.scripts
+
+to prevent `ps` scraping attacks (or accidental `~.bash_history` &c attacks), we should avoid specifying sensitive data in command line strings.
+
+.sqlite, gpg, files, and data streams
+
+when `gpg` encrypts or decrypts, it always does so with output to a different file than its input, and `sqlite3` always reads from the same temp file that `edit` creates. aside from temporary files being insecure, they're a logistical pain, too, since sqlite3 & gpg don't compromise and have incompatible methods of reading & writing data; sqlite3 requires overwriting a file, which gpg doesn't support.
+
+`gpg -er <name> path > path` always leaves `path` an empty file, so that's no good.
+
+something like this is on the right track:
+
+[source,shell]
+----
+#!/bin/sh
+case "$1" in -e) out="$(gpg -er nic --output - "$2")" ;; -d) out="$(gpg -d "$2")" ;; esac
+----
+
+the only problem is how to write `out` to a file such that gpg decrypts it properly. i tried `echo -n "$out" > "$2"` but gpg gave an error when trying to decrypt. `printf` instead of `echo -n` gave a different error. both `cat > "$2" <<< "$out"` and `cat <<< "$out" > "$2"` apparently aren't even syntactically correct.
+
+so the solution is to use an actual programming language (like factor) instead of bash, or to use `--armor` so that encrypted data is text instead of a bitstring. i like bitstrings, since they generalize text and support more flexible, much terser encodings, so i'll try using factor instead of `--armor`:
+
+.gpghere.factor
+[source,factor]
+----
+----
+
+[source,sql]
+----
+create table creds(service text primary key, email blob, pass blob); -- text if using gpg's --armor option
+insert into creds values("whamazon"
+                        ,edit("secret username","gpg -er nic")
+                        ,edit("secret password","gpg -er nic"));
+----
+
+except that we can't use naked gpg since, thus we must write a wrapper script, which i'd suppose is:
+
+but it does not work. i tried `echo -n` and `printf`, each of which failed differently. i redirect gpg's output to stdout then store that in shell var `out` because , and we aren't storing large amounts of data anyway.
+
+NOTE: rlwrap makes gpg's cli password input ui fail
+
+so this all is pretty poor many reasons, none of which is necessary evil. there's a lesson somewhere in here.
+
+==== units
 
 [source,sql]
 ----
@@ -1118,7 +1318,7 @@ select 3*g,12*oz from to_mg;
 
 this sees using a table as a simple ad-hoc relation. obviously the symmetry constraint here restricts the table from holding expressions beyond mere literal values. such functionality would require first-class λ's or `eval` (see sql metaprogrammability section.)
 
-.merge with default value
+==== merge with default value
 
 [source,sql]
 ----
@@ -1137,7 +1337,7 @@ select y,case when z is null then 2000 else z end as z from x left join y on x.y
 └─────┴──────┘
 ----
 
-.get successive integer 
+==== get successive integer 
 
 we get the greatest integer in the table, or if the table is empty, then start with 10.
 
@@ -1149,7 +1349,7 @@ insert into x values(100);
 select case when count(id) > 0 then max(id)+1 else 10 end from x; -- 101
 ----
 
-.tic tac toe
+==== tic tac toe
 
 this example demonstrates many things about how to reason about relations. to start, the 3×3 grid will not be a table with 3 rows and 3 columns. think about how you'll check for a winner: you'll want to check each of the rows, and each of the columns (and each of the diagonals, too.) to check all of the columns, you'll want to use the same logic for each column, just a different column number. ah, there's one hint: we want column _numbers_; sql does not number columns. columns are fixed and must be addressed by name. rows, on the other hand, are arbitrary in number and are all treated the same. furthermore, we want code that generalizes non-verbosely to higher dimensions, say for _connect four_. x & y should be treated the same; thus we'll use `(x,y)` indices. x's & o's will be stored as -1 and 1 respectively; an empty cell is 0. this makes checking for winners easy: if the absolute value of the sum _s_ of a row, col, or diag is 3, then the winner is `sign(s)`.
 
@@ -1201,7 +1401,7 @@ so there you go: checking for winners in tic tac toe simply by 4 queries. maybe 
 
 we see that `group by` partitions by equality, which is analagous to the set of (sets each one of whose axes' value is fixed.)
 
-.select by day
+==== select by day
 
 [source,sql]
 ----
@@ -1210,7 +1410,7 @@ select * from tbl where strftime("%Y-%m-%d",date) = "2022-07-01";
 
 `date` may be a datetime or date string.
 
-.resample 1m candles into day candles (single day)
+==== resample 1m candles into day candles (single day)
 
 [source,sql]
 ----
@@ -1235,7 +1435,7 @@ the `join` is not done as a cartesian product, but instead should be interpreted
 
 NOTE: the datetime format requires leading zeroes for all values, e.g. day, hour, &al.
 
-.resample 1m candles into day candles (multiple days)
+==== resample 1m candles into day candles (multiple days)
 
 [source,sql]
 ----
@@ -1340,21 +1540,12 @@ insert into db2.table1 select * from main.table1 limit 1; -- table1 of file "db2
 
 see link:https://www.sqlite.org/lang_keywords.html[sqlite's documentation] on parsing quoted strings.
 
-=== csv to sqlite
-
-NOTE: sqlite has a csv virtual table plugin
-
-prefer using link:https://github.com/harelba/q[q] (not in nixpkgs,) which allows running sql on multiple csv files or sqlite databases.
-
-use package `csvs-to-sqlite`. you'll probably want to use options `pk`, `d` or `dt`, `i` whose arguments are the column names as in first row of csv file. if you use these options, then you'll need to run the command for each table that you want to add, unless the tables share common columns for which the options apply.
-
-it's likely in your best interest to add csvs as tables into a db, then use sql to create a new table, rather than doing this all at once programatically.
-
 === pragmas useful for implementing metaprogramming 
 
 usage notes:
 
-* all pragmas may be more usefully used as relations e.g. instead of `pragma table_info("t")`, use `select * from pragma_table_info("t")`.
+* all pragmas may be more usefully used as relations e.g. instead of `pragma table_info(t)`, use `select * from pragma_table_info('t')`.
+  ** the pragma version does not require table to be quoted
   ** any typo in a pragma will silently do nothing (e.g. `pragma table_infos("t")`); however, the virtual table form will fail appropriately if there's a typo *in the pragma name* e.g. `select * from pragma_table_infos("t")` will say "no such table pragma_table_infos." however, as the table name is just a string literal, if you give a table name that does not exist, then the empty relation will be returned.
 
 pragmas:
@@ -1528,11 +1719,13 @@ this section discusses using sqlite as an alternative to anything conceivable.
 * sqlar: sql archive format, alternative to `zip` &c
 * `sqlite3` works on zip archives, too, regardless of filename extension (works on e.g. odp files). see `cli.html#zipdb`.
 * pass query results to `fzf --preview 'sqlite3 db 'select * from t where x like "{}"'`. again, though, this is preferably done without opening & closing each time that the cursor moves. this quoting is horrible, btw.
+* store comic archives as sql dbs instead of rar, 7z, zip, or any other number of alternative formats
+* use sql db instead of filesystem
 
 ==== `sqlite3(1)`
 
 .useful dot commands
-|==============================================================================================================================================
+|======================================================================================================================================================
 | dot-command                                           | description
 | `.changes`                                            | sanity check mutative queries
 | `.headers`, `.separator`, & `.mode`                   | modify output (namely `list` and `csv` output)
@@ -1541,11 +1734,12 @@ this section discusses using sqlite as an alternative to anything conceivable.
 | `.trace`                                              | debug
 | `.indexes`, `.databases` & `.tables` (includes views) | see what of the db is queryable
 | `.recover`                                            |
-| `.output` & `.once`                                   | incrementally (in interactive prompt) or at once (in script) to a file
+| `.output` & `.once`                                   | write to file or pipe the repl's output (`.output`) or just the next query's output (`.once`)
 | `.read`                                               | read a file (or a proccess's output, when prefixed with `|`) of sqlite3(1) commands
 | `.import`                                             | create a relation by reading from supported formats^*^
-| `.dump`                                               | write a sql source code file that generates the currently-loaded db
-|==============================================================================================================================================
+| `.save`                                               | write in-memory db to a file
+| `.dump`                                               | write to stdout a sql source code that generates the currently-loaded db
+|======================================================================================================================================================
 
 ^*^see `.help import`. input format is specified by `.mode`, the output format, unless overridden by `--ascii` or `--csv`. *the latter allows importing csv files without `.load csv`*! this makes extremely easy the querying of a db, passing to an editor, modding only part of the output, then updating the db with new values.
 
@@ -1553,7 +1747,9 @@ the following in-repl extension functions are useful:
 
 * `readfile`. useful for inserting blobs into relations. you'll probably want to use `.cd` with this
 * `writefile` as an alternative to `.once`
-* `edit`. writes selected value to a temporary file, then passes its filepath to the given program *as the sole command line argument*; it does not pass the path via stdin!
+* `edit(expr,prog)`. (or if `prog` omitted then the `VISUAL` envar.) writes selected value to a temporary file, then passes its filepath to the given program *as the sole command line argument*; it does not pass the expression's value via stdin!
+
+NOTE: when i use `edit(expr,"kak")`, kakoune (running in `kitty(1)`, and with `sqlite3` launched from `rlwrap`) did not properly support keybinds involving the `alt` key after i'd exit insert mode via the `esc` key. before using `edit`, test your editor with it on innocuous data (e.g. `select edit("","your_editor")`) for any quirks! i think that, in my case, rlwrap was the only cause of erroneous editor behavior. also be aware if your editor always appends a newline to the file that it writes. this will make tabular output (e.g. `.mode box`) ugly. a simple fix is to write a small program that runs your editor on the file, then when the editor exits, the written file is trimmed.
 
 read the docs; `sqlite3` is enabled by its ability to interface with other programs or the environment.
 

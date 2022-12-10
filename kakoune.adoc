@@ -125,7 +125,7 @@ with selected lines, `<a-s`, then `<a-k>` with arg string `..` to keep lines wit
 ''''
 
 * |: pass selection to a program as stdin, then replace selection by that program's stdout
-    * <a-|>: same but discard stdout
+    * <a-|>: same but discard stdout instead of replacing selected content by stdout
 * $: | but if program exits non-0 then text under selection is removed from the buffer
 * ! and <a-!>: insert a progam's output before or after each selection
 

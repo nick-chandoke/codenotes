@@ -185,12 +185,10 @@ NOTE: binary logical operators work on variables, not data, and are actually rel
 
 what if all of the lang's syntax were strings, the above primitives, or numeric literals? there'd be no need to quote strings, and strings would be used as commonly as relalg attributes. quoting would be needed only if one of the primitives were used. ah, that's right! picolisp does this! and with a programs being so simply & canonically expressed, querying the code as a db would allow e.g. selecting all of the code related to other code, or tracing paths through code relations.
 
-all binary operations are generalized to sets e.g. logical and is _all_, logical or is _any_, logical xor is _any one_. these all are further generalized to a range that #p(x) must satisfy (_any_ is `#p(x)>0`, _all_ is `#p(x)=#`, xor is `#p(x)=1`), which is even further generalized to a predicate on count, thus supporting e.g. `#p(x)∈[3.5]` or `#|2`. TODO: what is predicate logic's analogue of `#`?
+all binary operations are generalized to sets e.g. logical and is _all_, logical or is _any_, logical xor is _any one_. these all are further generalized to a range that #p(x) must satisfy (_any_ is `#p(x)>0`, _all_ is `#p(x)=#`, xor is `#p(x)=1`), which is even further generalized to a predicate on count, thus supporting e.g. `#p(x)∈[3.5]` or `#|2`. TODO: what is predicate logic's analogue of `#`? this should generally be stated as "how are aggregates expressed by predicates?"
 
 
 NOTE: x∈S is generalized to {x)⊆S, and the latter is preferable in set theory or relational algebra because it uses two sets rather than one set and one "naked" element (two different types.) however, in predicate logic x⊆S is effectively `x t [ S ∈ ∧ ] reduce`.
-
-organizer: task(loc desc start end freq priority timecost). item(desc havecnt wantcnt usefreq cost priority). traveling salesman on taxicab metric. i need the above predicate system to support at least a relation's attribute being the predicate any e.g. `x or y or z`.
 
 NOTE: ideal lang should be tacit, stack logic lang e.g. supporting `π1 ∧ π2` instead of just `π1(x) ∧ π2(x)`.
 
@@ -332,3 +330,7 @@ rather than cons pairs, generalize to a structure with arrows car & cdr. definin
 this example uses only lists, not keeping separate state. the information needed to write the fn is contained in the single argument. that's not considerable! do not think of this as clever; it's just an encoding that does not explicitly bind to part of the information that we need; whether the information is given an identifier or not, or whether that information is only selected from the list or copied to another section of memory (e.g. a varibale or in a stack) is irrelevant!
 
 this example is here to encourage you to stop thinking about _data structures_ per se, but instead think in terms of selecting information patterns from a given object without regard to "cells" like data structures are usually assumed to have: a collection of relations of cells, like vertices in a graph (incl list, tree, &c.) instead, reason about information _parsers_—things that select information from a thing. *the information used should determine the structure; the structure should not be decided first.* this necessitates that all code is virtual, with implementation computed thereof. "cells" are a terrible woe; they encourage one to distinguish between `(values 5 6)`, `'(5 6)`, and `'(5 . 6)`, or an identifier varying over scope, which is utter nonsense, since *their information is equivalent*. information is all; all else is linguistic cruft. coders do only two things: 1. import & store information and 2. select information, both unambiguously (i.e. without information loss.) _information_ consists of: 1. literal data; 2. orientation/relation [patterns]. e.g. `6` is a literal data (not datum, because there's no plurality. consider it as a bitstring; now it's suddenly multiple! gasp, what magic!?), and _sequence_ is a relation pattern (namely orderd by an index permitting an order or by pred & succ pointers.)
+
+.repl
+
+a stack state repl would be very nice with relations.
