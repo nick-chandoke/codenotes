@@ -15,7 +15,7 @@ this section is for those who've already read the rest of this document.
 
 * types: scalars, row values, or relations of null (which i'll call ⊥ to reduce confusion about null's varied meanings in other contexts), integer, text, real, or blob (which i'll call bytes, short for bytestring, which obviously is similar to text). i define type str := bytes | text, and num := ℤ | ℝ.
   ** `0.0/0.0` gives `null`, not infinity. for positive & negative infinity, use the string `"+infinity"` or `"-infinity"` for an attribute typed as `real`. for literals: `cast("-infinity" as real)`.
-    *** because strings are ordinally superior to numbers, both `x < "infinity"` & `x < "-infinity"` are true for all `x`. `select substring(cast("-infinity" as real),0,6)` returns `0.0` whereas `select substring("-infinity",0,6)` returns `-infi`.
+    *** because strings are ordinally superior to numbers, both `x < "infinity"` & `x < "-infinity"` are true for all `x`. `select substr(cast("-infinity" as real),0,6)` returns `0.0` whereas `select substr("-infinity",0,6)` returns `-infi`.
     *** real literals vary with external language e.g. in racket scheme `(require db) (define c (sqlite3-connect #:database 'memory)) (values (query-value c "select 4<?" -inf.0) (query-value c "select 4<?" +inf.0))` gives `(values 0 1)`.
   ** see `floatingpoint.html`
 * colmns/attributes/axes, rows/attributes/points
@@ -35,8 +35,11 @@ this section is for those who've already read the rest of this document.
 * use `upsert` instead of `insert`, `update`, `replace`
 * recursive queries generalize literal relations just as horn clauses with symbols generalize horn clauses of only value literals. recursive queries are equivalent to horn clauses or functions. this power is of relating symbolic expressions. a recursive `select`'s expressions (of its many clauses) are related to the result of applying those expressions on the prior iteration; as in other reductionist langs, the expressions are transitively related by evaluating expressions on prior-output values.
 * sqlite can replace record editors such as awk. sqlite cannot be used for general text; for that, prefer `kak -f`
+* sql solves the control flow problem (forcing the programmer to identify correct nesting for loops) by join & array paradigm: just a single loop over pointwise-related data, a subset of the cartesian product of relations; and each datum in a relation is associated with other data in its row.
 
 helpful string functions:
+
+NOTE: `substr` & `instr` are 1-indexed, not 0-indexed
 
 * substring: `substr`, `ltrim`, `rtrim`, `trim`
 * index: `instr`
@@ -55,6 +58,7 @@ using sql with another language:
     *** ``insert``s with `replace`, `rollback`, or `fail`
     *** any mutation whose `where` predicate features an aggregate
 * *never* get rows from a db then use them in another db query; that should always be done in sql alone!
+* put all supported data into sql relations. for example, say i've a relation `vals(name text, value integer)`, and that i want to, for each `name`, pass `value` to a corresponding complex unary function defined in some other language. then i'll need to effectively join `vals` with a hash table of names to functions; or, more efficiently, store functions in an array where the order of indices matches the order of names: `zipWith (\value f -> f value) (query dbconn "select value from vals order by name") fns` or `map (\[name value] -> (hashref fns name) value) (query dbconn "select name, value from vals")`.
 
 the need for both `from` & `join` (syntax, not concept) is asymmetric. it can be framed as `from` accepting one table and `join: Table -> Table -> Table`, but it can also be framed as `join : Query -> Table -> Query`, acting on `from table`. 
 
@@ -1161,6 +1165,8 @@ since we're dealing with sets, we're really selecting a element, which may be ar
 
 ====== selecting multiple attributes of a common row per group
 
+TODO: why does `with t(name,age) as (values('tom',9),('terry',60),('betty',6),('brett',16),('brandon',20)) select name,max(age) from t group by substr(name,1,1);` give correct results? i thought that it'd return ('betty',20),('tom',60) because those're, per group, the first rows in the relation, each associated with the aggregate over the groups. yet somehow it's associated `name` with `substr(name,1,1)`.
+
 if you're selecting multiple items, then the above technique will not work. consider a variant of the above table:
 
 ┌──────┬────┬───┐
@@ -1251,15 +1257,33 @@ this method's disadvantage is that plaintext data is ever stored in a manner whe
 
 this achieves the ideal result—encrypting & decrypting only the concerned information—even if we need to pull teeth to achive it.
 
-====== the successful way
+====== the preferable solution
+
+use sqlite as a library, not the sqlite3(1) program; code a program that:
+
+. accepts sensitive plaintext from stdin
+. parses a text buffer of sensitive information, encrypts it via gpg, then inserts into a sqlite db by the sqlite library
+. accepts a simple syntax to select creds then decrypt them to stdout
+
+to create a secure credential db with a mix of plaintext and encrypted attributes:
+
+. decrypt current credential data into a text editor buffer
+. select each attribute to encrypt, then pass each to an invocation of `gpg -e`, and replace the input plaintext by the output ciphertext. this is done in kakoune simply by using multiple selection with `|gpg -e`.
+. write this file somewhere or otherwise pass the buffer content to a program that you'll write which parses the buffer into sql `insert` statements
+
+now you've a db! to insert or update any single credential (you'll assumedly do only one at a time), write a simple program that reads input data from stdin, then passes those data to `gpg -e`, then passes the ciphertext to sqlite via a wrapper api.
+
+printing the credentials to stdout is as simple as: `sqlite3 creds.db 'select edit(user,"factor -run=gpghere -d"),edit(pass,"factor -run=gpghere -d") from creds where service="whamazon"'`, for which you can make a shell alias or function, or your own small program to effectively execute this kind of statement.
 
 ====== unsuccessful methods
 
-to arrive at a working solution, i went through many failing solutions.
+only read this section, not executing its code nor writing the `gpghere` program; it'll ultimately not be used anyway.
+
+to arrive at a working solution, i went through many failing solutions, only eventually identifying a satisfactory one. the "lesson" here is that software often features unnecessary evil, but there's little that kakoune, sqlite, & factor together can't handle.
 
 .sqlite3_history
 
-the only way around it is non-interactive statement execution by `.read`. the history file is trouble because it makes sensitive commands available for reading by other processes. 
+the only way around it is non-interactive statement execution by `.read`, but even that does not work because it still requires a file or process that outputs bytes. the file option is unsatisfactory since other procs would be able to read that file. using with a process that produces insert statements turns-out to be unnecessary or redundant.
 
 * removing write permissions for `~/.sqlite3_history` causes sqlite3 to crash upon launch.
 * replacing `~.sqlite3_history` by a soft link to a location is in volatile memory fails: sqlite3 overwrites the link with a regular file, storing history there as usual.
@@ -1280,32 +1304,42 @@ something like this is on the right track:
 ----
 #!/bin/sh
 case "$1" in -e) out="$(gpg -er nic --output - "$2")" ;; -d) out="$(gpg -d "$2")" ;; esac
+# TODO: write "$out" to "$2" somehow
 ----
 
 the only problem is how to write `out` to a file such that gpg decrypts it properly. i tried `echo -n "$out" > "$2"` but gpg gave an error when trying to decrypt. `printf` instead of `echo -n` gave a different error. both `cat > "$2" <<< "$out"` and `cat <<< "$out" > "$2"` apparently aren't even syntactically correct.
 
-so the solution is to use an actual programming language (like factor) instead of bash, or to use `--armor` so that encrypted data is text instead of a bitstring. i like bitstrings, since they generalize text and support more flexible, much terser encodings, so i'll try using factor instead of `--armor`:
-
-.gpghere.factor
-[source,factor]
-----
-----
+so the solution is to use an actual programming language (like factor) instead of bash, or to use `--armor` so that encrypted data is text instead of a bitstring. i like bitstrings, since they generalize text and support more flexible, much terser encodings, so i'll try using factor instead of `--armor`. i'll call the factor program `gpghere` it's the same logic as the bash above but it actually overwrites the original file properly. we then can insert:
 
 [source,sql]
 ----
-create table creds(service text primary key, email blob, pass blob); -- text if using gpg's --armor option
+create table creds(service text primary key, user blob, pass blob);
 insert into creds values("whamazon"
-                        ,edit("secret username","gpg -er nic")
-                        ,edit("secret password","gpg -er nic"));
+                        ,edit("secret username","factor -run=gpghere -e")
+                        ,edit("secret password","factor -run=gpghere -e"));
 ----
 
-except that we can't use naked gpg since, thus we must write a wrapper script, which i'd suppose is:
-
-but it does not work. i tried `echo -n` and `printf`, each of which failed differently. i redirect gpg's output to stdout then store that in shell var `out` because , and we aren't storing large amounts of data anyway.
+and retrieve: `select edit(user,"factor -run=gpghere -d"),edit(pass,"factor -run=gpghere -d") from creds where service='whamazon'`.
 
 NOTE: rlwrap makes gpg's cli password input ui fail
 
-so this all is pretty poor many reasons, none of which is necessary evil. there's a lesson somewhere in here.
+though again, we want to avoid typing `insert` statements in the interactive repl, since that'd log them in the history file. if you already have a secure passwords file, then you'll need to decrypt it into a buffer, then individually encrypt each username, password, &c, inside the text editor buffer, by passing text to `gpg`, e.g. in kakoune, select text to encrypt, then enter `|gpg -er nic -o -` followed by `return`. you can make your text file of the form
+
+----
+service
+user
+pass
+note
+...
+
+service ...
+
+...
+----
+
+then write a simple factor program to parse it as bytes rather than text, and use factor's sqlite wrapper api to send insert statements directly in a loop. or you can do something else; this is the point where you can be creative and do whatever works. there are many options.
+
+lastly, as far as i can imagine, you'll need to enter multiple passwords only once; after you've your secure creds db, you'll either insert or update only one credential row at a time, though you may select multiple at a time, which is fine & easy. for example, i pay my credit cards to 4 banks at once, so i select the creds to all of them. i can simply add a relation attribute called `tag` then give the bank rows `tag='bank'`, then `select edit(user,"factor -run=gpghere -d"),edit(pass,"factor -run=gpghere -d") from creds where tag='bank';`. fortunately, like `sudo`, `gpg` asks us for a password only after some period of inactivity, so despite multiple attributes to decrypt, only the first will trigger the passphrase entry dialog. though selecting is easy and can be safely done in sqlite3 [non-]interactively, the inserts & updates must still be done in a text editor or some interactive program that accepts sensitive input in such a way that it's not output to a file nor part of the command line. reading from stdin is a simple solution! `gpg -e -` does not work well; however, it'd be easy to write a program that reads a from stdin until a line whose sole content is `EOF`, then pass that text to `gpg -e`, and then pass that to sqlite via a wrapper. thus we've arrived at a solution, but in the end, it's easiest to consolidate these methods into the single program that is the aforementioned, preferred solution.
 
 ==== units
 

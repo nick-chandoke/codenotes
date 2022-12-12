@@ -8,6 +8,8 @@ a/symmetry can be seen in a map (alist) vs the `map` function (one fn over all d
 
 it's best to write a usable yet slower tool that produces a faster version of the tool.
 
+why not combinators? they must be used in moderation. one musn't shoehorn their thinking into the particular models bulit of combinators, or even the structures that they operate on. it's a slippery slope, never immediately bad, but always eventually bad.
+
 .overview
 
 keywords: bound vs free, symmetric vs ad-hoc, axiom, algebra [universal algebra]/model & notation.

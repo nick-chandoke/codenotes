@@ -10,25 +10,11 @@ why does this error:
 
 [source,factor]
 ----
-USING:
-accessors ! >>command
-! arrays
-combinators
-command-line
-io ! write
-io.encodings.binary
-io.files
-io.launcher
-kernel
-namespaces ! get-global
-prettyprint ! .s
-sequences ! last
-;
-IN: gpghere
+USING: accessors combinators command-line io io.encodings.binary io.files io.launcher kernel namespaces prettyprint sequences ;
+IN: MODULE
 
 : main ( -- )
 <process> command-line get-global last ! sqlite tmp file path
-! good example of keep: don't affect stack, but store a value
 { "gpg" "-er" "nic" "--output" "-" } over suffix swap .s clear ! >>command binary <process-reader>
 ! binary [ write flush ] with-file-writer
 ; MAIN: main
@@ -51,15 +37,10 @@ IN: gpghere
 
 .when &c
 
-used for actions, except for `unless*`.
-
-* `a [ b ] unless*` means `a b or` but short-circuiting and accepts quotations rather than single values
-  ** or, more generally, `a b unless*` means `a b or` where `b` has effect `( -- x )` i.e. produces a value e.g. `x y [ dup ] unless*` leaves `x y` if `y` else `x x`
-* `? q when` means when `?`, _do_ `q`; `q` must have effect `( ..a -- ..a )` i.e. any fn from _n_ inputs to _n_ outputs
-  ** e.g. `10 dup even? [ 10 * ] when` pushes `100`; changing to `odd?` leaves `10` on the stack.
-  ** `unless` is `when` with negated condition e.g. `9 dup even? [ 10 * ] unless` produces `90`
-* `when*` is *not* like `fmap` for `Maybe`. `x q when*` means when `x`, do `q` to `x`, but q must consume a value (effect `( x -- )`), e.g. `print` (and not like `[ 1 + ]`)
-  ** e.g. `6 [ 10 * . ] when*` prints 60. changing `6` to `f` results in no effect
+* `p q when`: consume `p` and if `p` then `call` `q` else `drop` `q`. `p` is not passed to `q`; `when*` makes that so.
+  ** `unless` is the same but with `p not`
+  ** though these cannot leave new data on the stack, they can affect the stack by mutating things on the stack e.g. `dup empty? [ dup 0 swap [ 1 + ] change-nth ] unless` to increment the 1st element of a non-empty sequence.
+* `unless*` has a different stack effect than the others; the others leave the stack how it was; they can be used only for programs of effect ( -- ) or ( x -- ) for `when*`. `unless*` leaves a new datum atop the stack. this is because it retains [dups] the predicate before checking its falsity. `a [ b ] unless*` means `a b or` but short-circuiting and accepts quotations rather than single values, or, more generally, `a b unless*` means `a b or` where `b` has effect `( -- x )` i.e. produces a value e.g. `x y [ dup ] unless*` leaves `x y` if `y` else `x x`
 
 there's nothing like `Maybe`'s `fmap`. should there be? `: fmapMaybe ( ..a q: ( ..a x -- x ) -- y ) [ f ] if* ; inline`. would you ever want to preserve the `f`? certainly you may want to perform a mutation on the top of the stack if it's not `f`, and you may want to do that for multiple conditions. however, given that `fmap` leaves `f` if it starts with `f`, then one mutation occurring implies that the rest must also occur, and so they all can be combined into one mutation. therefore a more sensible word is one that operates on the stack unless its top is `f`, in which case the `f` is dropped: `[ ] if*`. however, this fails because the branches have different stack effects. `[ f ] if*` balances them, and is the definition of `fmapMaybe`. so it appears that we should have `fmapMaybe`. one must now choose between `fmapMaybe` and `when` depending on the stack effect. it'd be nice to have one word that drops a `f` value and one that consumes it and any other things. for example, the fact that we must code like the following is annoying:
 
@@ -168,7 +149,7 @@ the lesson is that `if` is the primitive selective evaluator and is perfectly si
 
 * `USE: <lib>` imports one lib. `USING: <lib> ... ;` imports many.
   ** *put space between last lib and `;`*
-* `FROM: vocab => word ...` disambiguates imported words. it overrides `USE:`/`USING:`, and can be used in lieu of those
+* `FROM: vocab => word ... ;` disambiguates imported words. it overrides `USE:`/`USING:`, and can be used in lieu of those
 * see `QUALIFIED:`, `FROM:`, `EXCLUDE:`, AND `RENAME:`, too.
 * module A may use module B even if B has errors, as long as A doesn't use any of B's words in which the errors exist
   ** or maybe not? perhaps _sometimes_....
@@ -396,6 +377,8 @@ primitive & tuple classes use >> & << (but not derived ones?)
 
 * `nth`: elem at index or error. `nths` is like mapping curried `nth`
 * `set-nth`. mutative, so whereas `CHAR: c 1 "-s" set-nth` leaves the stack empty, `"-s" CHAR: c 1 pick set-nth` leaves "-c" atop
+  ** `change-nth` may be preferable. like `set-nth`, it's mutative, so you need some odd `dup`'s e.g. `{ "CAT" } dup 0 swap [ dup CHAR: c 1 rot set-nth ] change-nth` leaves `{ "CcT" }` on the stack.
+    *** `swap over` ( a b -- b a b ) may be useful here
 * `?nth`: elem at index or `f`
 * `prefix`, `suffix`: adjoin at head or tail
   ** `prefix?` & `suffix?` are not defined; instead use `subseq-start 0 =` for `prefix?` and `[ subseq-start ] [ [ length ] bi@ swap - = ] 2bi` for `suffix?`
@@ -405,7 +388,7 @@ primitive & tuple classes use >> & << (but not derived ones?)
 * `concat`: concatenate elements of a sequence of sequences
 * `join`: intercalate then concat
 
-a complement of n-array (e.g. `2array`) &c is `match-cond`. see §_pattern matching_.
+there's no complement of n-array; however, `2array` &c has complements `first2` &c. `nths` pushes 1 sequence, not n elements, to the stack.
 
 example: find 1st element matching some predicates: `[ preds 1&& ] find nip` e.g. `{ "kak" "file" 36 41 } [ { [ number? ] [ even? ] } 1&& ] find nip` returns `36`.
 
@@ -441,7 +424,7 @@ to write amazing code, master the following: drop, dup, dip, swap; cleave[-curry
 * `dip`: pop, apply, push back
 * `x -rot` = `[ x ] 2dip`; think of `x y z -rot` as inserting `z` before `x y`
   ** think of `rot` as moving `x y z` in front of `z`. i personally can imagine more easily moving one object rather than rotating a sequence. so `rot` (non-negative `rot`) moves `x` forward; `-rot` moves `z` backward.
-* `q keep` = `dup q dip`
+* `q keep` = `dup q dip`. use `keep` when you've `x y` but want `f(x,y) y` e.g. `{ 0 1 } 4 [ suffix ] keep` leaves `{ 0 1 4 } 4`
 * `bi`,  `tri`,  `cleave`: apply many fns upon top elem
 * `bi*`, `tri*`, `spread`: apply pointwise fns upon data
 * `bi@`, `tri@`,  `apply`: apply one fn upon many data
@@ -794,6 +777,8 @@ NOTE: use `with-disposal`, or more likely, `with-<input|output>-stream`.
 * `obj run-process` is the simple synchronous execution of a cmdline string or array of strings.
 * `stream-contents` replaces the process on the stack with its output.
 * though `echo` supports `-e` to not output trailing newline, remember that we can trim trailing newline by `[ CHAR: \n = ] trim-tail`
+
+TODO: how to stream one process's output as input to another process, or stream to stdout? the trouble is that `<process-reader>` returns an input stream, but `write` takes only binary data or a string. do i need to read n bytes at a time from the input stream then `[stream-]write` that?
 
 ==== filesystem
 
