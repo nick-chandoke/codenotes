@@ -7,13 +7,177 @@ this document discusses sql as understood by sqlite, and its underlying model.
 * how to organize/encode data: relations are basically their headers. thus make a table for each shape. whatever data have a common shape belong in the same table.
 * is relalg easily expressed by linalg? can today's gpus already compute relalg programs easily?
 
+=== sql's advantages
+
+* `null` propogation, and there're no illegal operations; at worse, `null` is the result
+* makes purity obvious; `select` is pure; all other statements are not.
+* a sql program can be overviewed quickly by looking at table schemata
+* array lang
+  ** implicit `map`
+  ** plurality agnosticism
+    *** no `head`, `tail`, `find`, &c; anything can produce a set of any number of rows, including 0. there's no needless singular datum constraint e.g. that the head must be one element. if the data are a normal sequence, then that's implicitly true, but that's a property of our data and the perogative of whoever imports it, not of the code that processes it!
+* uses sets
+  ** rows and columns each are unordered (rather columns are ordered, but that's considerable only for `union [all]`, `intersect`, & `except`)
+  ** empty set, like `empty :: [a]`, generalizes `empty :: Maybe a`, and `where` (filter) generalizes `find`
+* simple & encapsulated scoping:
+  ** attributes are scoped within relations
+  ** attributes are put into query scope by `from` and `join`; *data structure determines syntax*. consider `select a+b*c from t` vs `map (\(a,b,c) -> a+b*c) t` (haskell, using pattern matching), or `map(lambda r: r.a+r.b*r.c,t)` (python, using object accessors), or `t [ first3 [ + ] dip * ] map` (factor). factor impressively resists needing to bind at all, but requires ordering. sql resists the need to bind because the binding is implied by the table whence we're selecting.
+* mutation-friendly. mutative programming is essential for bit twiddly state machines & implicit information
+* elegant model
+  ** algebraic, symmetric e.g. `head` must have an `if` branch, but `filter` does not. sql has only the latter. the only asymmetric operation in sql is the asymmetry primitive, `case when`, which makes asymmetry explicit.
+  ** clearly distinguishes symmetries and asymmetries 
+    *** join is pointwise relation
+  ** flat tables, mostly flat syntax
+  ** uses relations, which generalize hash tables, which generalize vectors or linked lists
+    *** cols & rows can be freely adjoined and selected
+  ** simple & terse queries, which improve on functions
+  ** changing return values might not affect queries that use the returned relations. with a function `find` that returns an index and value of an element matching a predicate: `select x+1 from s where p order by i limit 1` in sql, `s p find nip` in factor (`nip` to discard index), `(let-values (((_ i) (find p s))) (+ 1 i))` in scheme. in both factor & scheme we must know number of returned data even if we don't use them. this is true in lua, python,...because their *functions* return values in some order but the function does not decide the output names; that's ever done exclusively by bind clauses!
+    ** functional languages have an asymmetry: their functions specify their argument names, but the thing using the function specifies the names of the outputs. one could argue that otherwise may shadow excessively, e.g. `{ p1 p2 } [ xs swap find ] map` would output two `x`'s & `i`'s each. sql solves this by using `as`, so that we solve the shadowing problem only when it occurs. furthermore sql does not allow shadowing; all attributes must have distinct designations, even if they're like `t.a` & `s.a`.
+* efficient
+* triggers, for reactive programming (implicit, rule-defined control flow)
+
+the stack is nice because programs leave items on the stack for subsequent programs. this is also done in sql, however; queries may mutate tables, obviously leaving their mutated versions available for use by subsequent queries. so how good are combinators compared to sql?
+
+----
+-- compute account owner, their cash, and whether they are net positive:
+-- assume that these words are defined, the last 3 being implicitly defined by defining the `account` tuple
+: account>> ( account-number -- account has-margin-call? ) ... ;
+: cash>> ( account -- cash ) ... ;
+: debt>> ( account -- debt ) ... ;
+: owner>> ( account -- owner ) ... ;
+account>> drop [ owner>> ] [ cash>> dup ] [ debt>> ] tri@ > -- factor
+select owner,cash,debt,cash>0 from account                  -- sql
+----
+
+immediately we see the inferiority of combinators! `x qs cleave` works only on a single datum, `x`. yes, we redundantly used `cash` in sql, but it's less complex! complexity isn't worth brevity. good code strives to maximize independence across codes, encoding dependencies only to exploit implicit facts e.g. 1. sql triggers explicitly encode dependence; 2. that n%m as a logical value represents whether n/m has a remainder, and that multiplying that by another number does not change the logical value if the logical value is false; this is dependence (mutual information; see the statistics / information theory definition of _dependence_) of how 0 is used by multiplication, modular arithmetic, and logical values' encoding of truthiness.
+
+this being said, i wonder how `[ [ first ] bi@ < ] sort` is done elegantly in sql. it wholly depends on why one would want [to compare on] the `first` of something. supposing `{ { 10 "a" } { 3 "z" } { 6 "d" } } [ [ first ] bi@ < ] sort .`, in sql that's `select x,y from t sort by x`, which easily supports arbitrary subsetting, expression selection, optionally filtered aggregates, joining,....
+
+=== using sql with another language
+
+maybe i'll pick-up this discussion later, but i'm currently assuming lua as a fine solution.
+
+there are some things that sqlite cannot do, at least without adding extensions, namely os, fs, ipc, ports.
+
+and then there are things that are inelegant in sql, despite their algebraic elegance; the inelegance is due only to syntax. for example:
+
+[source,sql]
+----
+insert into mod select not exists (select * from (values("-clear"),("-ui"),("-f"),("-l"),("-c")) intersect select a from args union all select 1 from args where substr(a,1,2)="-c");
+insert into outcmd select * from args group by 1 having not mod;
+insert into outcmd select ? from args group by 1 having mod;
+----
+
+should read
+
+[source,sql]
+----
+mod=("-clear" "-ui" "-f" "-l" "-c") × a∈args + 1∈args|substr(a,1,2)="-c" ≠ 0; -- should be equivalent to #(("-clear" "-ui" "-f" "-l" "-c") × a∈args) + #(args|substr(a,1,2)="-c") > 0
+outcmd <- *∈args having not mod + ?∈args having mod; -- having works as a guard; we cannot use `where`
+----
+
+it can invoke command lines via `edit`, but that's available only within `sqlite(3)`. that being said, if you aren't using `sqlite3(1)` then you're using sqlite as a library from another language, and that language will assumedly have i/o, os, & filesystem capability.
+
+if one isn't going to write sqlite extensions in c for these capabilities, then we must decide which language to use with sqlite.
+
+.the needs
+
+* sqlite interface
+* easy to debug; any errors are obvious, and all error messages are helpful
+* interfaces with os, fs, hw access (e.g. graphics):
+  ** execute programs by a command line vector, pass stdin, and read from stdout
+    *** a/synchronous, bg or fg
+  ** open, read, & write with ports & sockets
+  ** access & modify envars alist
+* good support for byte streams & binstrs
+* not compiled
+* small
+* fast
+* simple
+* low-level
+* terse
+* easy to install/run
+* work natively with integers (*including bitwise operations*), reals, strings/sequences of characters, bytes, and general elements
+* does not force any structure upon the coder: not control flow, functions, nor data structures!
+* mutation-friendly
+
+.optional niceties
+
+* concurrency
+* c obj ffi
+* sequence ops? questionable.
+* some control flow? questionable.
+* easily available miscellaneous libraries
+* quoted programs or lambdas? terseness should obviate this condition.
+
+NEXT: basically we want interpreted c. lua pretty much fits the bill, though something faster would be nicer. factor is out because the stack is just such a pain. that being said,...there should be something to be discovered regarding the tacitness of factor, but we want some structures more visually descriptive than the stack. so how can we do tacit but...not tacit? and i want symbolic names sometimes, but ordinals other times, and i want the data to be arranged in varying structures depending on each situation. i'll have to explore coding in lua, c, factor, sql, assembly.
+
+definitely not using `let`; i'd rather mutate. scope...i'd like to use data structures to limit scope like in sql. no lexical scoping, 'cause that implies nesting! it makes scope easy to throw around, too. why did i end-up hating lua? the stack only helps when we're passing things to other things: composing reductionist programs, still a bunch of _arguments_.
+
+.ideal language
+
+basically a trimmed-down c, but with some few modifications:
+
+* asm-specific instructions
+* terse a.f.
+* only control flow is `while`
+* better scoping
+* no types; only amorphous structures defined by constraints and information content. encodings replace types.
+* no functions; all mutations. like sql, queries (subset selection & expressions) will be an alternative to fns.
+  ** so no recursion
+* no structs; relations only
+* all structures are iterated entirely; to do otherwise, subset them
+* only expressions may sometimes nest; thus the only delimiter is parentheses. mostly, though, programs are only sequences of mutations.
+* algebraic. all programs are numbers, mutations, sequences, constraints
+
+.the contenders
+
+* python/lua-like
+  ** go. not compiled, iirc.
+  ** lua. link:https://zadzmo.org/code/luadbi/wiki/[`luadbi-sqlite3`].
+    *** or nelua
+  ** nim. compiled?
+  ** v (hopefully not compiled)
+* factor
+* prolog
+* lisp/scheme  | targets    | supports sqlite?
+  ** kawa      | jvm        | should, via jvm
+  ** chicken   | c          | ✓
+  ** bigloo    | c, jvm, js | ✓
+  ** ypsilon   |            | ?
+  ** femtolisp |            | ?
+  ** lumen     | lua, js    | should, via lua
+
+.the winning hand
+
+* programs are overall understood at a glance. lua or lisp clearly beat factor here.
+* mutation-friendly: lua and some lisps win here. mutation in factor is inelegant!
+* factor & lua don't have excessive parens, so they're easy to edit without familiarity with modal editors. lisp clearly loses here.
+
+* control flow must be handled in some non-sql lang just to accomodate per-statement triggers and/or simple loops that feature i/o. for these two uses, a language other than sql is acceptable.
+  ** all sql mutations are idempotent except:
+    *** triggers using requiring `new.` & `old.`
+    *** ``insert``s with `replace`, `rollback`, or `fail`
+    *** any mutation whose `where` predicate features an aggregate
+* *never* get rows from a db then use them in another db query; that should always be done in sql alone!
+* put all supported data into sql relations. for example, say i've a relation `vals(name text, value integer)`, and that i want to, for each `name`, pass `value` to a corresponding complex unary function defined in some other language. then i'll need to effectively join `vals` with a hash table of names to functions; or, more efficiently, store functions in an array where the order of indices matches the order of names: `zipWith (\value f -> f value) (query dbconn "select value from vals order by name") fns` or `map (\[name value] -> (hashref fns name) value) (query dbconn "select name, value from vals")`.
+
+==== case study: command line processor
+
+i want to write `kakn`, which prompts the user for a session name if one isn't given. also, if trying to spawn a new session of a given name and that session exists, then it'll connect to the open session instead. it does nothing if the command line would run kak non-interactively.
+
+thus in short, we want to maybe modify the command line then execute it. the command line is a sequence, a constrained set.
+
 === sql technique
+
+NOTE: to write good code, one mustn't reason in terms of sql; they must reason in terms of algebra, namely group theory, then translate that to sql.
 
 ==== quickref
 
 this section is for those who've already read the rest of this document.
 
 * types: scalars, row values, or relations of null (which i'll call ⊥ to reduce confusion about null's varied meanings in other contexts), integer, text, real, or blob (which i'll call bytes, short for bytestring, which obviously is similar to text). i define type str := bytes | text, and num := ℤ | ℝ.
+  ** ``cast``ing strings/characters to integer tries to parse integers from the start of the string; to convert a character (or the 1st character of a string) to its codepoint, use the `unicode` function. the `char` function is its dual.
   ** `0.0/0.0` gives `null`, not infinity. for positive & negative infinity, use the string `"+infinity"` or `"-infinity"` for an attribute typed as `real`. for literals: `cast("-infinity" as real)`.
     *** because strings are ordinally superior to numbers, both `x < "infinity"` & `x < "-infinity"` are true for all `x`. `select substr(cast("-infinity" as real),0,6)` returns `0.0` whereas `select substr("-infinity",0,6)` returns `-infi`.
     *** real literals vary with external language e.g. in racket scheme `(require db) (define c (sqlite3-connect #:database 'memory)) (values (query-value c "select 4<?" -inf.0) (query-value c "select 4<?" +inf.0))` gives `(values 0 1)`.
@@ -49,16 +213,6 @@ NOTE: `substr` & `instr` are 1-indexed, not 0-indexed
 * `lower` & `upper` (load icu extension for non-ascii)
 * `replace`
 * the concatenation operator, `||`
-
-using sql with another language:
-
-* control flow must be handled in some non-sql lang just to accomodate per-statement triggers and/or simple loops that feature i/o. for these two uses, a language other than sql is acceptable.
-  ** all sql mutations are idempotent except:
-    *** ``update``s requiring `new.` & `old.`
-    *** ``insert``s with `replace`, `rollback`, or `fail`
-    *** any mutation whose `where` predicate features an aggregate
-* *never* get rows from a db then use them in another db query; that should always be done in sql alone!
-* put all supported data into sql relations. for example, say i've a relation `vals(name text, value integer)`, and that i want to, for each `name`, pass `value` to a corresponding complex unary function defined in some other language. then i'll need to effectively join `vals` with a hash table of names to functions; or, more efficiently, store functions in an array where the order of indices matches the order of names: `zipWith (\value f -> f value) (query dbconn "select value from vals order by name") fns` or `map (\[name value] -> (hashref fns name) value) (query dbconn "select name, value from vals")`.
 
 the need for both `from` & `join` (syntax, not concept) is asymmetric. it can be framed as `from` accepting one table and `join: Table -> Table -> Table`, but it can also be framed as `join : Query -> Table -> Query`, acting on `from table`. 
 
@@ -135,6 +289,7 @@ to conclude i answer the recently posed question: to most elegantly express horn
 * `update` (not talking about `update from` here) expects a row value on the rhs
   ** `update t set a=x,(b,c)=(select ...) where ...` works
 * `<rowv> in <rel>` tests whether a row value is a member of a relation. `<scalar> in <rowv>` works, too.
+  ** `x in y` tests whether `x` is an element of `y` ; `in` does not compute whether any `x` is in `y`; for that you must use `intersect` e.g. `select (x,y,z) in t` is incorrect; `select exists (select * from (values(x),(y),(z)) intersect select * from t);` is correct
   ** given that other binops work on row values, `in` should be parameterized by a binop; then we'd have `any` instead of `in`
 * wrt an `order by` clause, when a relation is not a multiset, then rows can be indices; use them instead of `offset` because that's more efficient
 * use row values in a predicate clause instead of `and` or `or` e.g. `where (x,y) between (0,10) and (3,100)`
@@ -175,7 +330,7 @@ obvious ones like datum literals or operators/functions thereon aren't here enum
 
 see best-paradigms-lang.adoc. `where` is implicit in predicate logic; it's the same as predicate unification/evaluation. the `expression` grammar's `[not] in` subgrammar is set membership/intersection, which is is equivalent to testing against a predicate. therefore `a in b` = `exists a where b` = `exists a intersect b` except that `a where b` is incorrect in sql since therein `b` must be a relation which sql considers distinct from a predicate; however, theoretically, by predicate-set correspondence, the three are equivalent. in sql we'd need to unify sets & predicates by saying `exists a intersect select * from b where b`. the equivalence can be seen by `a [not] in b` (or `a like b` &al) being set membership if `a` is a row value and `b` a relation, or set intersection if both `a` & `b` are relations. *however, `[not] in` has one characteristic: it also accepts a scalar lhs with a row value rhs. this is a blatant asymmetry in how sql considers groups of data.* the symmetric solution would be if scalar were equal to a row value with a single datum and a row value equal to a relation with one row. indeed, this would imply that a scalar equal a singleton, single-attribute relation, which _is_ true almost always, but not in `[not] in` and perhaps in some few other contexts.
 
-sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed in predicate logic as (∨,∧,¬,⊥). one of sql's troubles is that it is not symmetric; it considers predicates distinctly from sets, and sometimes considers elements distinctly from sets. also, though this model seems appropriate, one must be careful to distinguish between expressions that act per row vs aggregates, which act per relation, for logical reasons, even though they're of the same grammar, both accepting expressions as inputs and returning a relation/expression as an output. also, and again usefully so, `null` is the empty row value whereas an empty relation is an empty set. `null` has short-circuiting/null-propogation semantics whereas an empty set is the identity for union but a short-circuiting operator for `intersect`. these semantics can be a bit confusing, but they are elegant!
+sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed in predicate logic as (∨,∧,¬,⊥). 0 & `null` are `falsy`. `coalesce` is coproduct on `null`. one of sql's troubles is that it is not symmetric; it considers predicates distinctly from sets, and sometimes considers elements distinctly from sets. also, though this model seems appropriate, one must be careful to distinguish between expressions that act per row vs aggregates, which act per relation, for logical reasons, even though they're of the same grammar, both accepting expressions as inputs and returning a relation/expression as an output. also, and again usefully so, `null` is the empty row value whereas an empty relation is an empty set. `null` has short-circuiting/null-propogation semantics whereas an empty set is the identity for union but a short-circuiting operator for `intersect`. these semantics can be a bit confusing, but they are elegant!
 
 * `where`/`between` (these use indexes)
 * `join` (or `where` [filter] & `union`) (general filter)
@@ -186,8 +341,10 @@ sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed i
 ==== select
 
 * `from` merely binds symbols for the query
-* `where` & `having` are both the same concept—"such that"—but one is applied to row values and the other to groups of row values. if sql were more symmetric, then `having` should apply to the whole query (the single group) just like aggregates do. however, most people would consider that more like a guard [list monad].
+* `where` & `having` are both the same concept—"such that"—but one is applied to row values and the other to groups of row values.
   ** if the expression supplied to `having` is an aggregate, then it's run over the group's rows. if it's non-aggregate, then it's applied to an arbitrary row of the group.
+  ** to use `having` "without" `group by`, use `group by 1`
+  ** `having` efficiently & elegantly effectively optionally executes a query by using either a result set or the empty set
 * `where` is scoped to all expressions following `select` e.g. `select 4 as x where x%2=0;` is valid
 * `where`'s expression cannot use aggregates. this leads to the unfortunate workaround of duplicating majority of queries in a `with` clause e.g. `with ml(ml) as (select max(length(body)) from docs where title="trailing stops") select * from docs,ml where title="trailing stops" and length(body)=ml;`. for _selection_ we can `order by length(body) limit 1`, but that does not work if we want to update or delete a row with a most extreme attribute value. i wonder if there's a better solution, perhaps using `group by` & `having`?
 * `group by`, `having`, and `window` support [window] aggregate functions, what would be expressed in an ml-style lang as `map (foldl1 f) . filter p2 . partition p1`
@@ -321,6 +478,68 @@ NOTE: that `case when` is short-circuiting is a bit concerning; it makes me doub
 
 recall that general branchless form is Σ[(p,x)]p×x, where `p` are [expressions that evaluate to] logical values (0 or 1) and `x` are associated values. re-expressed by ring isomorphism, that's ⋃ [(p,x)∈R] (p∩x). again, though, this is not quite appropriate; the logical version, ⋁ p∧x, is, but the set version isn't because p∩x where `p` is a logical value is actually `select x from R where p`. generally ⋃ [x∈S] p(x) is equivalent to {x∈S|p(x)}, which is always a subset of S. X ∩ Y also always produces a subset of both X and Y, so this is how intersecting a predicate with a set p∩X is a re-expression of {x∈X|p(y)}∩X, which is always a subset of X. in summary, `select x from R where p` is equivalent to `cond` [lisp] that returns multiple values where `R` is an alist. to add an else value `y`, use `select x from R union all values(y) where p limit 1`. like in factor, sql can return multiple values by returning a relation of multiple attributes. this shows `limit` as a sub__sequence__ operator, unusual in a _set_-based language.
 
+====== conditionality with `having` instead of `where`
+
+pseudocode: `if any of {"-clear" "-ui" "-f" "-l"} are in args or any in args starts with "-c" then outcmd = outcmd ++ args`, or in haskell as `if any (flip elem ["-clear","-ui","-f","-l"]) args || any (isPrefixOf "-c") args then outcmd ++ args else args`, is thusly expressed in sql:
+
+[source,sql]
+----
+insert into outcmd select * from args group by 1 having exists (select * from (values('-clear'),('-ui'),('-f'),('-l')) intersect select a from args union all select 1 from args where substr(a,1,2)='-c');
+----
+
+* exploits that inserting an empty table is equivalent to no insert statement at all
+* `having` requires that we use `group by`. `group by 1` is a dummy grouping; it assigns a single group number to all rows.
+* coproduct `union all` acts as boolean `or`
+* `substr(a,1,2)='-c'` is the sql version of "`a` has prefix `'-c'`". unlike in most langs, this is safe because out of bounds indices make `substr` return `null`, causing the whole expression to be `null`, which is falsy. if we can't get an appropriate substring then obviously `'-c'` isn't a prefix of `a`, so the result is naturally correct.
+
+the logical value is evaluated only once because there's only one group. `insert [or replace]` is a mutative alternative to `union [all]`.
+
+alternatively i could have used numbers instead of rows:
+
+[source,sql]
+----
+select count(*) from (values('-clear'),('-ui'),('-f'),('-s')) intersect select a from args union all select 1 from args where substr(a,1,2)='-c';
+----
+
+actually, that does not work! strangely it returns empty, even when using `*` instead of `count(*)` is non-empty!
+
+TODO: what's the deal with that?
+
+enclosing the query in parens then selecting `count(*)` from it works, though:
+
+[source,sql]
+----
+select count(*) from (select * from (values('-clear'),('-ui'),('-f'),('-s')) intersect select a from args union all select 1 from args where substr(a,1,2)='-c');
+----
+
+anyway, i'd expect that `exists` stops evaluation after one row has been found, whereas `count` should evaluate all rows before comparing its result to 0.
+
+btw, more on the oddness: suppose that
+
+also, you must be careful to union correctly! `select count(*) from (values(2)) intersect values(1),(2) union all values(3);` outputs
+
+┌──────────┐
+│ count(*) │
+├──────────┤
+│ 1        │
+│ 3        │
+└──────────┘
+
+the correct form to get the count of the union is `select count(*) from (select * from (values(2)) intersect values(1),(2) union all values(3));`. remember that sql requires `select` before each `compound-operator`! `exists` does not have this problem because it deals only with rows independently of their values—including whether their values are `null`.
+
+NOTE: it's better to store general values in a table then test emptiness, rather than put emptiness logical values into a table. this design is natural with the empty set being 0, and operations on zero always producing 0.
+
+====== conditionality with coproduct
+
+generally conditionality is handled with product & coproduct. properties of empty values:
+
+. they're the coproduct identity
+. that operation other than coproduct results in an empty value
+
+example: `/` and `*` with zero produce 0 or `null`. `-` is `+` in disguise, which is coproduct. `&` with 0 always produces 0. `|` with zero may produce non-zero things. in the boolean ring, `&` is product and `|` is coproduct. obviously any operation on `null` evaluates to `null`. `coalesce` is a coproduct, equivalent to generalized `or`. it even operates on `nulL`.
+
+these coproducts allow certain encodings of Σpx, which we can use to get corresponding values by using `join`. of course, the easy way is to `select val from p join x using (i) where p`, so i wonder where one would want to use other coproducts. to be determined, i suppose!
+
 ==== state machines & mutation
 
 * `changes()` tells the number of rows modified by the last `delete`, `update`, or `insert` statement.
@@ -347,7 +566,7 @@ NOTE: scoping is a concern in sql queries, e.g. how a table alias (by `as`) is u
 
 as an ending aside, note that a side-effect of data-only programming is that all computation is delayed, since all computations are only data until explicitly passed to `eval`.
 
-NOTE: the need for lambdas in `update` clauses is covered by old.attr & new.attr. see the sqlite docs for `update`.
+NOTE: the need for lambdas in `update` clauses is covered by updating on triggers with old.attr & new.attr, or "update from".
 
 === functions
 
@@ -1383,6 +1602,19 @@ insert into x values(100);
 select case when count(id) > 0 then max(id)+1 else 10 end from x; -- 101
 ----
 
+==== fixed point of a function
+
+suppose that we want to find the fixed value of a unary function `f`. we'll find it by using an initial value `i`. in c this is `a=i;b=f(i);while(a!=b){a=b;b=f(b);}`. translated to sql, and supposing that f=`(/3)`:
+
+[source,sql]
+----
+with t(a,b) as (select 100,100/3 union all select b,b/3 from t where a <> b) select a from t order by row_number() over (rows current row) desc limit 1;
+----
+
+there are other ways to get the last row, such as `... select a from t limit 1 offset (select count(*)-1 from t);` or putting an incrementer variable in `t` and selecting `i+1` then ordering descending with limit 1,...and probably some other techniques, too, but i think that the row number is the most elegant.
+
+the loop body is akin to bit shifting right or pushing into a ring buffer.
+
 ==== tic tac toe
 
 this example demonstrates many things about how to reason about relations. to start, the 3×3 grid will not be a table with 3 rows and 3 columns. think about how you'll check for a winner: you'll want to check each of the rows, and each of the columns (and each of the diagonals, too.) to check all of the columns, you'll want to use the same logic for each column, just a different column number. ah, there's one hint: we want column _numbers_; sql does not number columns. columns are fixed and must be addressed by name. rows, on the other hand, are arbitrary in number and are all treated the same. furthermore, we want code that generalizes non-verbosely to higher dimensions, say for _connect four_. x & y should be treated the same; thus we'll use `(x,y)` indices. x's & o's will be stored as -1 and 1 respectively; an empty cell is 0. this makes checking for winners easy: if the absolute value of the sum _s_ of a row, col, or diag is 3, then the winner is `sign(s)`.
@@ -1434,6 +1666,25 @@ select * from grid group by y having abs(sum(v))=3;
 so there you go: checking for winners in tic tac toe simply by 4 queries. maybe it can be syntactically shorter, but this is a good encoding of the game's rules: you win if you cross any row, column, or diagonal.
 
 we see that `group by` partitions by equality, which is analagous to the set of (sets each one of whose axes' value is fixed.)
+
+==== insert at index
+
+TODO: find a solution. try incrementing the highest-index items first where they're greater than the insertion index.
+
+here we'll insert `"mythings"` into `{ "kak" "-s" "mysession" "things" "filename" }` at index 4 (1-indexed), producing `{ "kak" "-s" "mysession" "things" "filename" }`.
+
+[source,sql]
+----
+create table args(i integer primary key autoincrement, a text);
+insert into args(a) values('kak'),('-s'),('mysession'),('filename');
+update args set i=newi from (select row_number() over (order by i rows current row) as newi, i as oldi, a from (select 2*i as i,a from args union all values(2*3+1,'things')) order by i) where i=oldi;
+----
+
+and it doesn't even work; sqlite complains about uniqueness constraint violation. indeed, we'd need to set them altogether; setting one at a time will violate uniqueness.
+
+with linked lists we can add at index easily by replacing old pointers by new ones, but we still can't efficiently get linked lists' values by index anyway. vectors don't support insertion at an index at all. in the lisp linked list model, we'd split at an index then append lists. the c version is O(n) but the lisp version is O(n) + whatever the runtime of `append` is.
+
+one sort-of solution is to do O(1) inserts and when you're finally actually concerned with the sequence items in order, sort the list.
 
 ==== select by day
 

@@ -6,6 +6,18 @@
 * cf link:https://forth-standard.org/[forth] viz wrt efficiency
 * check-out vocabs: `models`
 
+=== usability
+
+better than app.prog but still inferior to sql because sql is symmetric and implicit, whereas the stack relates all elements to each other, positionally. chunks of code are not cleanly separated into statements like they are in sql.
+
+factor improves on app langs by using the stack instead of `let` clauses, which nest and lack ordinal position which connotes when they'll be used (items near the top of the stack being used now.) it's nice to see a factor stack reduce, the elegance of data being _left_ on the stack for use by subsequent words. but we coders must still position words correctly. rather than defining a _set_ of edges, we must sequence mutations ourselves, and the stack's elegance really isn't so great when we're doing remotely complex control flow, such as: suppose that three data top the stack; then there's a `cond` block where one or two of the data optionally mutate the third. fortunately factor supports `locals` syntax, ... but that's really less elegant than sql.
+
+fortunately factor can use sql for great computations, and comes with easy-to-use has set-theoretic functions. yet one must always be careful to limit themselves to these functions, not being guided to factor's default designs of plurality-dependent operations, things like `find` instead of `filter`, or nesting looping words.
+
+factor programs can be difficult to overview; being able to overview them depends on naming words well. this is stylistic and not difficult, but also can't be done systematically and there's no natural solution to this; the ways to do this well are quite arbitrary.
+
+''''
+
 why does this error:
 
 [source,factor]

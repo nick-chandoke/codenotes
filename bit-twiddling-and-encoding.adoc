@@ -17,15 +17,123 @@ why?
 
 .conventions, terms, and other notes
 
-* 2's complement is assumed
+* 2's complement is assumed unless otherwise noted
 * _word_ always means machine word, not natural language word
 * for bits, 1 may be called _set_, and 0 _unset_
 * _bits_ is short for _bitstring_ i.e. a bit vector. because any bits can be split into many, _bits_ means a bitstring or a string of bitstrings, recursively.
   ** _bits_ is plurality-agnostic
 
+=== numbers, sets, and sequences (they're all the same!)
+
+numbers are no different from sets (and thus no different from sequences, since sequences are merely a specific variety of set). both may be considered as amorphous blobs, or any number of structures may simultaneously be considered of them. for example, the number `6` has several interpretations i.e. is an encoding of several informations, some of which are:
+
+. not zero (truthy)
+. {2 3} (prime factors)
+. 0b110 (a sequence of 3 booleans, or one boolean and a number on [0,3])
+. a number less than 10
+. the rational 12/2 (thus a compression scheme that reduces two numbers into one)
+. 4×1+2 i.e. 4r2 (one unit of 4 with a remainder of 2 i.e. a single period of measure 4 plus one half that period i.e. 1.5×4.)
+
+generalization of numbers: 𝔹 ⊂ ℤ ⊂ ℚ ⊂ ℝ ⊂ ℂ ⊂ ℍ .... it's incorrect to say that any integer is a single datum but that a complex number a 2-sequence of data, because an integer is an n-ary sequence of bits. now truly the bit _is_ the smallest unit of information. anyway, clearly if integers can encode such a variety of information, then rationals, complexes, &c can encode very much more!
+
+these are no different from sets. both have product, coproduct, subset. breaking a number into other smaller numbers then selecting one of those numbers is an example of subset selection. numbers support many unions; bitwise `or` is a union that applies to integers (and even to IEEE754 floats, if you're a real stud like the developers of  quake [game] were (viz fast inverse square root)), just as `+` is coproduct. they're coproducts of different rings, but a number can be interpreted by many rings, simultaneously or not.
+
+all numbers permit orders. so do all sets, at least regarding programming, since the sets are, as all things are, comprised ultimately of bitstrings, which are numbers. the pertinent question, regardless of set vs number, is whether any natural ordering is useful, or whether we instead need to introduce our own ordering scheme, independently encoded from the natual one (i.e. variance of values across the the natural one's axis does not vary values along the introduced one. this brings to mind partial derivative invariance.)
+
+with common thought, _set_ or _sequence_ refers to a _data structure_—an encoding where each datum is stored in its own cell. these structures are far too limited and their excessive & artificial partitioning often fails to encode any natural relationships among the data. they all have their own construction & traversal, places where they're suited or not, regarding elegance or efficiency. the foolishness of them is that they're all artificial; rather than use numbers, which can naturally encode so much information, people decided to treat numbers as mere values (as though numbers or other natural values are as unrelated as pie and books) and design their own encodings of structure. spoiler alert: humans did a worse job at structuring than nature. as usual, it's better to study natural structure than try to make our own. _succinct data structures_ are a nice example of storing information without needless partitioning. i can't say how natural they are, but they're at least a step in a good direction.
+
+==== vote strings for the de facto sequence type
+
+every language should have a _de facto_ sequence type. in lua, it's the string or table. in sql, it's the string or relation. in lisp, it's the list [stack], but that's a bad choice because lists cannot be easily & efficiently manipulated. consider that elements of a list can be expressed as a space-delimited sequence of uids. if we can efficiently manipulate strings but not linked lists, then a string representation is better; the string representation is converted to literal data when the literal data are needed; this may be a conversion of any subset of the sequence. lisp lists support nesting, but strings, like relations, do not. again, instead of nesting, we use `join` or reference by index e.g. in sql or lua `'1 2 3'` represents a permutation of table with keys/attributes having values 1 2, & 3. many languages feature pattern matching on structures but not on strings; if ever done for strings, it's usually in some quite different parser framework. why the asymmetry? aren't strings powerful enough? they may represent numbers of any radix, and generally generalize bitstrings, being able to encode an exceptional amount of value per character. a string of characters belonging to an alphabet of cardinality _n_ contains information equivalent to a number of radix _n_. though strings of arbitrary encoding are always representable by bitstrings, the partitioning (character size i.e. number of bits per character, e.g. 64 in UTF8, 128 in UTF16. remember that the utf number is bytes, not bits) can be quite useful, just as hexadecimal (4 bits per character) is a useful interpretation of bitstrings. any hexadecimal string is guaranteed to have n×4 bits. this helps with string alignment for bitwise manipulations. for example, we may consider hex and octal together; each hex character is 4 bits and each octal is 3. they align at 12 bits, or 4 octal / 3 hex. i can't now see how that'd be useful; in fact, quite the opposite, since that's such poor alignment compared to e.g. 2 base-4 & 1 hex.
+
+* c is one language where strings are represented as static arrays of characters, and characters are equivalent to integers. good symmetry! unfortunately it's a poor structure for manipulation. lua stores strings as ropes, so they support all sequence operations easily & efficiently. it also stores all strings as bytestrings. it's a very elegant bytestr/charstr model.
+* one can use strings or bits to express regrouping i.e. that a counter has passed a threshold, representing that a program has reached a certain point in execution. indeed, one can have a large bitstring that represents the current control flow point (or multiple), and mutating this is easier than updating a stack to track state.
+* regex is extremely powerful for strings. there is no reason to limit their use to text! use them for bytes (if your regex engine supports it, e.g. lua's), and sequences of _anything_, even if manipulating that sequence is done by manipulating a virtual string representation of the sequnece!
+* using strings as an encoding for sequences, we see that `gsub` (replace substrings matching a regex) is `filter-map`, assuming that `gsub` accepts a unary string endomorphism λ (such as in lua).
+* remember that sequences can be used as [multi]sets. this is easiest if `insert` & `update` are unified into `put`
+
+in summary: all encodings are sequenced; just ask whether we can leverage that or if we must introduce new independent information. all things support subset and adjoin. even a single bit supports subset: 1→{1}, 0→∅. obviously the bit supports adjoin: 0+1→1, 1+1→1. in the case of the bit, `+` & `&` are identical, or rather `+` is truncated/filtered from ℤ to the set {0,1}. in this case, `min` & `max` are the filters. is this use of _filter_ different from filtering a set by a predicate? you decide, but i suggest "no." indeed, to write `min` or `max` in c, you'd use a ternary expression—a convenient encoding of `if`. the predicates' information is inside the definition of `min` & `max`, namely `<`. btw, though they've the same predicate, each chooses a different input, together corresponding to the two branches of `if`.
+
+obviously bitstrings, being sequences, support:
+
+. adjoin = interleave (at arbitrary indices, not necessarily every other index) (append is a specific version)
+. subset = subsequence (substring is a specific version)
+. mutation by bitwise ops
+
+=== in/dependence [of information]
+
+so why do people prefer data structures? perhaps it's that bit twiddling / information theory / the art of encoding was never popular, or fell out of popularity, and seems less obvious than data structures. certainly anyone, without knowledge of encodings, number theory, or even intermediate mathematics, can understand a list, graph, tree, &c. i think that people like to consider data separately, too. it's easier. the price paid, however, is less elegant and more verbose code—more steps needed to relate data & keep them in scope. furthermore, independence is clean; we can consider one thing at a time. that's appreciable. indeed, dependence is terser and _can_ be more elegant, but things like factor use dependence (adding or removing an item on the stack affects other items' stack position) in a way that trades readability and ease of reasoning & writing programs for terseness, and it's not a worthwhile trade! this is not a fault of dependence, but of poor dependence. *good programming carefully relates data or not.* as prolog and relational algebra represent, programs are only relations & values, matter & form. *dependence of information is just as important as independence. code elegance is the balance of the two.*
+
+the ideal program uses relations that either "constructively" interfere or do not interfere. for example, if i want to simultaneously consider a number as both a non-zero number and a boolean value, then i'm in luck: i can perform any operation (endomorphism) on the number without affecting whether it's a boolean or not. however, if i want to simultaneously encode a boolean value and a number which may be zero, then i need to make these data independent; otherwise an operation may take a number from non-zero to zero, but that's a truthy zero, not a falsy value. the obvious solution in the data structurist mindset is to use a cons pair where `car` is a boolean value and `cdr` a numerical one. that satisfies the need for independence, but are there other encodings that also do that, but are more elegant? for example, in haskell we may use a duple; duples have categorical type class instances, so the ordering of boolean and number can change our code's elegance!
+
+bitstrings are usually not helpful for describing recursive structures. consider a linked list. its length is unknown and partitioning into cells is its very use. the only possible gain by concatenating bitstrings is that it _might_ make window functions easier to write, but even that is an imprementation-specific benefit; they're the same at the level of theoretical abstraction. however, bitstrings are only useful for describing _particular_ structures. this is really true of any strings whose certain intervals connote certain values, though. anyway, loops over alists can elegantly set variables. suppose that data x, y, and z are encoded in a bitstring at substring ranges [1,4],[5,7],[8,12]. then i can get the constituent parts of 0b10111,001,1010 (2970):
+
+[source,sql]
+----
+with n(n) as (values(2970)), s(var,i,l) as (values('x',1,4),('y',5,3),('z',8,5)) select var,(n>>(i-1)) & ((2<<(l-1))-1) as val from s,n;
+----
+
+┌─────┬─────┐
+│ var │ val │
+├─────┼─────┤
+│ x   │ 10  │
+│ y   │ 1   │
+│ z   │ 23  │
+└─────┴─────┘
+
+the `-1`'s show the difference between my preferred representation of bit substrings and the actual arithmetic. also, and i'm not a fan of tracking order of operations, but we can remove most of the parens: `n >> i-1 & (2 << l-1) - 1`. turns-out that subtraction has higher precedence than bitshit. given this example, can't say i'm disappointed with that!
+
+NOTE: bitstrings are not used by sql! they must be converted to relations before being usable with the relational algebra! since sqlite is already efficient, just use relations directly. still, bitstrings are useful in other languages. the above sql statement easily converts to a loop that populates a hash map in any language.
+
+=== domains & transforms
+
+the domain of your values determines its maximum information content. the number of bits needed to encode _n_ values is ⌈log₂n⌉. your encoding should support your program's preimage & image, and transforms on the encoding should appropriately preserve information or not.
+
+=== exploitation of relations
+
+remembering that functions generalize to relations, we see that, in the immediately-prior duple/ordering example, the categorical type class methods, being functions, are thus relations. they relate data to an im/proper subset of the duple. the question, as always, is which information is retained in the output, and whether it's enough for us to calculate the original inputs, if need be. *we want each particular relation/mutation to implicitly affect other information while preserving other information [invariants].* handling this manually is tedious, error-prone, and uncessary (soon). coding a constraint system to identify most efficient encodings given a set of invariants and domains should be at least as easy as coding μKaren, which is only 39 lines of scheme, though it might require a bit of knowledge of number or information theory.
+
+=== list of common encodings
+
+per relation, here listed are transforms and their domains and which information they preserve or not. though most encodings are tailored, they're commonly composed of some common patterns.
+
+* adding an extra bit doubles the number of values supported. this corresponds to (<<1)=(*2). the common example is where an extra bit accounts for sign
+
+=== particular encoding examples
+
+==== stock
+
+this example demonstrates: 1. reducing domain to practical preimage; 2. efficient utilization of extra values by modular arithmetic. by _extra values_ i mean those describable by a bitstring of a given length but not in the set of ordinarily valid values encoded by the bitstring; to encode n values i need ⌈log₂n⌉ bits, implying 2^n^-(1+n) extra values.
+
+say i'll invest some percent of my cash into a given stock. that's a real [number] value. however, though i may invest 50% in it, or 33%, or 25%, or maybe even 10%, i don't think that i care about investments less than 10%, and nor do i care about my investment amount being in increments any finer than 10%. thus my investment amount is an integer n ∈ [-10,10]. that's 10 values plus a bit for sign i.e. 19 values (since 0 & -0 are equal); i need 5 bits to encode it. 5 bits gives 32 values. since i'm using only 19, i can assign special meaning to some 32-19=13 values. can i combine m & n into o such that i can break o into m & n i.e. can i losslessly compress m & n into a single value o? yes, but i need an interesting transform. `with t(a) as (select * from generate_series(0,32)) select a/19,a%19 from t` produces:
+
+┌──────┬──────┐
+│ a/19 │ a%19 │
+├──────┼──────┤
+│ 0    │ 0    │
+│ 0    │ 1    │
+│ 0    │ 2    │
+│ ⋮    │ ⋮    │
+│ 0    │ 18   │
+│ 1    │ 0    │
+│ 1    │ 1    │
+│ 1    │ 2    │
+│ ⋮    │ ⋮    │
+│ 1    │ 13   │
+└──────┴──────┘
+
+one column has two unique values, and the other has 19 unique ones. the combination of these two data describes all 32 values. however, i must keep these data separate in order to do that. this means using a bit for the first column, and ⌈log₂18⌉=5 bits for the second. that means a total of 6 bits to encode two values n∈[0,10] and m∈[0,13]. add an extra sign bit for n, and our total is 7 bits. not bad; that's 2 bits a better compression than storing the numbers separately, which would be ⌈log₂19⌉+⌈log₂13⌉=5+4=9 bits. through the magic of modular arithmetic, we made two bits disappear!
+
+there's probably at least off-by-one error in this example, but whatever. the idea is valid regardless.
+
+notes:
+
+* this example would have been much easier and more boring if we'd rounded down 10 values to 7, which is neatly described by a 3-bit substring. all of the bytes' possible values would be reserved for that one variable, so we'd need to use other, independent bits for other variables. in other words, we wouldn't be overloading bits.
+* when using a sign bit, you can decide whether -0=0 or not; you may choose for 0 to be 0, but interpret -0 as a flag e.g. if 0 corresponds to closing a position at market price, then -0 may connote closing by a market-on-close order.
+
 === bit twiddler's mindset
 
-often bit twiddling, like assembly, is considered difficult to manage; this simply means that a good notation hasn't been chosen. it may be difficult or arduous to identify compression schemes then apply them. sure, but doing either by hand is silly; automate it. the only part to do manually is the part that actually requires the programmer! namely, that task is identifying relevant information; given any naïve idea/concept/datum, just identify the considerable attributes and the relevant sets of which they're members; mapping any domain to {0,1}ⁿ (isomorphic with the more general form, dⁿ where d is a digit of a given radix) is easy. after that, allow the computer to use algebraic rules (see below) to auto-compress and arrange your data conformant to the program-defining predicates (the program _spec_) that you provide.
+often bit twiddling, like assembly, is considered difficult to manage; this simply means that a good notation hasn't been chosen. bitstrings or hexstrings are not amenable to humans! (solution: blinkenlights. see below.) it may be difficult or arduous to identify compression schemes then apply them. sure, but doing either by hand is silly; automate it. the only part to do manually is the part that actually requires the programmer! namely, that task is identifying relevant information; given any naïve idea/concept/datum, just identify the considerable attributes and the relevant sets of which they're members; mapping any domain to {0,1}ⁿ (isomorphic with the more general form, dⁿ where d is a digit of a given radix) is easy. after that, allow the computer to use algebraic rules (see below) to auto-compress and arrange your data conformant to the program-defining predicates (the program _spec_) that you provide.
 
 the bit twiddle model forces programmers or designers to consider their data's properties, such as any datum's properties' e.g. mutual information or any of a datum's attribute's mathematical properties e.g. symmetry, closure, or associativity. this is very good; one must consider why they're using some assumedly useful data, or interpretations thereof, and the nature of the data [type]: how it behaves / can be manipulated, and how it can be interpreted, and, surprisingly importantly, the amount of redundant information of any interpretation.
 
