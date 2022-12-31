@@ -1,6 +1,29 @@
 == best paradigms lang
 
-this document is supposed to be a terse spec of the ideal programming language.
+this document is supposed to be a terse spec of the ideal programming language. it's changed greatly since discoveries about sql and the relationship among [text|byte]strings, numbers, sequences, and sets.
+
+* built on (+,×,-,0,1,/,⊥):
+  ** `+` (coproduct) is addition, binary or, sequence append, or set union. to accomodate such variety, we'll either use ad-hoc poly, or eschew data types altogether, instead replacing all data (individual datums) with _information_ (mass noun); each "object" represented by syntax is actually a collection of facts whose internal representation is most efficiently solved for by an engine. i'm on the cusp of outright asserting that it's fallacious to suggest that any data tyes are different from any others. perhaps even the concept of _algebra_ is faulty, and that true information manipulation should be non-algebraic, but instead follow some different calculus. indeed, i want each information content to have a unique representation; *never should two inequal things have the same information content!*
+    *** identity is always denoted by `0`, which may represent that integer/boolean, or ∅ or () (empty seq)
+  ** `-` is inverse. it's a unary transform but maybe for convenience i'll enable it as its usual binary form, where a-b is a shortcut for a+(-b)
+  ** `×` is product. it distributes over coproduct
+    ** identity is `1`
+    ** ∀a.a×0→0
+  ** `⊥` is a short-circuiting empty value, like `Nothing` in haskell or `null` in sql; any operation concerning ⊥, except for special yet-unnamed predicate corresponding to `is null`, yields ⊥
+  ** `/` is division & remainder, the two coproducts of ×. it represents partitioning.
+
+i won't dwaddle on symbolic notation since i ideally want all glyphs to be dynamically generated (see bit-twiddling§blinkenlights) anyway.
+
+i still need a primitive for subset/selection, which is always by predicate.
+
+TODO: should i have ⊥? (×0) seems to also short-circuit. perhaps ⊥ should correspond to failure, which begets backtracking. that seems like a separate model from this algebraic one, though.
+TODO: consider co/product wrt adts
+TODO: how can both `/` & `+` be dual of `×`?
+TODO: how can `+` denote direct sum, disjoint union, and union?
+
+should short-circuiting be done by a construct rather than by a symbol, like list monad guards as the special construct and common logical values as the part supplied by the coder? likely so.
+
+''''
 
 _program_ [noun] is not a useful term/concept. forget the term _language_, too. say _coding_ instead; `code` entails encoding [of information] and denies the fallacious code vs data dichotomy. whether a relation is about a universally quantified symbol or a particular literal value determines the ad-hoc or symmetric aspects of the relation e.g. `thing(i,v), in(i,0,4)` to mean `{(i,v) | i∈[0,4]}`. remember that these are predicates, though! the predicates set of implied values are not computed until queried. relations are like edges in a graph (symbols <-> vertices.) computations are traversals of (paths through) these graphs. btw, predicates are the most general abstract structure, and graphs are the most general data structure. *coders should never deal with data structures; they should deal exclusively with abstract structures.* this rule does not apply to those implementing logic engines. coders should never to deal with details beyond a program's spec; that's the optimizer's business!
 
@@ -18,7 +41,7 @@ to code:
   .. using interpretations allows pure structure to remain alone, open to study and interpretation. it's equivalent to duck typing but considering it as _information extraction_ biases the coder's mind better.
 . specify constraints then see implications. this is enabled b/c the empty predicate [logic/symbolic programming] is everything whereas the empty value [reductionism] is nothing.
 
-programs must be virtual/abstract, not reductions. think logic programming: symbols are literal math symbols, not just placeholders for literal values. everything is relations. a relation can have multiple indexes. transforms should be preserved, not applied; programs must be accumulations of constraints, not sequenced mutations on values e.g.
+programs must be virtual/abstract, not reductions. both sql and prolog do this: in prolog (generally in logic programming), symbols are literal math symbols, not just placeholders for literal values. all code is relations. a relation can have multiple indexes. sql uses query planners to arrange semantic elements into efficient programs. transforms should be preserved, not applied; programs must be accumulations of constraints, not sequenced mutations on values e.g.
 
 * `x=x` is immediately known as tautology and reduced to `t` because that's a terser, lossless encoding of equivalent information
 * `swap swap` reduces to the identify function

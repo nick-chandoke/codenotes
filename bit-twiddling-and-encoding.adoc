@@ -1,19 +1,76 @@
 == bit twiddling, and encoding
 
+.hash maps vs tree maps for natural & speedy lookup
+
+* a hash whose result is a memory address would be fastest.
+* digitstrings are ordered,...
+  ** so if they encode all data, then they can always be stored in a treemap.
+    *** like in sql, they may use values that are keys in other maps, rather than using pointers, though pointers _can_ be used also; the encoding would simply decide by a prefix or other predicate whether a value represents a pointer or something else.
+  ** and permit multiple orders. we can start using multiple orders by using the sql index mechanism.
+
+.treemap parsers
+
+if we're going to generally use parsers for everything everywhere, then it should be efficient by one design so that we can use that one thing unthinkingly, freely. let's not use linear search through parsers. most parsers are defined as functions, and so cannot be computed over, and so lookup keys cannot be derived from them, though each can be paired with a lookup key by some relation like using a composite parser as `[(key,parser)]` rather than just `[parser]`. however, then, by most definitions of _parser_, a composite parser would not be a parser. the mere fact that parsers are functions means that we can't get metadata from them; functions only morphisms are from given inputs to outputs, not supporting morphisms independent of the function's inputs or outputs.
+
+consider an i18n parser. it reads the 1st 2 characters of a string which represent a country code, then looks-up that code in a dictionary. a linear search would be foolish; a binary search is fastest and obvious. the parser must know that the country codes are ordered. again, with everything as dstrs, this is obviously guaranteed, but still. the fact that any parser may fail, causing "backtracking" to the next parser to try remains the same.
+
+.parsers, maps, and relations
+
+screw maps; prefer relations, though even a relation is merely an unordered set of data at common indices. so really screw maps and relations! sequences suffice. the sequences must support fast lookup, namely binary search, though i've yet to compare with hash tables or other structures. however the sequence is stored, it must support fast find/replace, which can get subsequences, delete by replacing with an empty value, or insert a substring; replacing /^/ or /$/ by a string are prepend and append respectively,
+
+"lookup" is just sql's `select`. indeed, since we aren't using data structures _per se_, _select_ is a more appropriate term. even _subset_ is not quiet appropriate because we're dealing with information, which is plurality-agnostic and does not recognize the dichotomy of elements vs sets. information is more general than sets.
+
+.conclusion
+
+certainly our language must not use functions, instead only being parsers, defined solely of find/replace. rather than hash tables or any structure containing actual _values_, they contain pointers to values; hash tables are thus merely an indexing mechanism, not a storage mechanism; data are stored in ram, which is O(1) access. we only need to know which data to access. tables are relations, which are relations of indices. this being said, we still need efficient find/replace.
+
+TODO: study hash and string search algorithms e.g. rabin-karp, and succinct structures.
+
+''''
+
+6 groups, a, b, c, d, e, & f, are related as subsets: f={a,e,b={c,d}}. if we give groups integer unique ids, then we can represent a=1,b=,c=,d=,e=,f=0. f's elements are given by: {x|x>f} or {x|x!=uid(f)} (though this implies that c & d are in f, which may or may not be what you want). TODO: finish this example by identifying uids in ℤ for which predicates exist satisfying the subset relations.
+
+TODO: explore cellular (individual agents whose action (including death) depends on their surrounding context, namely their relation among other agents) string programming.
+TODO: manipulating bitstrings by bitwise ops is currently inelegantly expressed in most langs. how is it in various assembly langs, though? e.g. toggling bits i~j by shifting an i-length string to the right j bits then xoring. it isn't bad, but it's verbose, error-prone (`&` & `|` are easily confused, and offsets may be incorrectly specified), and detailed beyond the actual code; it concerns the implementation, not just the idea. besides, bitstrings should be treated uniformly as all other strings (i.e. numbers, digit/elt sequences), right? if so, then i should identify a good notation for it all; if not, then why the asymmetry?
+TODO: put the following section where it belongs.
+
+recall that all programs simply identify information then pass them to arithmetic functions. generally subset identification is done by predicates, though commonly the predicate is `x==y`, though more generally `x ∈ Y`, or most generally `p(x)`. the subsets may be of form `a` (find), `[a]` (filter), `[[a]]` (group by), &c, subset selection is `group by` aka `partition`; partition is done by equivalence classes, and is of form `a -> [[a]]`; if one wants one subset, then they use a predicate that partitions into the desired group and others which are not concerned in the current computation.
+
+one may suggest that partition is division, and that we should consider union/append (+), intersection (×), difference (-), and relating subsets e.g. join, inner or outer products, cartesian product, `rotate` which can be interpreted as remapping indices i.e. mutating relation of indices with values, and is a specific variety of *permutation*. however:
+
+. a+b is just saying that a & b belong to a common group. union can be represented as appending strings, but can be encoded by other means also. for example 'abc' + 'def' = 'abcdef' works, as does 'abc' -> '1abc', 'def' -> '1def' where equality on the leading number determines group. the information added by `a+b` is grouping `a` & `b` together.
+. a×b & a-b both just identify subsets of `a`
+. relating elements is just saying that they belong to a common group
+  .. `join` in sql is its own concept within the relational algebra; it has no single, natural generalization beyond relalg
+
+`group by` still applies to substrings—even overlapping ones. consider a string with multiple groupings:
+
+----
+abcdecgba -- string
+123453621 -- group 1; groups are determined by equal group number
+1234abcdA -- group 2: substrings' order is done by codepoint order. grouping is done by x∈[0-9] or x∈[a-z] or x∈[A-Z]
+----
+
+generally we can encode more information per string element by sharing indices with other strings or by appending e.g. to store two characters per element, for elements 'ab', 'cd', & 'ef':
+
+----
+'abcdef' -- one string; with len=2, substring(s,len×n+1,len×n+n) when indexing from 1
+-- two strings; to get nth element, get nth element from each of the two strings
+'acd'
+'bdf'
+----
+
+a program's output is always just an action or subset or aggregate thereof in a pretty encoding. computation of aggregates may be delayed until the aggregate value needs to be related to some other value. element in/dependence has a lot to do with optimization! it determines when whole sets must be stored (e.g. sorting a set requires the whole set but `[ 1 + ] map` may consider only one element at a time) and which operations may be done in parallel.
+
+so, given an infoblob, you want to identify relations among elements. with those relations you can compute things. two common failures of programming are 1. needlessly discarding information, and 2. combining (operations over sets) rather than combining operations then applying them over sets. subset is a variety of this; often subsets are not just identified, but copied; that is a _huge_ inefficiency! ironically both copying & deleting are done far more frequently than appropriate; practically never does either need to be done! rather than delete from a set, just blacklist it from a traversal. without deleting, there's no need to copy; copying just preserves information that would otherwise be lost. so just don't lose it! this is a case of two needless competing opposites. not only can aggregates (folds) be commonly delayed, but also maps or any operations. perhaps there may or may not be a reason to delay any computation, but the fact of _whether it can_ be delayed crucially determines how we can optimize our program by restructuring!
+
+TODO: identify which relations force computation. `max` does not require sorting, though it's equal to `sort 1 last`. but what about `sort n last`? by symmetry, shouldn't that not require sorting? what essential quality of the information needed by `n last` requires sorted data? perhaps only operations that require looping more than once over forcing computation i.e. that the operation is element-wise, but that the elements aren't computed yet; in `sort 1 last`, the one element to take already exists. in `sort n last`, regardless of whether we sort first then take `n` vs if we sort until we have the 5 max elements, both cases require looping more than once. this being said, the latter version is more efficient! it seems that the cardinality of the subset to be identified (i.e. the amount of information content) determines how much of any computation must be done. in this case, the minimal information that we must know in order to get the top 5 is the max of a set, then the max of that set minus its max, ...; thus we compute the aggregate `max` 5 times. given that `max` is O(n), we do not need to sort the set in order to get the top _n_ elements; yet this version of top _m_ elts has O(mn). compare this with quicksort's average O(nlog(n)). our version is clearly better for m<<n. however, quicksort lends itself to parallelization, which can be a very large speedup, and leaves the whole set sorted, which, if used later in the program, may as well be computed now. suppose m=10 and n=10,000. ours runs in 100,000 operations whereas quicksort would be 92,000 on average. clearly the 100k version considers information redundantly whereas quicksort does not. comparing of sorting algorithms by considering how their structuring of data exploits implication of facts or computations without needing to subset or rearrange; what info do they preserve, and how do they exploit statistics to get a most-likely good performance? remember that probabilistic programming is closely related to information theory!
+
+''''
+
+_devise encoding schemes, write parsers._ this document discusses programming by using only strings related implicitly by indices. arbitrary relations are expressed by strings implicitly related by indices, too: the map `[(a,b),(c,d)]` is represented by strings `'ac'` & `'bd'`. strings support subset (substr), union (++), and find/filter, and so can act as sets. they are sequences; they order elements, relatiing elements to their neighbors or to other elements by patterns on indices. for example, we can store two strings `'abc'` & `'def'` as a single string ``adbecf'`; the two contained strings are not extracted as substrings, but subsequences: `subseq(s,i|2)`. `|2` partitions the string, and generalizes to `f:substr→ℤ` where each unique z∈ℤ uniquely identifies a group. i choose `f` to act on a substring(i,j) instead of just an element `i` because a single item in a string may not contain enough information, and the generalization is easy. generally we need substrings & efficient random access in order to decode strings with practical efficiency.
+
 using an enum/number enforces mutual exclusivity. consider `(or a b)`; the first non-falsy is chosen; however, `a ∧ b` may be true. if you want to help ensure that `a xor b` is true, then have a single number called. why integers? most types work; we need for all elements of the type to be unique. integers are a good choice because they obey that property, and are machine words, and support bit twiddling. the point of this pattern is doing `case x v1: ...; v2 ...; ...` instead of `cond`, since `x` must have exactly one value, whereas `cond` statements, while more general (i.e. supporting general predicates instead of mere equality), must be carefully ordered, and may be not mutually exclusive.
-
-why?
-
-. fun like number theory, which it practically _is_, but in binary
-. keeps programmers familiar with information theory, which all programmers should know intimately
-. efficient:
-  .. bitwise ops are single-cycle
-  .. elementary arithmetic uses few cycles
-  .. word is the physical unit of memory
-  .. bitwise (and simd) ops parallel: `a&b` = `(map and a b)`
-  .. opcodes are inline; no jumping
-. flexible: boolean/integer duality
-. all systems support this variety of data, including direct support by ISAs
 
 .conventions, terms, and other notes
 
@@ -42,12 +99,14 @@ all numbers permit orders. so do all sets, at least regarding programming, since
 
 with common thought, _set_ or _sequence_ refers to a _data structure_—an encoding where each datum is stored in its own cell. these structures are far too limited and their excessive & artificial partitioning often fails to encode any natural relationships among the data. they all have their own construction & traversal, places where they're suited or not, regarding elegance or efficiency. the foolishness of them is that they're all artificial; rather than use numbers, which can naturally encode so much information, people decided to treat numbers as mere values (as though numbers or other natural values are as unrelated as pie and books) and design their own encodings of structure. spoiler alert: humans did a worse job at structuring than nature. as usual, it's better to study natural structure than try to make our own. _succinct data structures_ are a nice example of storing information without needless partitioning. i can't say how natural they are, but they're at least a step in a good direction.
 
-==== vote strings for the de facto sequence type
+==== vote strings for the _de facto_ sequence type
+
+basically numbers are bitstrings, and strings as usually considered are strings of characters, and each character corresponds to a number, so all strings are bitstrings. since numbers are all that are used by a processor, they're the only data type, but they're bitstrings, so bit is actually the only data type, and it's not even just a data type; it's the unit of information. therefore bitstrings are the only data ever, and they're sequences of bits. therefore numbers and strings are the same, both bitstrings. as for sets, they're merely structures that have efficient lookup by value, contrasting with sequences, which have efficient lookup by index. therefore sequences, `[(i,v)]`, are isomorphic to the implementation of sets `{v}`; firstly, everything must be ordered when represented anywhere, even if the order is irrelevant, so `{v}` is really literally `[v]`. the index is missing but contains the same information as the relations that structure the set in such the way that it efficiently implements set operations; the _structure_ part of _data structures_ can be expressed by strings, because they are implicitly indexed, and arbitrary relations can be encoded by index permutations e.g. `[(a,e),(c,e),(b,f),(a,d)]` is given by strings `'abc'` & `'def'` and index/association permutation string `'12,32,23,11'`. other relations may be specified on 'abc' & 'def' without affecting them nor requiring restructuring.
 
 every language should have a _de facto_ sequence type. in lua, it's the string or table. in sql, it's the string or relation. in lisp, it's the list [stack], but that's a bad choice because lists cannot be easily & efficiently manipulated. consider that elements of a list can be expressed as a space-delimited sequence of uids. if we can efficiently manipulate strings but not linked lists, then a string representation is better; the string representation is converted to literal data when the literal data are needed; this may be a conversion of any subset of the sequence. lisp lists support nesting, but strings, like relations, do not. again, instead of nesting, we use `join` or reference by index e.g. in sql or lua `'1 2 3'` represents a permutation of table with keys/attributes having values 1 2, & 3. many languages feature pattern matching on structures but not on strings; if ever done for strings, it's usually in some quite different parser framework. why the asymmetry? aren't strings powerful enough? they may represent numbers of any radix, and generally generalize bitstrings, being able to encode an exceptional amount of value per character. a string of characters belonging to an alphabet of cardinality _n_ contains information equivalent to a number of radix _n_. though strings of arbitrary encoding are always representable by bitstrings, the partitioning (character size i.e. number of bits per character, e.g. 64 in UTF8, 128 in UTF16. remember that the utf number is bytes, not bits) can be quite useful, just as hexadecimal (4 bits per character) is a useful interpretation of bitstrings. any hexadecimal string is guaranteed to have n×4 bits. this helps with string alignment for bitwise manipulations. for example, we may consider hex and octal together; each hex character is 4 bits and each octal is 3. they align at 12 bits, or 4 octal / 3 hex. i can't now see how that'd be useful; in fact, quite the opposite, since that's such poor alignment compared to e.g. 2 base-4 & 1 hex.
 
 * c is one language where strings are represented as static arrays of characters, and characters are equivalent to integers. good symmetry! unfortunately it's a poor structure for manipulation. lua stores strings as ropes, so they support all sequence operations easily & efficiently. it also stores all strings as bytestrings. it's a very elegant bytestr/charstr model.
-* one can use strings or bits to express regrouping i.e. that a counter has passed a threshold, representing that a program has reached a certain point in execution. indeed, one can have a large bitstring that represents the current control flow point (or multiple), and mutating this is easier than updating a stack to track state.
+* one can use strings or bits to express regrouping i.e. that a counter has passed a threshold, e.g. representing that a program has reached a certain point in execution or that some condition is thus implicitly met. indeed, one can have a large bitstring that represents the current control flow point (or multiple), and mutating this is easier than updating a stack to track state.
 * regex is extremely powerful for strings. there is no reason to limit their use to text! use them for bytes (if your regex engine supports it, e.g. lua's), and sequences of _anything_, even if manipulating that sequence is done by manipulating a virtual string representation of the sequnece!
 * using strings as an encoding for sequences, we see that `gsub` (replace substrings matching a regex) is `filter-map`, assuming that `gsub` accepts a unary string endomorphism λ (such as in lua).
 * remember that sequences can be used as [multi]sets. this is easiest if `insert` & `update` are unified into `put`
@@ -59,6 +118,14 @@ obviously bitstrings, being sequences, support:
 . adjoin = interleave (at arbitrary indices, not necessarily every other index) (append is a specific version)
 . subset = subsequence (substring is a specific version)
 . mutation by bitwise ops
+
+consider this iteration over the string `'hello'`, which expresses a sliding window of size 3: `local s = 'hello' for i=1,#s do print(string.sub(s,math.max(i-1,0),math.min(#s,i+1))) end`. neither `map` nor `fold` handles windows well; substring does, though. zippers do, but only for simple situations. `substring` is plainly implemented as jumping to the index (pointer offset) `i` then using `n` elements subsequent of and including the one at `i`. thus `substring` exactly represents sql's `between` or `limit/offset` constructs, and adding iteration (here a `for` loop) transforms that into a window function. the only difference between `between` & `limit/offset` is that one controls input and the other controls output.
+
+suppose the string `'apple\36banana\2cherry garcia\50'`. this encodes an alist of type `[(string,integer)]`: each string is `/[[:alpha:]]+/` associated with a value in [0,50]. we can search this string for a number or text by the regex `[a-z]+` or `[\0-\50]`, both by lua function `string.find`. in fact, we can combine and specify these regexes to find any pair, sequence of pairs, or even the pair following an integer value in a given range (regex `'[a-b][a-z]+[\0-\50]'` where `a` & `b` are numbers.) you can use `string.gsub` instead of `string.find` to filter the list for all such values. to print each of the 1st column on its own line: `print(string.gsub(s,'[\0-\50]','\x0a'))`. by this scheme, the 2nd column of the alist values can store any number in [0,96], since 97 is the codepoint for 'a'. that's not limiting, though; to store more data, just allow delimiters to be `[\0-96\]+`; now they can store an arbitrary amount of information as a base-96 number. no recursive traversal. no recursive data structure. no nesting. no separation of data, `map`, `filter`, `fst` nor `snd`. just `find` & `gsub`—functions supported by all languages, even easily written in assembly for any architecture. this scheme does not support getting the 1st col val from a 2nd col val unless the strings are bound to some maximum length.
+
+we can associate such an alist with another of (actually, any number of) the same scheme by implicit index.
+
+strings like this can encode programs; in such cases, they're practically custom bytecode schemes, and you'll need to write (simple) interpreters in whatever language is to execute them. it's far easier to use bytecode than to write your own human-readable (e)dsl.
 
 === in/dependence [of information]
 
@@ -98,6 +165,9 @@ remembering that functions generalize to relations, we see that, in the immediat
 per relation, here listed are transforms and their domains and which information they preserve or not. though most encodings are tailored, they're commonly composed of some common patterns.
 
 * adding an extra bit doubles the number of values supported. this corresponds to (<<1)=(*2). the common example is where an extra bit accounts for sign
+* ordering represents layers e.g. [2,4],[5,7] represents 2 layers. being in the upper layer implies that you're above the max value of the lower layer. layers are given by orders and can thus simply be expressed by strings.
+* cheap approximation e.g. linearization or using a simple (measure of information content) relation then (e.g. binary search or quicksort, which start with 2 large, imprecise sets then increases precision)
+* convenient relative values e.g. to represent numbers 1036 and 940 you may say that the max is 1036 which needs 11 bits, so use 11 bits for both. however, if we express them in terms of their minimum, then you need 7 bits for 1036 and 0 bits for 940. a very terse expression for numbers of large ranges is an assumed base and a small number for exponent e.g. with b=10 (0 bits because it isn't variable) and n=∈[0,7] (3 bits), 1036 is expressed as (3,36), encoding 10^3+36. that's 9 bits total.
 
 === particular encoding examples
 
@@ -383,6 +453,46 @@ in double dash, there's a counter for which checkpoints you've hit. just because
 * branching; branchless programming does not concern bit twiddling, though relatedly bit twiddling can often well encode combinations of conditions
 
 one may assume that categorical values must be represented by _arbitrary_ numbers/bitstrings, but this is not true: mnemonic strings can be expressed by words: a word on a 64-bit system can represent a string of 12 ci latin characters, and 6 chars by 32 bits, since ⌈log₂26⌉ = 5, and ⌊64/5⌋ = 12 & ⌊32/5⌋ = 6. thus `int[n]` is a more efficient version of `char[12][n]`.
+
+=== examples
+
+==== most frequent item in a set
+
+say that we've a string of alphabet ACGT. that's 4 characters. if we want to know the most frequent item, then the order is irrelevant (because `max` is commutative); we treat the string as a set. of course the solution is to count the number of occurences then return the max:
+
+.table version
+[source,lua]
+----
+local t = {A=0,C=0,G=0,T=0}
+for i=1,#s do local c = string.sub(s,i,i) t[c]=t[c]+1 end
+local m = 0 local mc;
+for c,n in pairs(t) do if n>m then m=n mc=c end end
+return mc
+----
+
+this works, but is written in terms of concepts rather than in terms of information content. it's also done with tables instead of strings. it does not exploit any symmetries nor natural implications. it has a traversal of length `#s` and one of length of the alphabet (4), and that latter loop branches.
+
+of course, our good version should use only basic arithmetic and relation. we see that we're converting subsets to counts.
+
+* counting uses incrementing (+1)
+* we shouldn't sort since we aren't concerned with order.
+* we must preserve the relation between letter and count; this suggests that we store characters in a string, and counts in a string; however, we really need only to store counts in a string; the counts will be ordered in alphabetical order.
+* the counts can be known only after traversing `s`
+
+.bit/string version
+[source,lua]
+----
+-- rather than return max element, return index of max element; this implicitly tells the letter. indices should _always_ be used rather than values!
+----
+
+the point of this method is that it's simple, efficient, and forces the programmer to relate the facts of their data to their conceptions of it.
+
+one very important aspect of using only information in its plainest representation (string) is how solutions generalize to other..._structures_? well, not _data structures_, but abstract structures defined only by facts of the data, of which there are only 4 varieties:
+
+. relation of elements within one string or among many strings
+. domains
+. implications
+. invariants
 
 === recepies
 

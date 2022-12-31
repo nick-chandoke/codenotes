@@ -1,0 +1,341 @@
+== lua
+
+TODO: see about translating μKaren into lua
+TODO: does `for` with `pairs` over kv tables not preserve order? are only seqs (implicit index tables) ordered?
+TODO: i've lambasted functions. i still must lambast data structures.
+
+this doc covers how & why to use lua, and by which paradigm. particularly good uses of particular functions & codes are listed, with caveats, but most details (e.g. string character classes) are omitted; read the lua reference manual for technical details.
+
+=== offering
+
+simple, small, portable, interpreted. features: [byte]string with regex, hashmap/sequence with sort, pack, append; subproc, coroutines, easy c ffi; nice lang features: type coercion, multiretvals; and obviously basic math fns and loops & branching.
+
+that's the whole language. though there are file functions, there are no filesystem functions; you'll need an external library for that. indeed, much of lua's functionality is implemented by external libs, often written in c.
+
+=== overview in bullets
+
+TODO: revise this into a section on each data type / information encoding.
+
+* like sql, well-typed/formed statements usually return `nil` instead of throwing an error. `n/0` yields infinity and `0/0` yields nan, though.
+* types: `nil`, `boolean`, `number` (52 of 64 bits are for ints; the rest are for decimal), `string`, `userdata` (for C API), `function`, `thread`, `table`. `type(expr)` returns a string representing the parameter's type, like `typeof`
+  ** infinity is called `math.huge`
+  ** `null` is a synonym for `nil`
+  ** no `character` type
+* strings (common type for bytestrings and text strings): single or double quotes, or multiline by `[[ ]]`. concat by `..`.
+  ** internal representation is rope
+* t[#t] naturally gives `nil` for empty table
+* comment by `--`. multiline by `--[[ ]]`
+* global scope unless `local` provided
+* nil can't be used with other values
+* booleans are distinct types
+* `and`, `or`, `not`
+* repl can't print literal values; it only evaluates statements
+* only `nil` & `false` are falsy
+* loop
+  ** `break` & `return` short-circuit à la c
+  ** modifying the control variable gives undefined behavior
+  ** `while <p> do <body ...> end`
+  ** `for <var>=<init>, <end>[, <step>] do <body ...> end`
+  ** `for <k>,<v> in pairs(<t>) do <body ...> end`
+  ** `for a,... in b,... do <body ...> end`, where `b...` are coroutines (generators)
+    *** breaks when the first (TODO: not _any_?) of `b...` returns falsy
+    *** only the last of `b...` can return more than one value
+    *** i think that `[i]pairs` is a version of this; it's an iterator that returns multiple values
+  ** do-while is expressed as `repeat <body ...> until <p>`. NB. no `end`.
+* branch: `if <p> then <body ...> [elseif <body ...>] [else <body ...>] end`
+  ** `iif(p,x,y)` [sql] is idiom `p and x or y`
+    *** `and` has higher precedence than `or`
+* loop & branch forms are like c, not scheme: they're strictly control flow, not evaluating to a value. you cannot get around this by `do`
+* assign to nil to delete. nil & globals like picolisp.
+* multiple values: `x,y,z = 1,2,3,4` -- 4 is discarded
+  ** `table.unpack` is like `apply`; it gets multiple values from a table
+* types are coercive; `10 .. 20` returns `"1020"`, and `'14' + '7'` returns `21`
+
+* `#<t>` for count
+* tables (hash maps)
+  ** literals. `,` and `;` both work as delimiters
+    *** `{k=v,...}`. `k` is a string key; it's syntactic sugar for `{['k']=v}`.
+      **** you must use the bracket notation if you want to specify key literals that are numbers (and maybe some unusual strings?) e.g. `{[4]=6}`
+    *** `{a,...}`. implicit autoincrement integer starting at 1, just like sql.
+    *** define a function inside a table: `table.func(...) ... end`
+    *** to access nth element from a literal (useful only for debugging): `({...})[<i>]`
+  ** table keys are not stored in any order
+  ** t.k to get v@k∈t. this is syntactic sugar for `t['k']`
+    *** t.k=v to set v@k∈t. `t` has to exist as a table already.
+      **** set to nil to remove
+* primitive equality is by value but table equality is by reference
+* in a file, return a table containing data & fns; this is effectively a module. then `x=import('<filepath>')` to use a module.
+* tco (calling exactly only another function as the last statement of a function)
+* unary function invocation does not require parens
+* arbitrary radix (up to 35) are encoded as strings, not special syntax. use `tonumber(str,base)`
+* local binds aren't really needed since lua's syntax is chunked e.g. `do local x=4 print (x+5) end` is fine
+* `function(a,b) return a+b end` instead of `+` is a real tragedy. this applies to functions generally, not just operators. through metaprogramming there's probably a terser version
+* there's only `string.format`, not `printf`.
+* lua & sql both index from 1. however, `string.sub(s,i,j)`, but `substr(s,i,n)`. neither is really better; sometimes we want to take _n_ characters, but sometimes we want a slice.
+
+NOTE: `ipairs` is predictable and allows modifying the table that it iterates over. `pairs` uses the table's `__pairs` metamethod and `next`, which has caveats about mutating the table.
+
+NOTE: `setfenv` & `getfenv` were present in lua 5.1 but replaced in lua 5.2 by the `_ENV` variable, which stores namespaces/scopes. free vars referenced by closures are called _upvalues_. `_ENV` defaults to `_G`.
+
+=== functions
+
+functions are sometimes good, but are generally a poor mechanism for encoding programs. yet functions are used in lua so the notes must cover them.
+
+* first class functions (but who needs those, and their syntax is crufty)
+* functions can be defined of yet-undefined [functions]; there's only an error if a function is undefined at invocation time!
+  ** we can define a function in terms of a yet-undefined [function], then, when we find that it hasn't been defined, we can define it without re-evaluating the dependent function's definition! very hackable & dynamic!
+  ** TODO: test whether this is true also for global non-function-type data
+* `function [<name>](p,,...) <body ...> end`. omission of name denotes a λ. `(function (x) return x + 2 end) (4)` ok.
+  ** if body ends with a `return` statement then it returns; else it returns `nil`.
+  ** omitted function args are `nil` in the function body (except builtin fns implemented in c)
+  ** function arg & retval behavior is like sql but functions return `nil` unless otherwise specified
+* in `return a(),...,b()` returns the concat of the first retvals of each of `a...` concat all of `b`'s retvals
+* [indirectly] recursive local functions must have declaration statements before definition statements: `local func; func = ... func(...) end` (see pg 57 of *Programming in Lua 3e*)omitted & extras are by position rather than by name
+* special code to get count of the variadic arg variable, `...`: `select('#',...)`
+* enclosing a function invocation in parentheses forces it to return only its first return value
+
+=== strings
+
+TODO: move this section to best-paradigms.adoc, on its own section on digitstring programming, which uses only find/replace. relate this lua section to how lua uses its builtin functions to accomplish the same designs.
+
+it's important to use a language that does not treat numbers differently from strings, nor strings from sequences, and that characters be singleton strings (avoiding asymmetry of elements vs subsets.) lua treats numbers differently from strings, which is ok if the numbers won't be related to other data e.g. a counter. in this case numbers are used specifically, but they're still seamlessly interperable by, regardless of whether the implementation coerces; 1+1 and '1'+1 should give the same result, as is true in lua.
+
+a very nice benefit of strings (as ropes or other efficient structure) is that, unlike common lists, we can replace an "element" (actually a substring of length l1) by another string of length l2; ordinary lists can't replace an element by a sequence of elements; you'd need to split a sequence then append with the new value, even if that new value is the empty sequence! that's inefficient!
+
+bitstrings are just strings of digits of base 2. a bytestring is a string of digits of base 256. a number is base-agnostic, though commonly represented by a string of digits of base 10. UTF8 strings are strings of digits of base 256^8^.
+
+* iterate over strings as character/byte sequences: `local s = 'hello' for i=1,#s do print(string.sub(s,i,i)) end`. yeah, it's sad that we can't just `for x in 'hello' do print(x) end`, but then again writing a decently efficient sql-like system to iterate over tables, strings, or others-as-sequences is easy. best to have one `select`-like [sql] function so that we aren't jumping around much nor using coroutines which are slow. furthermore it's easy to use one function that accepts a complex but terse input (namely a bytestring), since manipulating a bytestring: 1. is particularly easy because we've designed the encoding scheme to elegantly support relevant transforms & relations; 2. it's simple data manipulable by any language, obviously marshallable, so not only is it easy to manipulate, but there are many tools that support those transforms.
+  ** this syntax is crufty but matches the common implementation of the relational algebra by dicts: we use an integer index to reference values. this system is fundamental, allowing anything that we want, including window functions: `local s = 'hello' for i=1,#s do print(string.sub(s,math.max(i-1,0),math.min(#s,i+1))) end` prints each value in a sliding window of size 3, and this works for every sequence supporting efficient indexing. furthermore, `substr` exactly represents `between` or `limit/offset` in sql, and adding iteration (here a `for` loop) transforms that one concept into a window function.
+* last char: `print(string.sub(x,#x,#x))`
+* `table.concat` converts a table of strings into a string with optional interspersing. dual op would be splitting a string on a given seperator string. useful for writing wrapper programs in terms of `arg` & `os.execute`.
+* `gsub` does concat implicitly e.g. `string.gsub('the cats','a','ZA')` would generally be expressed by common sequenecs as "break at 'a' into X,Y; return X++'ZA'++tail(Y)" except that it'd recurse on `tail(Y)`.
+
+example: convert binary to hex: `string.format('%x',tonumber(<bits>,2))`
+
+TODO:
+* how to implement a db by strings? unindexed regex are powerful but slow:
+  ** `find` or `match` is always linear
+  ** `match` cannot exit early e.g. `%d{,6}[^;]+` will not stop matching a string (of possibly great length) if the `%d{,6}` pattern fails. we can use substring and multiple regexes and control flow statements, but that's not unified
+    *** because there's no seek (like in a file), once a substring fails to match, there's no efficient way to jump to the next substring to try matching against
+
+all efficient data-structure-as-string traversals can be done efficiently by a loop over indexed strings.
+
+==== programming with strings: overview
+
+think of λs in lua as a more convenient representation of higher-order programming in c. λs should be used rarely, namely maybe in `table.sort` or for coroutines, but hardly elsewhere if at all. lua has loops, but more closely resembling traversals like `map` &al are string functions. all string functions are non-mutative. there are basically 3 useful string functions:
+
+. substring(s) (`[g]match`, `find`, `sub`)
+  .. `match` is obviously defined by `find` & `sub`, and `gmatch` is obviously defined by `match` & `while`.
+. `..` (concat)
+  .. filter-map (`gsub`) is obviously defined by `for`, `..`, & `gmatch`
+. `[un]pack` (one concept, two dual functions)
+
+plus `string.len` (better expressed as `#`), which is not often useful.
+
+NOTE: [un]pack was added in lua 5.3 or 5.4. without pack, at least you can use `string.format` to convert numbers to bytestrings e.g. `string.format('%c',47)`
+
+with the digitstring generalization, strings must be 0-indexed in order to be consistent with digitstrings' least significant character being multiplied by 1 i.e. b^0^; thus the index correctly corresponds to the character's exponent. also with 0-indexing, 0 naturally represents digit offsets or no offsets: the ith element of length l is the substring on [i*l,(i+1)*l].
+
+===== detailed discussion of functions
+
+string functions that support patterns (generalization of regex):
+
+* `string.gsub` maps a unary function over matches. it may naturally remove matched items by returning the empty string. it's the most general string function, but it returns one string whereas `string.find` & `string.match` return individual elements as indices and substrings respectively. `string.gmatch` exists but there's no `string.gfind`. obviously functions that return only the first match are faster but more limited.
+* remember that one match may contain multiple captures.
+* `string.find` does not use an iterator function (coroutines) so may be faster than `string.match`
+
+`member` [scheme] generalizes `==` by basically mapping `(x==)` over a set, and `filter` generalizes `member` by returning multiple values instead of one. for strings, `find` & `[g]match` correspond to `filter`. for multiple elements stored in one string, and each element's starting index is known, then searching by `find` plainly is less efficient then trying to match against a given element then jumping to the next starting index, rather than trying to match against each subsequent character.
+
+non-patten string functions:
+
+* `string.sub`. __sub__string, not __sub__stitution.
+* `string.len` is redundant & verbose version of the unary `#` operator
+* `string.[un]pack` are severely awesome for custom encodings
+
+there's no `split` function since that's possible by regex.
+
+TODO: exercise: define set intersection for strings. obviously `..` instead of `table.insert` and t[i] becomes string.sub(t,i,j). intersection is O(n^2) unless sequences are sorted. in lua there's table.sort but no sort for strings. to iterate over a string's elements, use `gmatch`.
+
+using strings to program is easy if you choose your encodings well; it's difficult when the encodings are complex, as is true of most programming language syntaxes. for example, trying to use string ops on bash command lines is difficult given its syntax's complexity e.g. being able to use single or double-quotes to delimit single strings, and accepting backslash escapes within. namely the difficulty is caused by allowing the delimiter also as a non-delimiter character. this is particularly troublesome for writing wrapper programs—those that take a command line vector, do something with it, then pass it or a small modification of it to the program being wrapped. the asymmetry of lua accepting the command line vector as a table but needing to pass a string to `os.execute`. for example consider arg={'prog','a b'}; then `os.execute(table.concat(arg,' '))` will run the command line 'prog a b', which has 2 args but should have one.
+
+===== string programming in lua
+
+despite lua's power and simplicity for string programming, it has some unfortunate limitations.
+
+* "pattern items" support kleene stars &al only on character classes, not groups e.g. `x(yz)?` is unsupported
+* lua's regex does not support `|` (`or`)
+* there's no builtin escaping function. for including arbitrary literal strings in regexes, use this: `function escape(s) local x,_ = string.gsub(s,'[]%%$*?()-+?^.[]','%%%0') return x end`.
+
+NOTE: `-` is non-greedy `*`
+
+though we can do much with lua, a better language than lua should be made, and that language should use parsers rather than regexes. the simultaneous support of characters as literals or regex special characters confounds. the lack of first-class regex groups and disjunction greatly limit pattern matching.
+
+====== generalizing bitstrings to radix-n strings
+
+| r2 | rb
+| m << n | m×b^n^
+| m >> n | m/b^n^
+| m & n | lcm(m,n)^*^
+| m \| n | gcd(m,n)^*^
+
+^*^ see <https://dfns.dyalog.com/n_gcd.htm>. are there other useful generalizations?
+
+====== encoding schemes & common techniques
+
+* for regex matching, use field starters instead of field separators. a motivating example: splitting 'a b c;d e f' into records is easy by splitting by `;` or matching all `[^;]+`. however, how would we get the first cell of each record? if we use the more symmetric encoding `;a b c;d e f` then `;` now starts _every_ record rather than n-1 records, which naturally denotes the end of any prior record because records cannot be nested. the nth record is simply expressed as `;(%S+ ){n-1}([^;%s]+)`.
+  ** field starters are no better than field separators when matching by a stateful parser.
+  ** if records supported nesting (always a bad idea, btw), then each record would need corresponding start & end characters e.g. `(` & `)`.
+  ** the pattern that matches on regex-separated fields is `[^s]+` where `s` is the separator regex. the field starter version is `s([^s]+)`
+* set operations are easily done with bitstrings and associations:
+  ** subset: table `m:={a=0,b=1,c=2}` (an inverse map of `{a,b,c}`) to set bits in an integer accumulator variable `x` that tracks which elements we've encountered yet by setting its bits. if all elements are found, then `x==(1<<#m)-1`. to say that `b` is included, we'd set `x`'s 2nd bit; for `c`, its 3rd bit. for any element `y`, we modify `x` thusly: `if m[y] then x = x | m[y] << h end`. if instead of a table we use a string 'abc' (assuming each element has a 1-character identifier), then instead of `m[y]` we'd `string.find(m,y)` to get the element's index in the string, which is the bitshift offset (though in lua the offset is `1-string.find(m,y)`). if element identifier strings are fixed length then some linear function gives the offset from the starting string index.
+  ** still with a bit-to-element map, intersection is bitwise `and`, and union bitwise `or`, and xor is bitwise xor.
+  ** arithmetic interpretation of sets-as-strings easily expresses set relations. arithmetic predicates are simpler than string predicates. we use maps (generally _relations_), which are possibly ordered but regardless can efficiently identify subrelations. to accumulate presence into a bitstring then test its value is informationally equivalent to accumulating elements into a string (either literally or by any unique mapping) then sorting that string and testing its equality against a target string.
+  ** TODO: how do set ops on r2 digitstrings (bitstrings) generalize to rn digitstrings? which generalizations would be appropriate, given that r2 appropriately tells boolean presence of an element?
+* tables are useful for relatiing strings of variable length. maps should not be used; like strings, use only sequences, implicitly relating data by index. this naturally extends to n-attribute relations: rather than getting `m[k]`, where `m` is a one-way map, prefer sequences `m1` & `m2`; you can run any predicate over `m1` & `m2` by `for i=1,#m1 do f(m1[i],m2[i]) end` for any number of `m1...mn`. especially you can lookup any `mi` by any predicate on `mj`.
+  ** sequences conveniently map string character offsets to ordered record offsets e.g. the 2-record string `'cats;monkeys'`, with records separated by `;`, can be expressed as `{'cats','monkeys'}`, so we can access monkeys by sequence index `2` rather than by string index `6`. however, if we use only sequences then we strictly separate records and, in lua, lose the power of string functions; to traverse tables we must use `for`. if you want dual indexing then you can build an index that maps element index to character index; however, this works well only if the sequence/string does not change.
+    *** TODO: what again does the string model afford us that the relational one does not? or does the benefit actually lie not in either of those _per se_, but in using custom encodings [instead of functions or quoted subprograms / macros]? with good packing, neither of strings nor relations is more tersely encoded behind-the-scenes. relations can be ordered by any of their attributes, and auto-increment attributes can make sequences implicit. ah! but the relational model is not apt at inserting or removing rows in the middle (literally not at the ends) of a relation! truly sequences and relations are the same; the only question is how they're implemented, and yes, the true power is in the elegance is in elegantly relating encoding to selection & mutation so that little code is needed to express selection & mutation. one may think that only selection is pertinent, that anything selected can be mutated by an endomorphism; however, if we allow the mutation to change the shape, then that encoding may be inapt. for example, we can replace a substring of any length by a string of any other length, but we cannot replace an element of a vector by a vector and have the result be flat.
+
+=== usage/environment
+
+* `require` looks in the directory relative to execution directory, not source code file path! so either `cd` to the right directory (which fucks-up all other relative filepaths) or add the directory to `LUA_PATH` (which must be set for this particular execution so that it's not used by other lua programs) this...is extremely stupid.
+  ** remember that `LUA_PATH` may be relative but is actually, happily particular e.g. `LUA_PATH="path/to/src/?.lua" <lua-prog-in-PATH> args ...`
+* argv is called `arg`. it's set only for lua scripts, not the repl.
+  ** in top-level scope, `...` is the positive-index substring of `arg` expressed as a string
+* `luac` compiles into bytecode. `require("pre.lc")` is OK.
+* use `-e <script>` flag to execute a script literal
+* in the repl, use `return` (or shorthand `=`) to get scheme-repl/calculator behavior
+* there's no standard way to define a main method; all code is evaluated without regard to its use as a library or entry point. until/unless a special method is implemented, all methods rely on heuristics of the environment, and so these techniques may need modification across lua implementations. known solutions, preferred first:
+  ** `if arg ~= nil and arg[-1] ~= nil then main() end`. this technique assumes that the requiring module does not define `arg` as a global variable. only an imbicil would do that anyway.
+  ** `if not debug.getinfo(4) then main() end`, which works by checking whether the stack depth is greater than 3, which is the default depth.
+* to handle signals (e.g. ^C) use module `posix.signal` of the link:https://luaposix.github.io[`luaposix`] package
+
+NOTE: `debug.getinfo(f,i)` uses `(f,i)` as an index; both are positive integers.
+
+* `require` is like `loadfile` but doesn't process the same file more than once
+* `require` uses envvar `LUA_PATH` as its path; `LUA_PATH` is a list of paths separated by semicolons, with question marks to be replaced by filename, e.g. `?;?.lua;/home/?` will try to find `filename`, `filename.lua`, and `/home/filename`. `require` uses the first matching expanded path expression, and path expressions may legally not have question marks (but this is rarely useful in practice)
+* c ffi: `loadlib(lib_abs_filepath, func_name)` returns `nil` on error. use in `assert`
+
+=== modules
+
+* exports: there's no unified way to define functions both for use within the module and for export; all functions to be exported must be present in a table that's returned; the `return` statement must be the last statement of the source file; the source file is loaded by lua as a chunk; see docs for `dofile`.
+  ** in lua 5.1 and before, there used to be a special form called `module` to define a module. of course, like all special module support, it was asymmetric, had unfortunate side effects, and generally sucked.
+* imports: `require 'm'`≡`require('m')`≡`local m=require('m')`. any non-assignment version(s) are discouraged because it isn't helpful when the filepath involves path separators.
+
+.example
+[source,lua]
+----
+local M={}
+function M.f(x) return x+1 end
+return M
+----
+
+though we can load lua files like C files—everything non-local is brought into scope when the lua file is loaded—often modules are the idiom of defining a table of functions and variables, then the last statement of the module is one that returns the table. this way, when the module is loaded, it's assigned to a value, and that value acts like a module identifier. for example:
+
+=== mechanics & evaluation strategy
+
+* assigning to `nil` forces garbage collection
+* accessing local variables is computationally faster than global variables
+* speediest to slowest: closures, table-state iterators, coroutines
+* for table operations, lua tries lhs's metatable, then rhs's metatable, and if neither metatable has a definition for the operator, then lua throws an error
+* overridden `==` operator returns false for comparison of any tables not having the same metatables
+* overridden relational operators are legal for use iff typeof(lhs) == typeof(rhs); else lua throws an error
+
+=== coroutines
+
+==== basic effectful coroutine
+
+----
+local co = coroutine.create(function() for i=1,10 do print("co",i) coroutine.yield() end end)
+----
+
+each call to `coroutine.resume(co)` prints "co n" until it's exhausted.
+
+==== passing args to a coroutine
+
+[source,lua]
+----
+co = coroutine.create(function(a,b,c) print("co",a,b,c+2) end)
+coroutine.resume(co,1,2,3)
+----
+
+prints `co 1 2 5`.
+
+==== return value of a coroutine
+
+[source,lua]
+----
+co = coroutine.create(function(a,b) coroutine.yield(a+b,a-b) end);
+print(coroutine.resume(co,20,10))
+----
+
+prints `true 30 10`.
+
+* return is just coroutine.yield but signals immediate death
+* trying to resume a dead coroutine will return false, error_msg
+
+=== idioms
+
+* `for k,v in ipairs(table) do lookup[v] = k end`: lookup in a table
+* `do return end` -- circumvent that `return` or `break` has to be the last statement in a chunk
+* `func{table_literal}`: passing a table of parameters to a function instead of a list of parameters (for func(table) ... end); allows named parameters
+* `do local parent = func; func = function(...) ... end end`: overloading a function
+* using `do` blocks to limit scope
+
+=== io
+
+NOTE: options for `read` were changed from lua 5.2 to 5.3; namely the leading asterisk was removed. those for `open` remain the same correct, though. like python, they may be specified together in a string (use of sequence as a set).
+
+.funcs
+
+* `io.input(<handle/filepath>[,mode])`: gives a handle
+* `<file>:read()`: gets content
+* `io.read(...)`: shortcut for `io.input(...1):read(...2)`
+* read from a process: `io.popen(<procstring>):read('*a')`. idk how to execute a process by a command line _vector_ (cf string)
+  ** `io.popen` runs asynchronously in the background. however, it is still a child process of lua, so killing lua will kill it too. of course, if `io.popen` is the last statement in a lua program, then killing the bg proc will immediately thereafter terminate the lua proc
+  ** `os.execute` is synchronous
+
+explore funcs by `for k,v in pairs(_G) do print(k) end`; in there there's something called `bit32`. ok. let's see what's in it by replacing `_G` with `bit32`. ah! bitwise fns!
+
+remember `<handle>:close()`!
+
+TODO: has lua any guaranteed resource cleanup fn like haskell's `mask` or factor's `with-file-[reader|writer]`?
+
+=== oop
+
+* `t:f()` is syntactic sugar for `t.f(t)`
+* prototyping / js-style inheritance: `setmetatable(a, {__index = b})`
+    * unlike js the parent must still be dereferenced (no auto-chain-following): `subclass.parent.var1` rather than merely `subclass.var1`
+* `function class:new() object = {} setmetatable(object, self) self.__index = self return object end` // WTF is this?
+* `class = { ... }` -- prototype // WTF is this?
+* `subclass_instance` uses `subclass`' metatable: `subclass = base:new() subclass_instance = subclass:new()`
+* overriding base methods: `function base:method() ... end function subclass:method() ... end`
+* private access (here for data members; still returns closures of inner functions):
+
+=== community
+
+repos:
+
+* [kepler project](https://github.com/keplerproject)
+* [luarocks](https://luarocks.org/m/root)
+
+=== repl example
+
+[source,lua]
+----
+-- handles nils at the end of results and such
+local function print_results(...) if select('#', ...) > 1 then print(select(2, ...)) end end
+repeat -- repl
+    io.write'> '
+    io.stdout:flush()
+    local s = io.read()
+    if s == 'exit' then break end
+
+    local f, err = load(s, 'stdin')
+    if err then -- Maybe it's an expression.
+        -- this is a bad hack, but it might work well enough.
+        f = load('return (' .. s .. ')', 'stdin')
+    end
+
+    if f then print_results(pcall(f)) else print(err) end
+until false
+----

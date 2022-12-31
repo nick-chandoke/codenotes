@@ -2,6 +2,50 @@
 
 _a discussion of bad, ubiquitous programming practices, and their superiors. this document serves to help one recognize then unlearn bad practices._
 
+TODO,dec2022: revise this document in light of digitstrings.
+
+=== functions
+
+a function is a particular variety of (sub)program that takes inputs and gives outputs. that inputs are free enables the subprogram much more than having fixed values. that being said, it could use fixed addresses, have those addresses mutated, then read from them. this is common in assembly, seen as setting registers values before invoking an instruction or reading output from a fixed register after invoking an instruction. however, like in assembly, pushing parameters to the 1-dimensional stack avoids some problems present in 0-dimensional registers, namely when two segments of code need access to common registers at different times; one is bound to overwrite the other's value. the error here is that independent data are kept in a common place that cannot simultaneously store them both.
+
+functions solve this collision problem in the same way that the stack does: by introducing _scopes_, analagous to stack frames: scopes are nested i.e. ordered just like stack frames or elements in a linked list. however, for convenience, a scope contains multiple _variables_, analagous to registers. the variables are named like registers, but unlike registers usually informative names are chosen per function. these variables scoped to the function are the function's _inputs_. a function _returns_ one or more output values; however, unlike its inputs, its output is unnamed; its output may be named in the scope in which the function is invoked, but this is not necessary if the function's output is passed directly as an input to another function's input.
+
+functions are ubiquitous, but they certainly are not needed and there are other expressions [encodings] of (sub)programs. common examples are `eval` in lisp or ruby, called `load` in lua, though lua still reads into a function, or `call` in factor. generally, however, any program permits an infinite number of encodings, and any decoder can evaluate the program, assuming that the execution environment's primitive functions can accomodate the functionality. as ever, the general method is superior when tailored to its use.
+
+particularly, functions' shortcomings are:
+
+* function bodies cannot be examined nor modified (except picolisp, but there lambdas are fexprs, which generalize functions & macros)
+* functions definitions reference inputs by name, yet invokation specifies inputs by position. this inconsistency is awkward enough, but there's even more awkwardness:
+  ** some languages like python or racket allow specifying inputs by name, though when no name is given, use position to match values to inputs.
+  ** many languages accept variadic inputs as sequences. we're already accepting inputs positionally, so why the redundant asymmetry^*^?
+    *** python's model also accepts variadic inputs as a dictionary! i suppose that that's consistent with accepting variadic sequences; now for both positional and named arguments we can accept inputs by names given by the invoking function rather than the defining one.
+* dual to variadic args, and for langs that actually allow multiple return values, one may as well return a single structure (e.g. list) of data to return.
+* functions force input names even when no particular name is appropriate
+* dual to functions requiring names for their inputs, invoking code must bind output(s) to names if 1. multiple outputs are returned; or 2. an output is used multiple times. binding clauses are crufty.
+* we're constrained to the function's/language's scoping model and passing data around subprograms only by inputs & outputs and the language's facilitating syntaxes, which are often inelegant & verbose.
+* being forced into naming causes unnecessary datum ambiguity.
+* functions unnaturally encourage partitioning data into subsets each of which corresponds to some idea
+  ** partitioning data is, in the function model, always done into multiple scopes, and relating data across scopes is inelegant
+* functions' inputs are scoped and function bodies usually invoke other functions; thus functional programs are nested & recursive. this naturally forces one to manage scopes, just to keep data in scope in order to relate data across scopes. this clumsiness is not present in sql nor procedural langs.
+
+^*^ i never thought that i'd see the phrase _redundant asymmetry_!
+
+clearly function users cannot decide whether to accept arguments positionally or by name, nor whether to accept them by position or by name, nor whether the function or the invoking code should specify the names or positions of the inputs. obviously functions are poor design, but adding together distinct-but-equivalent designs for identifying data is not a solution! concatenative langs don't have these issues, and use subprograms as quoted programs, which are inspectable & modifiable and don't name their inputs nor outputs, nor do they require binding clauses. their critical downfall, however, is that:
+
+* they're verbose and/or confusing (though not as verbose as common applicative langs as they're commonly used)
+* their code's meaning is not apparent at a glance. in fact, identifying its meaning takes quite a bit of work!
+
+the relational model (namely as per sqlite) is very good. it uses queries instead of functions to express (sub)programs, which has benefits:
+
+* _all_ data are kept in relations
+  ** relations are the sole scoping mechanism. in sql, all scopes are named.
+    *** relations cannot be nested. therefore there are no nested scopes due to relations^*^.
+* subprogram outputs are named by the subprogram itself. possible inputs are specified as data in the relation or constants.
+
+^*^scopes are nested when queries are nested, but nesting is rare and practically never more than 1 level deep.
+
+the only disambiguation needed is `as`. `join` can avoid most query nesting, and avoids all relation nesting; instead of nesting relations' scopes, it unions them.
+
 all programs are: cond (asymmetric exception), loop (when considering program as state machine), group, select, extract, put._ _extract_ removes from a structure and generalizes `split-at`, `partition`, &c. `put` generalizes insert & create.
 
 a/symmetry can be seen in a map (alist) vs the `map` function (one fn over all data, where application to each datum does not affect other data in the structure being mapped over.) you can combine them: a `cond` inside a loop body. think of the `cond` clauses as exceptions to the norm, expressed by the `else` clause.

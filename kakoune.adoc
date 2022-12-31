@@ -34,6 +34,7 @@ current:: valid in `[un]set-option`. refers to the narrowest scope in which the 
 === nb
 
 * *disable hooks* by prefixing a command with backslash, e.g. `\p` to paste w/o hooks (or \i ctrl+shift+v, depending on your terminal), e.g. autoindention or parens nesting
+  ** there's no way to list all currently registered hooks. at least you can read files in `rc/filetype/<lang>.kak` in the kakoune source code tree to see particular filetype hooks
 * to set "major mode," `:set buffer filetype <type>` where `<type>` is e.g. `janet`
 * to see the value of a variable, e.g. `%val{runtime}`, use the builtin `echo` command, e.g. `:echo %val{runtime}`
   ** to see the filetype, `echo %opt{filetype}`

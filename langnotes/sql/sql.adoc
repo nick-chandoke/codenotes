@@ -26,7 +26,7 @@ this document discusses sql as understood by sqlite, and its underlying model.
 * elegant model
   ** algebraic, symmetric e.g. `head` must have an `if` branch, but `filter` does not. sql has only the latter. the only asymmetric operation in sql is the asymmetry primitive, `case when`, which makes asymmetry explicit.
   ** clearly distinguishes symmetries and asymmetries 
-    *** join is pointwise relation
+    *** join is pointwise relation i.e. lookup/reference by value. `a join b on p` is `[[(a,b)]]` where each element is a set of things sharing a common property given by a predicate `p(a,b)`. this is a subset of a×b, and often the subset `[(a,[b])]` is particularly desired, derived by `local t = {} for _,x in pairs(s) do if p(a,b[a]) then table.insert({a,b},t) end end return t`.
   ** flat tables, mostly flat syntax
   ** uses relations, which generalize hash tables, which generalize vectors or linked lists
     *** cols & rows can be freely adjoined and selected
@@ -36,7 +36,7 @@ this document discusses sql as understood by sqlite, and its underlying model.
 * efficient
 * triggers, for reactive programming (implicit, rule-defined control flow)
 
-the stack is nice because programs leave items on the stack for subsequent programs. this is also done in sql, however; queries may mutate tables, obviously leaving their mutated versions available for use by subsequent queries. so how good are combinators compared to sql?
+the stack is nice because programs leave items on the stack for subsequent programs. this is also done in sql, however; queries may mutate tables, obviously leaving their mutated versions available for use by subsequent queries. so how good are combinators compared to local binding vars? their terseness is nice. i'd like to have a lang that implicitly uses local binds if we use equals signs or a `let` kind of thing but othrwise pushes to the stack. similarly, if a function's "invocation parens" are omitted, then it'll pull args from the stack.
 
 ----
 -- compute account owner, their cash, and whether they are net positive:
@@ -52,6 +52,25 @@ select owner,cash,debt,cash>0 from account                  -- sql
 immediately we see the inferiority of combinators! `x qs cleave` works only on a single datum, `x`. yes, we redundantly used `cash` in sql, but it's less complex! complexity isn't worth brevity. good code strives to maximize independence across codes, encoding dependencies only to exploit implicit facts e.g. 1. sql triggers explicitly encode dependence; 2. that n%m as a logical value represents whether n/m has a remainder, and that multiplying that by another number does not change the logical value if the logical value is false; this is dependence (mutual information; see the statistics / information theory definition of _dependence_) of how 0 is used by multiplication, modular arithmetic, and logical values' encoding of truthiness.
 
 this being said, i wonder how `[ [ first ] bi@ < ] sort` is done elegantly in sql. it wholly depends on why one would want [to compare on] the `first` of something. supposing `{ { 10 "a" } { 3 "z" } { 6 "d" } } [ [ first ] bi@ < ] sort .`, in sql that's `select x,y from t sort by x`, which easily supports arbitrary subsetting, expression selection, optionally filtered aggregates, joining,....
+
+=== sql expressed simply
+
+sql is basically some nested loops that may exit early and accumulate into some output array.
+
+* the basic query is a `for` loop that exits early if a `limit` is hit and accumulates row expressions into the output relation only data after a counter variable is leq to `offset`
+* ordinary expressions are calculated as simple vectors of functions, producing a vector of outputs
+* each aggregate has some associated state vars that update per iteration, per group
+  ** grouping does not change runtime efficiency; it only requires one to keep a map from unique group ids to each group's aggregate states
+* `having` & `where` obviously & simply add predicates to the loop that determine whether to add to the output set
+* lookup by indexes if possible else search whole relation. indexes are exclusively for `where` & `between` clauses that use expressions involving the indexed attributes. values for these clauses are found just as slices [python] of the internal data structure.
+* `exists` exits loop once a value is found
+* the _dictionary_ type is a sequence of duples `(a,b)`, supporting indexing `b` by `a`, and morphisms to `[a]` & `[b]`. relations, `[(a,...)]`, generalize dictionaries. the duple is the primitive relation. a sequence/set thereof brings us into the array programming paradigm. every relation with _n_ attributes is expressable as the join of _n_ single-attribute relations. rows are expressed by multiple dicts on common indices. indexes are mere index permutations e.g. with tables `a` & `b` (here assumed literally as type `[(_,_)]`), rather than index by row number, we can index by `a`'s values in reverse order by a permutation: `idx := map fst (sort (>) a)`; `idx` works for `b` and any other dicts implicitly.
+  ** relation `r(a,b,c)` is expressed by dicts as a dictionary with keys `a`, `b`, & `c`, each set to dicts identified by those same symbols: `r={a=a,b=b,c=c}` (assuming that keys are set to references to dicts, rather than copying their values!). then `select f(a,b,c) from r` is `map (\(a,b,c) -> f r[a] r[b] r[c]) r`. an easy, sql-like way to express this (not needing to index explicitly from `r`) is to pointwise-relate a seq of identifiers to a seq of fns e.g. `map {(+) ('hi, '++) f} {'ab' 'b' 'abc'}`; per pointwise pair `(f,args)`, `#args` equals f's arity. then some code maps id seqs to values before passing to fns. can't say that's much better, except that it expresses at least the inputs by strings, which can be read from an input stream, not needing to be `eval`'d.
+  ** though we _can_ use `v` of type `{a,...}`, leaving the dicts as `[(k,{a,...})]`, that has 2 problems: 1. there's asymmetry: we still have keys & values despite the values being sets; and 2. that makes indexing inefficient; see the j wiki.
+  ** dicts' kv pairs are already local e.g. in `t[k]` (c, lua, python,...), `k` is of `t`. so there're no scoping cares.
+  ** btw, oop is just a stupidly contrived and constrained system for effectively dealing with dicts.
+
+the majority of the difficulty in implementing a sql engine is concurrency, acid transactions, making mutations on the relations' internal representation efficient, and indexing. window functions, triggers, primary & foreign keys, and all the rest are easy to code.
 
 === using sql with another language
 
@@ -330,7 +349,7 @@ obvious ones like datum literals or operators/functions thereon aren't here enum
 
 see best-paradigms-lang.adoc. `where` is implicit in predicate logic; it's the same as predicate unification/evaluation. the `expression` grammar's `[not] in` subgrammar is set membership/intersection, which is is equivalent to testing against a predicate. therefore `a in b` = `exists a where b` = `exists a intersect b` except that `a where b` is incorrect in sql since therein `b` must be a relation which sql considers distinct from a predicate; however, theoretically, by predicate-set correspondence, the three are equivalent. in sql we'd need to unify sets & predicates by saying `exists a intersect select * from b where b`. the equivalence can be seen by `a [not] in b` (or `a like b` &al) being set membership if `a` is a row value and `b` a relation, or set intersection if both `a` & `b` are relations. *however, `[not] in` has one characteristic: it also accepts a scalar lhs with a row value rhs. this is a blatant asymmetry in how sql considers groups of data.* the symmetric solution would be if scalar were equal to a row value with a single datum and a row value equal to a relation with one row. indeed, this would imply that a scalar equal a singleton, single-attribute relation, which _is_ true almost always, but not in `[not] in` and perhaps in some few other contexts.
 
-sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed in predicate logic as (∨,∧,¬,⊥). 0 & `null` are `falsy`. `coalesce` is coproduct on `null`. one of sql's troubles is that it is not symmetric; it considers predicates distinctly from sets, and sometimes considers elements distinctly from sets. also, though this model seems appropriate, one must be careful to distinguish between expressions that act per row vs aggregates, which act per relation, for logical reasons, even though they're of the same grammar, both accepting expressions as inputs and returning a relation/expression as an output. also, and again usefully so, `null` is the empty row value whereas an empty relation is an empty set. `null` has short-circuiting/null-propogation semantics whereas an empty set is the identity for union but a short-circuiting operator for `intersect`. these semantics can be a bit confusing, but they are elegant!
+sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed in predicate logic as (∨,∧,¬,⊥). 0 & `null` are `falsy`. in category theory we may say (⨿,Π,_,_). yeah idk the last 2, but when you see that we have pointy, square, and curvy symbols, it's pretty silly. they're 90° rotations of (),[],&<>. why not introduce a similar {} notation for the same idea in _yet another_ interpretation, too? `coalesce` is coproduct on `null`. one of sql's troubles is that it is not symmetric; it considers predicates distinctly from sets, and sometimes considers elements distinctly from sets. also, though this model seems appropriate, one must be careful to distinguish between expressions that act per row vs aggregates, which act per relation, for logical reasons, even though they're of the same grammar, both accepting expressions as inputs and returning a relation/expression as an output. also, and again usefully so, `null` is the empty row value whereas an empty relation is an empty set. `null` has short-circuiting/null-propogation semantics whereas an empty set is the identity for union but a short-circuiting operator for `intersect`. these semantics can be a bit confusing, but they are elegant!
 
 * `where`/`between` (these use indexes)
 * `join` (or `where` [filter] & `union`) (general filter)
