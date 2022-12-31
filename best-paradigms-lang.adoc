@@ -1,6 +1,109 @@
-== best paradigms lang
+== best paradigms lang (substring relation notations)
 
-this document is supposed to be a terse spec of the ideal programming language. it's changed greatly since discoveries about sql and the relationship among [text|byte]strings, numbers, sequences, and sets.
+this document is supposed to be a terse spec of the ideal programming language. it's changed greatly since discoveries about sql and the relationship among [text|byte]strings, numbers, sequences, and strings.
+
+.blend of stack and non-stack
+
+feature push & pop fns. if the stack is omitted, then it'll default to the default stack. i'm considering a notation that supports implicitly filling free values from the stack. not sure if that's sensible, but it's more sensible than either using only the stack or not at all.
+
+=== digitstring lang
+
+all things being numbers and strings, they support arithmetic and substring, which uses python's index notation [i] or [i:j], except that it supports predicates also.
+
+==== literals
+
+* regexes are denoted by a leading ρ; like in `sed`, the following character determines the delimiter e.g. `ρ-'-' is interpreted as a literal, not a regex in here because it's the delimiter-`
+* regexes are considered separate from strings. however, like strings & numbers, they're coerced by some operations e.g. `regex+str` equals `regex+literal(str)` where `literal()` converts a string into a regex that matches the string literal. `Ρexpr` complies `expr` into a regex.
+
+==== general operators
+
+* any computation with a trailing `=` is shorthand for `x=expr(x,...)`, including indexing ops.
+  ** pure substitution vs mutative substitution is chosen by whether there's an `=` present
+
+==== arithmetic
+
+.operators
+
+arithmetic:: `+` `-` `×` `/` `//` `%` `&` `|` `^` `~` `<<` `>>` `<<<` `++` `--` `×=` `/=` &c
+relationals:: `<` `>` `>=` `<=` `==` `~=`
+
+.notation
+
+a leading `u` denotes unsigned. TODO: should it prefix an operator or a variable?
+
+==== strings
+
+* numbers are interpreted as digitstrings; x[i]=1 strings the ith bit of x
+
+.operations
+
+we generalize gmatch, match, find, find all, sub, and gsub by seeing them as traversals that may exit early by some predicate of loop state vars. this reduces the 6 functions to match, find, and sub that return a variable-sized substrings. substitution vs extraction is determined by presence of `=`. to choose between match or find,...idk, b/c idk why/when one would want to return indices rather than values there.
+
+* `#` (count)
+* select: `[i]` `[i:j]`; generalizes substring & find by allowing `i` or `j` to be an index or predicate
+  ** using braces instead of brackets selects all; brackets selects first
+  ** replacement is done by using `=` inside the clause; this is separate from `=` outside the clause which chooses whether we mutate a variable or not.
+  ** generally we may select a predicated substring by a given index. the notation may be `x[v@I]` for index `I`. indexes tell how to traverse a string, and exist for efficiency. `[]` passes `v` as a value to `I`; for example, `I` may be binary search, whose traversal of `x` depends on `v` being an integer index of `x` by common numerical order and assumes that `x` is sorted.
+    *** this is analagous to sql's indexes on computations of attributes.
+  ** `select` evaluates to the empty value if none found
+  ** like in lua's `string.gmatch`, selection with multiple captures may return multiple results.
+  ** brackets have identical semantics to braces; the only difference is that they stop traversal after a value is found.
+    *** generally we decide whether to stop a traversal early by supplying a predicate of a running aggregate or particular value being traversed. `x[i]` is a pretty print of `x{i}[#yet>=1]`
+      **** given that it's a pretty-print, should i support `[]`? i dislike pretty prints.
+      **** this more general, sql-like notation suggests that i should not even support python's slice notation, since it's a particular version of `BETWEEN x AND y`
+  ** `[]` (or `{}`) is the index operator. it may be given any string. as usual, strings of multiple values are default-delimited by `'\1'`; thus one can pass a single string representing multiple index inputs [arguments] and the default `[^\1]` parser will select multiple inputs to pass to the index.
+  ** to delete, replace by the empty string
+  ** to append or prepend, replace `ρ^` or `ρ$` by a string
+* all permutations are virtual; they affect indexing, not the data as physically stored in memory
+
+you may have noticed that the above rules imply that strings are not of one index, though every string has a natural index. like in sql, we may define any indexes over any strings, and the index may be of any form [type]. also the language is truly not only plurality-agnostic, but information-agnostic; no string exactly identifies some information; only the combination of a string and parser indicates information.
+
+[TODO]
+* when & how should i allow selecting indices instead of values at those indices? consider natural indexes and other indexes.
+
+.string structure
+
+strings support 3 operations:
+
+. seek to position i
+. take substring of length l
+. at position i, replace next l1 characters by l2 different characters (implies replace, delete, and insert)
+
+==== the empty values
+
+there are two: the additive and multiplicative identities 0 & 1. an additive operation with 0 acts as though 0 were not in the input string. a multiplicative operation with 0 immediately produces 0, and with 1 acts as though 1 were not in the operation input string. there is no particular behavior defined for 1 in an additive operation.
+
+==== control flow
+
+there's no control flow statement. all control flow is impliied by rules, which express conditional jumps. any looping is implicit, much akin to how loops are implicit in recursion, which is a particular case of function invocation; if a rule jumps to a point that eventually leads control to that same rule, then that's a loop; loops are implicit, not given any special consideration. like in prolog, on rule failure, the next rule is tried.
+
+however, there is another variety of traversal: implicit mapping over delimited strings when an operation is applied to a sequence of delimited strings. these traversals are always non-strict; any operation over a sequence is done only upon identifying the next element of the sequence.
+
+like in sql, one may traverse over any number of expressions e.g. multiple pattern matches per string of selected substrings; substrings of substrings &c may be identified by symbols; we rely on the programmer's naming convention to keep these straight, and encourage the use of counters to track position if necessary, e.g. if doing a fold through a recursive structure or its loop equivalent. i encourage, however, that all traversals be encoded in indexes. one can encode recursion in strings e.g. as json does, though i encourage flat structures & lookup à la `join` [sql].
+
+like lua's `for`, traversing over a single value is merely a specific case of traversing over multiple values. however, unlike lua's `for`, the thing being traversed is not considered of only one sequence; only strings may be traversed, and may simultaneously be parsed multiple ways e.g. i may traverse a string split on a given character; the `split` parser returns a virtual string / traversal that simply replaces the selected character with `\1` (the default split delimiter), and unless otherwise specified, the default parser `[^\1]` is used to select elements. other parsers may be used, too, e.g. `!x,y∈x[ρ'[^\1]',ρ'[^;]']` which will efficiently match the first `[^\1]` & `[^;]` from the starting index (which is a traversal state variable, which defaults to 0), leaving the cursor at the latter position of the end of each match e.g. in matching the first `x` & `y` of `'cal\1ifornia;girls\1boo;boo'`, x='cal' & y='cal\1ifornia'. i've yet to consider the behavior where the order of multiple indexes matters which here would make x='cal' and y='ifornia'. this variant behavior is easily implemented and easily denoted by using periods or semicolons or whatever instead of commas.
+
+most control flow is done by indexing & operations over substrings.
+
+==== scoping & subprograms
+
+scoping is needed only if programs are complex. like in sql, our programs strive for simplicity by flat structures and explicit scoping; in sql scoping is done by table names and, excepting `with`, all tables are global. rather than scopes we'll use indexing and names to identify substructure. this is a virtual lang, so there's no computational benefit to naming an expression; the same expression multiple times will not evaluate it multiple times. this is not an imperative language; like prolog, programs are logical structures that're reduced to imperative programs.
+
+all programs are parsers; all code is done in strings and all evaluation is done by the parser; thus programs correspond to `eval` on strings, except that there's no standard `eval`; one may use any parser and no parser is more particular than any other. this, for example, implies that there's no "import" function; one may open a "source code" file as a bytesteam and pass it as an input to a parser. the source code parser is just one of many parsers and is not in any way especially considered.
+
+i'll further decide on scoping and subprogram notation, if any, as i try writing programs.
+
+===== rather than functions...
+
+parsers are used instead of functions. though you can define a parser `tonumber(e[,b])` that parses `e` & `b` then replaces the parser expression by the string `e` parsed as a radix-`b` number, you could more easily write a parser `ñe,b` that selects `e` & `b` then returns the same result. this language sees functions as a non-particular syntax that isn't even very good, but certainly that its syntax should not be enforced everywhere, but that instead each computation should have its own syntax, and that that syntax should be expressed simply as a (digit)string rather than being forced into some particular form e.g. sexps.
+
+again, the language is not reductionist; therefore expressions are relations [prolog,sql], not functions [β-reducing λ's].
+
+to suggest that multiple syntaxes is too non-standard is no more valid than suggesting that multiple variables, multiple control structures or design patterns, or multiple of anything else is too non-standard. there are no standards. people do not decide standards; rather data & systems have inextricable structure(s), and people recognize it or not. choose representations (syntaxes, indexes) appropriate for the information being represented for elegant display and traversal.
+
+''''
+
+older stuff follows:
 
 * built on (+,×,-,0,1,/,⊥):
   ** `+` (coproduct) is addition, binary or, sequence append, or set union. to accomodate such variety, we'll either use ad-hoc poly, or eschew data types altogether, instead replacing all data (individual datums) with _information_ (mass noun); each "object" represented by syntax is actually a collection of facts whose internal representation is most efficiently solved for by an engine. i'm on the cusp of outright asserting that it's fallacious to suggest that any data tyes are different from any others. perhaps even the concept of _algebra_ is faulty, and that true information manipulation should be non-algebraic, but instead follow some different calculus. indeed, i want each information content to have a unique representation; *never should two inequal things have the same information content!*
@@ -24,6 +127,8 @@ TODO: how can `+` denote direct sum, disjoint union, and union?
 should short-circuiting be done by a construct rather than by a symbol, like list monad guards as the special construct and common logical values as the part supplied by the coder? likely so.
 
 ''''
+
+even older stuff follows:
 
 _program_ [noun] is not a useful term/concept. forget the term _language_, too. say _coding_ instead; `code` entails encoding [of information] and denies the fallacious code vs data dichotomy. whether a relation is about a universally quantified symbol or a particular literal value determines the ad-hoc or symmetric aspects of the relation e.g. `thing(i,v), in(i,0,4)` to mean `{(i,v) | i∈[0,4]}`. remember that these are predicates, though! the predicates set of implied values are not computed until queried. relations are like edges in a graph (symbols <-> vertices.) computations are traversals of (paths through) these graphs. btw, predicates are the most general abstract structure, and graphs are the most general data structure. *coders should never deal with data structures; they should deal exclusively with abstract structures.* this rule does not apply to those implementing logic engines. coders should never to deal with details beyond a program's spec; that's the optimizer's business!
 

@@ -2,7 +2,9 @@
 
 _a discussion of bad, ubiquitous programming practices, and their superiors. this document serves to help one recognize then unlearn bad practices._
 
-TODO,dec2022: revise this document in light of digitstrings.
+TODO,dec2022:
+* revise this document in light of digitstrings.
+* consider symbolic code, namely eventualy refinement of predicated symbols, and expressing structures/outputs as relations & holes that are eventually filled (literally free variables that are eventually bound (or not, if they're to remain somewhat free)); things with holes can be composed, and the composition retains the original holes. as always, the holes only need references, which may be numerical indices, names, or most generally a predicate (though predicates alone lack indexing that enables efficient traversal.)
 
 === functions
 
