@@ -1,0 +1,280 @@
+= uiua notes
+
+CURRENT STATE: prolog is best proglang. it's equal to lisp or strings or any other 1D structure that naturally permits multidimensionality by autorelation. however, prolog evaluation systems see prolog lists as predicates, and predicates are the essence of meaning. therefore prolog should be used for general programming. this leaves uiua as a natural better of j for programming dataflows. uiua still has a place for conveniently & tersely expressing dataflows. prolog may be at least as good by an eDSL set of dataflow macros, but this is yet to be seen. namely uiua elegantly expresses sequences of mutations over sequences. it is not apt at dealing with complex sets of relations. in fact, array langs are just more convenient versions of scalar langs; they do not much have different paradigms; instead they simply make many instructions tacit—namely loops and index manipulation operations. the same is true of stack langs: they're simply a different but equivalent—often more convenient but sometimes less—model for composing functions than the applicative model. it's more of a stylistic difference. no doubt style is important! but array-stack langs are simply more convenient notation; they don't change how one reasons about coding compared to a scalar lang, with the exception of simplicity by a tuned vm that allows the user to use only one data structure (and a natural one at that!) freely for all purposes without much worry for efficiency, which is certainly extremely appreciable! also the array model, and array langs (by convention, not necessity), and stack langs (necessarily) are flat, which is very nice b/c it avoids scoping problems (this is not true of boxed arrays, however.)
+
+i wonder which of uiua or k is more preferable. it's a contest between the stack vs applicative function relation model, versus k's ragged arrays.
+
+''''
+
+for general stack considerations, see factor notes. to understand the stack or array models vs general models, see ~/codenotes/nics-coding-method-cheatsheet.adoc.
+
+what uiua has that factor does not:
+* terser syntax:
+  ** no spaces between delims and elts
+  ** builtins have single-glyph names
+  ** glyphs (both fns & modifiers i.e. higher-order fns) can be juxtaposed
+  ** _much_ better stack signatures!
+  ** inline fns' stack signatures can be specified
+* plain ol' binding syntax e.g. x=4, wherever it's wanted in the program, though assignment statements must be the final statements on a given line of code
+  ** *note, however, that all bindings in uiua are global.* this is to encourage tacit code.
+* types restricted to arrays (and bytestreams)
+* array literals are themselves programs e.g. `[×3.-2.10]` to mean `[24 8 10]`
+  ** considers arrays as stacks implicitly: the stack words work on arrays. arrays are the single data type, but arrays are stacks i.e. they naturally support all stack operations & structure: push, pop, order/sequence.
+    *** because we can convert the stack to an element on the stack, and back, via , this means that we can operate on the stack
+* much easier/simpler; b/c more info is encoded by arrays, less must be encoded by stacking fns
+
+what i don't understand about uiua:
+* why is there no repl? factor has one. it'd be nice to have, but doesn't need: syntax highlighting, a translation mechanism for primitive names to glyphs. then again, perhaps a kak json-rpc ui is better anyway, since it's generally more powerful.
+* how to use the lsp?
+* why does it support only `main.ua` and not allow specifying other files?
+* why does `uiua watch` open `main.ua` in firefox? neither `$EDITOR` nor `$VISUAL` is firefox!
+  ** in seconds, rust crash-reports that "Failed to watch directory: OS file watch limit reached. about [programming/firefox/.hg/store/data/media/webrtc/trunk/tools/gyp/test/rules-rebuild/src]". why in the hell is it watching that directory, and what does that have to do with firefox opening `main.ua` in a tab? that directory is _not_ where firefox is running! that's just a repo of the ff src!
+
+my interest in uiua in order:
+. the actual set of primitives itself is better than j.
+. stack:
+  .. generalizes an asymetric glut of combinators to a single symmetric structure
+  .. parsing programs is easy b/c prims don't have ambivalent valence
+
+== good designs
+
+* rtl, top of stack displayed at bottom. makes prefix operators e.g. √4 look normal
+  ** apparently, though i'ven't yet seen explicit acknowledgement of it: like j, parsing is from the left yet evaluation from the right. this enables such things as:
+    *** `[1 2_3_4 5_6]` being illegally non-rectangular yet `⍛0[1 2_3_4 5_6]` is rectangular. this implies that the array literal is not evaluated once it's on the stack, but is instead modified by a later operation, namely `(⍛0)`, before being a datum usable in the program.
+      **** TODO: actually, given that arrays are actually constructed by using couple & join, this evaluation note may be incorrect! then again, the fact of how `'` works clearly implies that parsing is from the left.
+    *** `≡'⊢⇌` is equivalant to `≡(⊢⇌)`, which means that `⊢⇌` isn't evaluated immediately upon being "pushed to the stack"; instead of being pushed to the stack-then-evaluated altogether as is done in factor, the expression `⊢⇌` is, as given by `'`, known to not evaluate but instead be arguments of `≡`.
+* has operations that distinctly run on all elts (e.g. arithmetic) or whole array (e.g. `reverse`)
+* arrays like j: homo, char, num, but fns instead of boxes
+* multiline strings (each line starts with `$`)
+* chars support some (strangely arbitrary) arithmetic
+* all arrays are observable as stacks, too e.g. `[↷ 1 2 3 4 5]`
+
+NOTE: array literals are evaluated from bottom to top so that the program/code that generates the array looks like the output array itself. however, program literals are evaluated top to bottom (still rtl), to be consistent with the usual evaluation. thus if you want to return your function to return its value in an array, the brackets must not span multiple lines. example:
+
+----
+X ← (
+  ⊞=.⇡ # this line evaluates 1st
+  ↥⇌.  # this line evaluates 2nd
+)
+Y ← (
+  [⊞=.⇡ # this line evaluates 2nd
+  ↥⇌.]  # this line evaluates 1st
+)
+Z ← (
+  ⊞=.⇡ # this line evaluates 1st
+  [⇌.] # this line evaluates 2nd but still puts the result of the function into an array
+)
+X 3
+Y 3
+Z 3
+╭─       
+╷ 1 0 1  
+  0 1 0  
+  1 0 1  
+        ╯
+╭─       
+╷ 1 0 0  
+╷ 0 1 0  
+  0 0 1  
+        ╯
+╭─       
+╷ 0 0 1  
+╷ 0 1 0  
+  1 0 0  
+         
+  1 0 0  
+  0 1 0  
+  0 0 1  
+        ╯
+----
+
+pervasive:: applies to elements of an array
+array:: applies to the whole array
+element:: atom [j]
+row:: item [j]
+
+== bad designs
+
+* why does `~` print only the top of the stack rather than the whole thing?
+* if you bind a name with ←, and there are not enough values on the stack for the code on the right to run, the code will be bound as a function and will not run until the name is used e.g. `f←+1` defines a function, rather than raising an error. this is bad design b/c it's ambiguous: the programmer may have wanted to bind a datum, but, because their assumption was wrong, they've instead accidentally defined a function; and conversely they may want to define a function but, again because they didn't correctly track the stack, they've accidentally bound a datum rather than a function. working off the prior example, if `2` were on the stack already, then f would be bound to 3, and `f5` evaluates to a stack with 3 on top then 5 next! binding forms should be strictly either in/dependent of the context in which they're evaluated! i encourage that this syntax never define functions, but instead either bind to a datum, or if underflow, then raise an error, and require explicit parenthesization to define functions. this new design is consistent with uiua's obviousness e.g. not overloading primitives for multiple valences.
+* `⊟ "cat" (+1 2)` fails b/c of length mismatch but `⊟ @c (+1 2)` works. what's the point of having special consideration of an inline function making an array of constants if the other array elements must be atoms? i understand how this doesn't require homogenous types, but it requires same shape, which boxing usually does not.
+
+== box & array notation
+
+BUG: online, the following do not terminate:
+----
+# case 1
+x ← ∵!⊢{3_4}
+⊡ 1_1 x # 1_0 also does not terminate
+∵△□3_4 # case 2
+----
+
+TODO: how to do raze in uiua?
+
+* double brackets/borders are constant functions which return those arrays
+* the □ character is displayed to the left of each boxed element of an array
+* `{}` boxes the elements of an array. of course it does not box the array itself because boxing is a device to enable heterogeneous arrays.
+
+demonstration:
+---------------------------------------
+uiua                 | j
+x ← ↯[2 2]⇡4         | x=.i.2 2
+x                    | x
+╭─                   |
+╷ 0 1                | 0 1
+  2 3                | 2 3
+      ╯              |
+□ x                  | <x
+╓─                   | ┌───┐
+║ 0 1                | │0 1│
+  2 3                | │2 3│
+      ╜              | └───┘
+∵□ x                 | <"0 x
+╭─                   | ┌─┬─┐
+╷ □0 □1              | │0│1│
+  □2 □3              | ├─┼─┤
+        ╯            | │2│3│
+                     | └─┴─┘
+□∵□ x                | <<"0 x
+╓─                   | ┌─────┐
+║ □0 □1              | │┌─┬─┐│
+  □2 □3              | ││0│1││
+        ╜            | │├─┼─┤│
+                     | ││2│3││
+                     | │└─┴─┘│
+                     | └─────┘
+≡□x                  | <"1 x
+                     | ┌───┬───┐
+[⟦0 1⟧ ⟦2 3⟧]        | │0 1│2 3│
+                     | └───┴───┘
+{"mark" "jessica"}   | 'mark';'jessica'
+                     | ┌────┬───────┐
+[□"mark" □"jessica"] | │mark│jessica│
+                     | └────┴───────┘
+---------------------------------------
+
+NOTE: generally all elements of different lengths or types must be boxed / made constant before being combined into an array.
+
+TODO: consider boxing wrt: 1. rank vs join/relations; 2. avoiding fill
+
+== fns
+
+`$` before a string (and hence multiline strings) are format strings where arguments are given by underscores in the string. escape `_` by a backslash. e.g. `$"is _ > _? _." 5 3 "yes"`
+
+partition's control arg does use substrings all of whose values equal `⊜·[0 0 1 1 2 2 1 1] [1 2 3 4 5 6 7 8]`
+
+.uiua/j correspondence
+[options="header"]
+| uiua      | j | functionality
+| □         | < | distinguish
+| !         | > | confound/confuse/combine/mix/join
+| _         | <space> | array of specified elements
+| []        | () | array of specified elements
+| {}        | ; | boxed array of specified elements
+| ⍜!        | &.> | apply fn to a distinguished datum
+| #         | NB. | comment
+| partition | ;.n | distinguish subsequences
+| group     | /.  | group
+| level     | "   | associate subsets / join [relalg]
+| ⊂         | ,   | append without preserving distinctness
+| ⍛0⊟       | ,:  | append while preserving distinctness. always fills with 0 whereas in j, atoms replicate
+| ⍛         | <implicit> | fill
+| △         | $ | shape
+| ⧻         | # | length
+| ♭         | , | linearize
+| ⍛f↙       | {.!.f | overtake with fill element f
+
+.primitives particular to uiua
+* `adv^v`: delay binding verb to adverb. i expect that some modifier train corresponds to this.
+
+.name/glyph correspondence
+[options="header"]
+| name             | ascii symbol | glyph
+| flip             | : | 
+| negate           | `
+| equals           | =
+| less than        | <
+| greater than     | >
+| not equals       | !=
+| less or equal    | <=
+| greater or equal | >=
+| multiply         | *
+| divide           | %
+| add              | +
+| subtract         | -
+
+.dual primitives
+| join | couple
+
+in `fork f g x y`, `f` & `g` each may have arity in [0,2]. e.g. `[⊃'+1× 10 2]` produces [11 20]; it matches +1|1 with 10 and ×|2 with 10 & 2. `[⊃(;∶&n)× 10 2]` produces [763.421 20] but `[⊃&n× 10 2]` produces `[807.89 10 20]. mixed arity fns are done enabled in j by using `@[` or `@]`.
+
+=== exploiting that functions are first-class
+
+`∵(|1 !/^)+_×_↥..1_4_5_4_3` evaluates to [17 240 5]. it applies each dyad to modifier `/` then calls. each verb applies to the list argument atop the stack; hence the duplication. a better design is auto-duplication, which would be done by joining arrays:
+
+----
+≡(|1 !/^⊃⊢(↘1).)~∺⊂+_×_↥1_4_5_4_3
+╭─1:17
+╷ + □1 □4 □5 □4 □3  
+  × □1 □4 □5 □4 □3  
+  ↥ □1 □4 □5 □4 □3  
+                   ╯
+[17 240 5]
+----
+
+TODO: ∺(|1 !/^) should be terser
+NOTE: this runs online but not by my local installation.
+
+== vs j
+
+terser than j e.g.
+----
+⍜'↻3'⊂@x      # uiua
+'x'&,&.(3&|.) NB. j
+----
+
+these are properties of uiua, not j.
+
+* array literals are better:
+  ** may span multiple lines
+  ** support boxing implicitly
+  ** support strand and delimit notations simultaneously
+
+e.g. what in j must be `('cats';'bats'),:4;6` or `2 2$'cats';'bats';4;6` we can express in uiua as:
+
+[source,uiua]
+----
+[{"cats" "bats"}
+ {4      6}]
+----
+
+* some primitives auto-box, such as `⊂`: `≡⊂"xyz"∵□"abc"` produces
+----
+╭─       
+╷ □x □a  
+  □y □b  
+  □z □c  
+        ╯
+----
+
+which is much visually more obvious. the formatter will make only one space between 4 & 6 though.
+
+* no automatic fill; thus we're free to manipulate arrays as we wish then fill when needed, whereas in j we must take carefully compose operations so that fill is done only at the end of those operations.
+* implict fn comp
+* tacit exprs are flat, not (binary) trees. you must track stack state changes, though.
+* no grouping needed; this frees `()` for lambdas!
+* trains are tacit/combinators. stacks use stack manipulators and combinators.
+* j uses `~` for `.` (dup) & `:` (flip)
+* supports ``break``ing out of `reduce`, `fold`, `scan`, `each`, `rows` and `repeat`.
+* has first class functions rather than gerunds and tacit modifiers
+
+where valence is not specified, both expressions work for both valences.
+
+[options="header"]
+| j               | uiua
+| `g@:f`          | `g f`
+| `(f1 g f2)`     | monadic: `g⊃f1 f2.` or `g:f2:f1`; dyadic: `g⊃f1 f2`. j `(+/%#)` is uiua `÷∶⊃/+⧻.`. note the flip b/c `÷`'s argument order is inverted.
+| `g&:f`          | `g∷f`. also `g⊃^.f` works.
+| monadic `(u v)` | `u:v.`
+
+how to curry? currying's a way of coupling data, which makes incremental specification/accumulation of programs easy! it's a necessity! well, ofc, not currying _per se_, but the coupling of functions with an argument set/vector. given that fns are first-class in uiua, we really don't need currying; we can just accumulate fns and their args into an array/stack

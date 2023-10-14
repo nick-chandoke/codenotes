@@ -7,11 +7,6 @@ TODO's:
 * link:https://github.com/mawww/kakoune/blob/master/doc/pages/scopes.asciidoc[docs]
 * it's pronounced "ka'koon"
 
-=== spacemacs' functionality to implement
-
-* pretty print (display certain strings as other strings)
-  ** accomplish via `add-highlighter` w/ `replace-ranges`. see :help highlighters
-
 === design
 
 * most distinctive feature: selection on movement, and multiple selections
@@ -78,6 +73,33 @@ see `:doc keys` for notation. nb. `lt` & `gt` represent `<` & `>`.
 selection (see `:doc registers` and §_multiple selections_ in `keys.asciidoc`):
 
 * <a-p> to paste all. `y` yanks all selections. <a-p> should be your default, and `p` should likely be mapped to <a-p>
+  ** to paste a block adjacent to another, first copy the text, then paste it, then use <a-C> and <a-l> to select e.g.
+
+----
+starting text:
+0  1  2
+3  4  5
+6  7  8
+9 10 11
+
+text that i want to paste to the right of the above block:
+100 101 102 103
+104 105 106 107
+108 109 110 111
+112 113 114 115
+
+to make:
+0  1  2 100 101 102 103
+3  4  5 104 105 106 107
+6  7  8 108 109 110 111
+9 10 11 112 113 114 115
+
+1. make the selections be one for each line of the 2nd block, then yank them. you can use `<a-C>`, or select the block by using `x` and `j`, or `]p` followed by `<a-s>gh` or whatever
+2. move the cursors to the end of the 1st block then paste `<p>`. no need to multiple-paste.
+
+in the above example, this means four selections for the 2nd block where each selection starts at the beginning of the line and ends at the end of the line, not including the following newline character. then place 4 cursors at the ends of the lines of the 1st block, then paste.
+----
+
 * <a-d> and <a-c>: delete [and enter insert mode] w/o yank
 * R: replace selections w/yanked text
     * <a-R>: replace selections w/_every_ yanked text (what?)

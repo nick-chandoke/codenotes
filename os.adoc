@@ -1,6 +1,8 @@
 == the ideal os for minimalist hackers who love symmetry and smolcode
 
-as i consider bsds, porteus, and other oses, i need to look at what each offers and check against the list of things that an os must do vs extra features, and whether those features are useful and how easily they can be found as simple code or programs that other oses run.
+NOTE: at least with host os using _programmer dvorak_ layout in linux on 104-key keyboard, you can't use virtual box for vms, since the number keys don't work.
+
+as i consider bsds and other oses, i need to look at what each offers and check against the list of things that an os must do vs extra features, and whether those features are useful and how easily they can be found as simple code or programs that other oses run.
 
 i know, though, that i ultimately will be satisfied only not by an os, but a code machine, where there's no concept of "programs", only code, and the kernel is merely some code that boots and runs other code. all c-based and unix-based designs are out. everything about fixed-size filesystems, disk partitions, command lines, &c are intolerable. rather than permissions, there must be manual & automatic modes, so that care is preserved. of course, the shell must be freeform. the core of any kernel is how it manages hardware and running code. i'll learn how bsds, linux, lisp machines, &c do those. of course parallelism is a core feature of oses, so probably take hints from erlang on that one.
 
@@ -24,3 +26,70 @@ recall what as os is: an interface between programs and hw; it handles i/o, memo
 we don't need any prebuilt packages nor repositories; we can pull & compile our own code as we want. this is not an issue b/c we use few, small programs, and speedy compilers like tcc. we can resolve dependencies manually, and manage our own `PATH` &al envars (or w/e equivalent mechanism that the os uses.)
 
 there's no reason to pair a package manager with an os. any os can install nix, guix, pacman, or any other if such convenience is desired.
+
+=== finding a best os that already (hopefully) exists
+
+basically the goal is "arch, but sensible and actually works without being a pain in the ass."
+
+* nothing gets in the way of flexibility. the system should be completely hackable and only the simplest methods & encodings should be used. the system should be completely dynamic, flexible.
+  ** rolling release. releases are arbitrary and thus nonsense. a computer system should be like a living system, and living systems grow & adapt as they run. we don't want an "anesticize-surgury" model of installing improvements.
+  ** small, naked. comes with nothing.
+  ** nothing is contrived. no package _management_, system _management_.
+* obvious, not weird, not using special terminology/concepts nor requiring special knowledge, beyond hw, os, and coding, since those are what computers are about.
+* featureless. exactly how one should not use a programming language, one should not use an operating system. rather use code to store data, some of which may be runnable. this generalizes both proglangs & oses. such a system may be hard to find, if it exists at all. however, i want a system that, like being naked, comes with nothing, but instead makes installing "features" [programs] easy.
+
+i understand how c is a common language, but really that should be changed. compiled languages should be used only for programs that need the utmost efficiency and won't be changed often. there really should be an interpreted language that supports compilation, and regardless, the running program should be modifiable as it's running.
+
+.problems with current oses
+
+the contenders: artix, manjaro (since i can change the keyboard layout after install), gentoo. maybe forget manjaro, since it doesn't offer anything over arch beyond its installer. artix has non-systemd, and gentoo has a better package manager than pacman.
+
+NOTE: i've decided that gentoo is best for its link:https://wiki.gentoo.org/wiki/Wayland_Desktop_Landscape[support for wayland] (cf funtoo), its ease of installing (cf arch) doesn't use systemd, is *highly configurable* and has a good packgae manager (cf artix.)
+
+contentding base distros (which are still shit): artix. like most software, it's all shit. therefore the choice of os is less important than choice of software. linux is the best that i currently know, so artix is 1. smol/basic/essentialist, 2. uses openrc, not systemd, 3. installs binaries, not compiling.
+
+* arch: installation is painful and rarely works, failing to install the boot program correctly
+  ** i've found no arch derivatives with easy installers that finished installation and booted afterward
+  ** manjaro: i like its aim for just working like one'd expect, yet being arch-based. amazingly, doesn't offer a naked flavor.
+    *** installer failed to set keyboard layout [to dvorak programmer], so i couldn't tell whether the password which i entered for encryption was correct. also don't leave installer idle too long or a screensaver that requires an unlock code starts!
+    *** runs on pinephone, too.
+  ** artix: probably better than arch, but not much different (namely it doesn't use systemd.) naked version doesn't come with an installer, so just like arch, you'd better have another computer with the install guide open (or code your own installer), and hope that your manual install of the bootloader works!
+* slackware: the slackware book looks like it was written before the year 2000 despite having been updated in 2012. sucky, uninformative website, and it's not rolling release anyway.
+* gentoo:
+  ** _portage_ (package management system) does not actually (at least easily) allow multiple versions of a package simultaneously. these are called _slots_. i've yet to look into them, to be fair.
+  ** compiling things sucks. it takes fucking forever, uses an insane amount of computer resource, and can freeze/crash the computer, and sometimes compilation just fails for whatever reason.
+  ** USE flags, which are supposed to optimize compiled programs, are really just another mechanism that, like package dependencies or merging vcs branches, sometimes (too often) needs resolving. besides, how much speedup can it give? i haven't noticed anything being especially fast, but never has it seemed slow, so how would i notice? besides, there is no fucking way that it's worth the compile tiems!
+  ** subversions:
+    *** NOT calculate linux (gentoo-based) b/c it has no naked version
+    *** funtoo. wolf pack, openrc init rather than systemd. that being said, gentoo supports many init systems.
+      **** NOT funtoo b/c they don't support wayland, and they won't until it's integrated with their DEs
+* guile: slow, and uses nix-derived package system, guix. however, i'm a bit curious about its service manager, shepard
+* void: has special shit like xtools and ansible
+* porteus: slackware-based live ditro. has modular package un/install rather than a package manager. good design, but unfortunately:
+  ** does not come in a naked flavor; all config is done through the gui
+  ** the documentation is plain wrong
+* opensuse tumbleweed: not naked and has specialized package management
+
+...i have work to do for improving linux/oses. even lfs is shit. why? because linux is shit, because it's based on unix & c, which are shit. gotta get away from bullshit like "cross compilation", linkers, "object code", ((shared) object) files, &c. how about...just CODE, huh? no needless terminology nor assumed nonsense practices. it's all just relations, arithmetic, find/replace, and execution, damn it!
+
+=== gentoo
+
+* metadistribution:
+  ** supports many architectures
+  ** user chooses init system (e.g. systemd, s6, openrc)
+  ** may use not the stock linux kernel
+* portage
+  ** per-package `USE` flags allow you to change options, as opposed to a binary precompiled by a maintainer
+    *** this allows a lot of optimization e.g. supporting only some graphical environments or hw
+  ** multiple versions of a given package being installed is allowed
+* compiling most programs is a goddamn fucking embarassment, how much cpu time and actual time is needed. a fresh gentoo install for on the gui world takes like 6 hours on a 2020 intel i7. all basic programs thereafter take another 5 hours. some ebuilds are so intense that they freeze the computer even after hours of compilation.
+
+==== installing
+
+there's no gentoo live installer; use any live distro.
+
+=== funtoo
+
+flavor: core
+mix-ins: audio, dvd, gnome, hardened, kde, kde-plasma-5, media
+subarch: n/a

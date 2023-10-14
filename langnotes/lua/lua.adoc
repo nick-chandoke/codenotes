@@ -1,8 +1,9 @@
 == lua
 
+TODO: try to replace lua by tcc & cosmopolitan libc
+TODO: make these notes better for reference when coding fresh lua files. use and generate template code from desires e.g. read from <stdin|file>, write to <stdin|file>, loop (and show loop choices e.g. `while` and all variants of `for`, ranges, character classes & regex syntax, workarounds e.g. lua bytestring ops, &al common codes. also, ensure that i have a definite, single reference for all codes (jumps, loops, sets, io, &al))
 TODO: see about translating μKaren into lua
 TODO: does `for` with `pairs` over kv tables not preserve order? are only seqs (implicit index tables) ordered?
-TODO: i've lambasted functions. i still must lambast data structures.
 
 this doc covers how & why to use lua, and by which paradigm. particularly good uses of particular functions & codes are listed, with caveats, but most details (e.g. string character classes) are omitted; read the lua reference manual for technical details.
 
@@ -11,6 +12,8 @@ this doc covers how & why to use lua, and by which paradigm. particularly good u
 simple, small, portable, interpreted. features: [byte]string with regex, hashmap/sequence with sort, pack, append; subproc, coroutines, easy c ffi; nice lang features: type coercion, multiretvals; and obviously basic math fns and loops & branching.
 
 that's the whole language. though there are file functions, there are no filesystem functions; you'll need an external library for that. indeed, much of lua's functionality is implemented by external libs, often written in c.
+
+use lua for scripts, and c & sqlite (or w/e you like, such as go, and not java) for everything else.
 
 === overview in bullets
 
@@ -51,7 +54,7 @@ TODO: revise this into a section on each data type / information encoding.
   ** `table.unpack` is like `apply`; it gets multiple values from a table
 * types are coercive; `10 .. 20` returns `"1020"`, and `'14' + '7'` returns `21`
 
-* `#<t>` for count
+* `#<t>` for count. works for sequences, strings, or anything supporting the `__len` metamethod. does not work on tables; you must loop through `pairs` with an incrementer for that.
 * tables (hash maps)
   ** literals. `,` and `;` both work as delimiters
     *** `{k=v,...}`. `k` is a string key; it's syntactic sugar for `{['k']=v}`.
@@ -93,6 +96,10 @@ functions are sometimes good, but are generally a poor mechanism for encoding pr
 * [indirectly] recursive local functions must have declaration statements before definition statements: `local func; func = ... func(...) end` (see pg 57 of *Programming in Lua 3e*)omitted & extras are by position rather than by name
 * special code to get count of the variadic arg variable, `...`: `select('#',...)`
 * enclosing a function invocation in parentheses forces it to return only its first return value
+
+==== arithmetic
+
+in lua 5.2 (and maybe 5.3), bitwise operators are not lingustically operators; they're in the `bit32` table. modulo (%) is still available, though.
 
 === strings
 
@@ -154,7 +161,7 @@ non-patten string functions:
 
 there's no `split` function since that's possible by regex.
 
-TODO: exercise: define set intersection for strings. obviously `..` instead of `table.insert` and t[i] becomes string.sub(t,i,j). intersection is O(n^2) unless sequences are sorted. in lua there's table.sort but no sort for strings. to iterate over a string's elements, use `gmatch`.
+TODO: exercise: define set intersection for strings. i can treat strings as character sets; then intersection is obvious, but what version of intersect concerns strings' order? i suppose something similar to intersecting intervals, which generalize to [a,b]×[c,d]×.... obviously `..` instead of `table.insert` and t[i] becomes string.sub(t,i,j). intersection is O(n^2) unless sequences are sorted. in lua there's table.sort but no sort for strings. to iterate over a string's elements, use `gmatch`.
 
 using strings to program is easy if you choose your encodings well; it's difficult when the encodings are complex, as is true of most programming language syntaxes. for example, trying to use string ops on bash command lines is difficult given its syntax's complexity e.g. being able to use single or double-quotes to delimit single strings, and accepting backslash escapes within. namely the difficulty is caused by allowing the delimiter also as a non-delimiter character. this is particularly troublesome for writing wrapper programs—those that take a command line vector, do something with it, then pass it or a small modification of it to the program being wrapped. the asymmetry of lua accepting the command line vector as a table but needing to pass a string to `os.execute`. for example consider arg={'prog','a b'}; then `os.execute(table.concat(arg,' '))` will run the command line 'prog a b', which has 2 args but should have one.
 
@@ -163,6 +170,7 @@ using strings to program is easy if you choose your encodings well; it's difficu
 despite lua's power and simplicity for string programming, it has some unfortunate limitations.
 
 * "pattern items" support kleene stars &al only on character classes, not groups e.g. `x(yz)?` is unsupported
+  ** instead of properly applying the operator to the capture expression, *operators following captures are treated as literal characters*; `(abc)?` is equal to `(abc)%?`.
 * lua's regex does not support `|` (`or`)
 * there's no builtin escaping function. for including arbitrary literal strings in regexes, use this: `function escape(s) local x,_ = string.gsub(s,'[]%%$*?()-+?^.[]','%%%0') return x end`.
 
@@ -199,6 +207,7 @@ though we can do much with lua, a better language than lua should be made, and t
 
 * `require` looks in the directory relative to execution directory, not source code file path! so either `cd` to the right directory (which fucks-up all other relative filepaths) or add the directory to `LUA_PATH` (which must be set for this particular execution so that it's not used by other lua programs) this...is extremely stupid.
   ** remember that `LUA_PATH` may be relative but is actually, happily particular e.g. `LUA_PATH="path/to/src/?.lua" <lua-prog-in-PATH> args ...`
+  ** using `LUA_PATH` is practically necessary for using the lua repl. it's actually pretty good because we can be particular about which modules are available for import without needing to reflect that in a filesystem. it's easy to make a shell alias to run lua repl with the current directory in `LUA_PATH` e.g. `alias lua='LUA_PATH=?.lua lua'`
 * argv is called `arg`. it's set only for lua scripts, not the repl.
   ** in top-level scope, `...` is the positive-index substring of `arg` expressed as a string
 * `luac` compiles into bytecode. `require("pre.lc")` is OK.
@@ -212,6 +221,7 @@ though we can do much with lua, a better language than lua should be made, and t
 NOTE: `debug.getinfo(f,i)` uses `(f,i)` as an index; both are positive integers.
 
 * `require` is like `loadfile` but doesn't process the same file more than once
+  ** wait, no that's bullshit; when i do `mymod=require('...')` it works as expected, but `mymod=loadfile('...')` sets `mymod` to `nil`.
 * `require` uses envvar `LUA_PATH` as its path; `LUA_PATH` is a list of paths separated by semicolons, with question marks to be replaced by filename, e.g. `?;?.lua;/home/?` will try to find `filename`, `filename.lua`, and `/home/filename`. `require` uses the first matching expanded path expression, and path expressions may legally not have question marks (but this is rarely useful in practice)
 * c ffi: `loadlib(lib_abs_filepath, func_name)` returns `nil` on error. use in `assert`
 
@@ -230,6 +240,10 @@ return M
 ----
 
 though we can load lua files like C files—everything non-local is brought into scope when the lua file is loaded—often modules are the idiom of defining a table of functions and variables, then the last statement of the module is one that returns the table. this way, when the module is loaded, it's assigned to a value, and that value acts like a module identifier. for example:
+
+i really want everything to be dynamic, or at least have a special fn for that; like i want to redefine a function so that all functions which call it implicitly & immediately use the new version. lua is not as dynamic as i'd like. this dosen't even particularly regard modules.
+
+this being said, the lua documentation lies about `package.loaded`; if you want to reload a package, just `package.loaded['pkg']nil require('pkg')`.
 
 === mechanics & evaluation strategy
 
@@ -287,12 +301,18 @@ NOTE: options for `read` were changed from lua 5.2 to 5.3; namely the leading as
 
 .funcs
 
-* `io.input(<handle/filepath>[,mode])`: gives a handle
+see <https://www.tutorialspoint.com/lua/lua_file_io.htm>
+
+* `io.input(<handle/filepath>[,mode])`: sets the current implicit ("default") file handle
+* `io.open(path[,mode])` returns a file handle
+* remember `:io.flush()` & `:io.close()`!
 * `<file>:read()`: gets content
 * `io.read(...)`: shortcut for `io.input(...1):read(...2)`
 * read from a process: `io.popen(<procstring>):read('*a')`. idk how to execute a process by a command line _vector_ (cf string)
   ** `io.popen` runs asynchronously in the background. however, it is still a child process of lua, so killing lua will kill it too. of course, if `io.popen` is the last statement in a lua program, then killing the bg proc will immediately thereafter terminate the lua proc
-  ** `os.execute` is synchronous
+  ** `os.execute`:
+    *** is synchronous
+    *** returns 3 values: true|nil, "exit"|"signal", and the integer exit code
 
 explore funcs by `for k,v in pairs(_G) do print(k) end`; in there there's something called `bit32`. ok. let's see what's in it by replacing `_G` with `bit32`. ah! bitwise fns!
 
@@ -325,7 +345,7 @@ repos:
 -- handles nils at the end of results and such
 local function print_results(...) if select('#', ...) > 1 then print(select(2, ...)) end end
 repeat -- repl
-    io.write'> '
+    io.write('> ')
     io.stdout:flush()
     local s = io.read()
     if s == 'exit' then break end

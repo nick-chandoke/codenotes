@@ -1068,7 +1068,7 @@ with recursive t(v) as (values(1) union all select v+1 from t where v < 5) selec
 
 NOTE: despite the SQL99 standard spec, sqlite appropriately does not require `recursive` in order for a cte to be recursive.
 
-this does not produce (1)++(2),(3)++(3),(4),(5)++.... `select` does not return the whole table on each iteration; as described in `with§3`, one item is taken from a queue (step 2a); `select` is a misnomer in recursive queries.
+this does not produce (1)++(2),(3)++(3),(4),(5)++.... `select` does not return the whole table on each iteration; as described in §3 of sqldocs for `with`, one item is taken from a queue (step 2a). `select` is somewhat a misnomer in recursive queries.
 
 produces a column `v` with five rows of values 1 through 5, effectively equal to haskell `take 5 (Data.List.NonEmpty.unfoldr (\n -> (n, Just $ n + 1)) 1)`. the definition of `t` is unbounded; the bound is in `limit 5`; therefore locally bound tables (at least when bound with `recursive`) are not stricted evaluated before the body of the `select` statement.
 
@@ -1796,6 +1796,8 @@ returns
   ** `csv`
   ** `line` (best for reading long outputs in terminal)
 
+TODO: what's `ascii`? w/e it is, it risks writing control characters to terminals.
+
 === performance
 
 * gather multiple successive statements into transactions (see your db's docs for the `TRANSACTION` keyword)
@@ -1831,7 +1833,8 @@ insert into db2.table1 select * from main.table1 limit 1; -- table1 of file "db2
 
 .sqlite3-specific execution
 
-* to open a db as read-only, specify its location as a URI, then append a query: `file://<path>?mode=ro`
+* to open a db as read-only, link:https://www.sqlite.org/uri.html[specify its location as a uri] then append a query: `file://<absolute path>?mode=ro`. this can still cause the "database is locked" error depending [somehow] on how the program which has opened the db for rw has done so.
+  ** if reading e.g. firefox's `places.sqlite` (bookmarks & history) while firefox is open (and so has the db locked) then you can feasibly, given that the file is small (15M for me) copy it to a new location then open it there. obviously this hack is infeasable for large files or when such copying must occur too frequently, as this would either take too long or age the disk unduly.
 
 .quoting
 
@@ -1854,6 +1857,8 @@ usage notes:
 
 pragmas:
 
+remember that pragmas require a statement-terminating semicolon.
+
 * pragma `table_list` gives more info than `.tables` and can be used in `sqlite3_exec` instead of only in a repl
 * describe a table: `table_info("n")`. no effect or empty relation if n ∉ db.
   ** `table_xinfo` is the same but also shows hidden columns
@@ -1871,23 +1876,93 @@ sqlite is an excellent json extractor and manipulator. it considers json as a se
 
 * `.mode json` outputs json to stdout
   ** `.once <file path>` writes next query's output to file (so can write table as json to file)
-* if using sqlite as a library in another proglang, then conversion from rows to json is trivial
+* if using sqlite as a library in another proglang, then conversion from rows to json is trivial; use a json library for that proglang
 * json is stored as ordinary strings, except return value of `json`
 * json is stored in table cells or string literals
 
+.importing json string into relation
+
+suppose that i've a file `f.json` whose contents is an array of objects with keys `date`, `symbol`.
+
+.reading from process
+[source,sql]
+----
+create table tmp(t); -- to hold the raw string that'll be parsed into json
+-- NOTE: i do not know whether \037 or \036 are used to partition import string into tables or not when --ascii isn't used
+.mode ascii
+-- or .import "filepath.json"
+.import "|curl 'https://xyz.com/a/json/endpoint'" tmp
+-- avoid outputting to terminal with .mode ascii!
+.mode box
+create table t as select value,id,parent from json_each(json(t)) join tmp;
+-- select dates after today that're T+1 or fewer days away
+-- e.g. if today is the 11th then with T=1 it'll select symbols & dates
+-- whose dates are the 12th or 13th.
+with n(n) as (select ceiling(strftime('%J',CURRENT_TIMESTAMP)))
+  select json_extract(value,'$.symbol') as symbol,
+         json_extract(value,'$.date') as date
+  from t,n
+  where cast(strftime('%J',date) as integer) between n and n+T;
+----
+
+.reading from file
+
+this method has 4 fewer lines and does not use pragmas, though it still uses special function `readfile` which is available only inside the sqlite repl.
+
+in either case, if you were using the sqlite library, you'd simply pass a string in directly. i'm not aware of json ever being designed maliciously for sqlite's parser.
+
+[source,sql]
+----
+create table t as select value,id,parent from json_each(json(readfile("f.json")));
+with n(n) as (select ceiling(strftime('%J',CURRENT_TIMESTAMP)))
+  select json_extract(value,'$.symbol') as symbol,
+         json_extract(value,'$.date') as date
+  from t,n
+  where cast(strftime('%J',date) as integer) between n and n+T;
+----
+
+NOTE: if you set `.mode json` before you `.import` then it'll parse each JSON token as a row, like `json_tree` except without that fn's columns, instead with only one column whose value is a k/v pair or a delimiter for an array or json object. i don't see when this would be appropriate.
+
+use sqlite repl function/pragma `.cd` if necessary.
+
+.parse a json table into sql
+
+this parses an array of uniform-schema objects into a table `t`, inferring the relation's header from the 1st element's keys.
+
+[source,sql]
+----
+-- list so that we can easily copy & eval the sql statement output by our sql query
+.mode list
+-- array of json objects becomes a table of records
+create table src(j); insert into src select value from json_each(json(readfile("actives.json")));
+-- eval the sql statements output by the following query; they create & populate the table corresponding to the original json
+with j(h) as (select j from src limit 1) select 'create table t('||group_concat(key,',')||'); insert into t select '||group_concat('json_extract(j,"$.'||key,'"),')||'") from src;' from json_each(h) join j;
+drop table src;
+.mode box
+select * from t;
+----
+
 .fns
 
-json:: id fn but cod is string pseudo-typed as json.
-json_valid:: 0 or 1 whether a value is a (valid) json string.
-json_array(e,...):: constructor
-json_object(k,v,...):: constructor
-json_array_length:: obvious. useful in query predicates.
-json_extract:: select elements from json tree. if one path arg given and selected value does not refer to json array, then returns single value as sql atom; else returns json array string.
-json_insert, json_replace, json_set:: put: 1. unless exists; 2. when exists; 3. either; respectively.
-json_remove:: duh
-json_patch:: put (or remove if put to null) values in json object at keys. treats arrays as atoms.
-json_each, json_tree:: json tree as sql tables, top set of children only, or children on all levels
-json_group_array, json_group_object:: aggregate fn. return selection as json array or object (see example below). take 1 & 2 args respectively.
+common, useful, non-trivial fn names are bolded.
+
+[options="header"]
+|======================================================================================================================================================================================================================
+| function(s)                           | description
+| *json*                                | id fn but cod is string pseudo-typed as json.
+| json_valid                            | 0 or 1 whether a value is a (valid) json string.
+| json_array(e,...)                     | constructor (not accessor)
+| json_object(k,v,...)                  | constructor (not accessor)
+| json_array_length                     | duh. useful in query predicates.
+| *json_extract*                        | select elements from json tree. if one path arg given and selected value does not refer to json array, then returns single value as sql atom; else returns json array string.
+| *json_insert, json_replace, json_set* | put: 1. unless exists; 2. when exists; 3. either; respectively.
+| *json_remove*                         | duh
+| *json_patch*                          | put (or remove if put to null) values in json object at keys. treats arrays as atoms.
+| *json_each, json_tree*                | json tree as sql tables, top set of children only, or children on all levels
+| *json_group_array, json_group_object* | aggregate fn. return selection as json array or object (see example below). the fns take 1 & 2 args respectively.
+|======================================================================================================================================================================================================================
+
+NOTE: there's no function to get headers from a transient table. to know the headers returned by json functions, you must read the sqlite documentation. namely we cannot `select * from json_[each|tree](...)` because this includes the hidden column `json`, which returns a huge text string.
 
 .operators
 
@@ -1935,6 +2010,8 @@ select json_group_object(key,fullkey) from json_each(j), d where k="j"; -- {"a":
 
 === triggers
 
+TODO: why is there a section on triggers here? haven't i already discussed them in better detail elsewhere?
+
 triggers are very powerful. they enable reactive programming aka _hooks_.
 
 [source,sql]
@@ -1966,11 +2043,33 @@ the solution (2) is to use bit vectors in cpu registers to avoid jumps and heap 
 
 === interfacing with sqlite
 
-firstly, i imagine that every desired extension to sqlite can be accomplished via its c api. yet c is compiled and a poor language. sqlite is extensible and can dynamically load functionality, but coding that functionality is still crufty! our sqlite interface options:
+remember that pragmas require a statement-terminating semicolon.
+
+firstly, i imagine that every desired extension to sqlite can be accomplished via its c api. though c is compiled. sqlite is extensible and can dynamically load functionality (loads shared object), by:
+
+. if you've used `sqlite3_db_config(<db>,SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION,1,NULL)` in C, then `load_extension(name[,path])` in some sql statement (e.g. `select`) and `sqlite3_load_extension()` both are equivalent ways to load an extension.
+. pragma `.load <ext>` in the sqlite repl, which does not require enabling extension loading.
+  .. `.load` takes a 2nd, optional arg which specifies the shared object's function name to load; the default is `sqlite3_extension_init` or `sqlite3_<x>_init` where `x` is derived from the filename
+
+to compile extensions you need one of the amalgamation files, `sqlite3.h`, which is not included in the sqlite source archives. you have 3 options for obtaining it:
+
+. install package `libsqlite3-dev` from a package manager that features it.
+. download the sqlite amalgamation
+. manually generate the amalgamation (see <https://www.sqlite.org/src/doc/trunk/README.md>)
+
+see `getthecode` doc. `fossil clone https://www.sqlite.org/src sqlite.fossil` is probably the best way to obtain.
+
+==== extensions
+
+see `loadext` docs.
+
+''''
+
+our sqlite interface options:
 
 * `sqlite3(1)`, which includes a sql repl and many useful specialty functions
 * direct c funcalls
-* wrapped funcalls (for non-c langs like lua, lisp, &c)
+* wrapped funcalls (for non-c langs)
 * command line
 
 * all support multiple statements (you can use heredocs for multiple statements on the command line—even pragmas or those with leading dots.)
@@ -2025,6 +2124,7 @@ this section discusses using sqlite as an alternative to anything conceivable.
 * pass query results to `fzf --preview 'sqlite3 db 'select * from t where x like "{}"'`. again, though, this is preferably done without opening & closing each time that the cursor moves. this quoting is horrible, btw.
 * store comic archives as sql dbs instead of rar, 7z, zip, or any other number of alternative formats
 * use sql db instead of filesystem
+* `sqlite3` as a command-line interface to sqlite: `sqlite3 -csv <file> <sql>` will print in csv, which can be processed by awk or w/e else. `xargs` is really useful with such outputs for generating shell scripts from sqlite dbs
 
 ==== `sqlite3(1)`
 

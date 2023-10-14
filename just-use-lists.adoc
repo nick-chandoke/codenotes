@@ -40,7 +40,7 @@ insert into edges values(-1,1),(-1,2),(-1,-2),(-2,3),(-1,4);
 
 the grouping (a,b,d ∈ 1) is encoded as graph {-1→a,-1→b,-1→d}, which is codeed in the table as (-1,1),(-1,2),(-1,4), where 1, 2, & 4 are the ``id``s of a, b, & d respectively.
 
-as you'd expect, the graph encoding is more elegant for graphs, and the lisp encoding is more elegant for subsets. lisp literal syntax is ideal for describing trees.
+as you'd expect, the graph encoding is more elegant for graphs, and the lisp encoding is more elegant for subsets. lisp literal syntax is ideal for describing trees. by the way, one can generalize the array pattern _m-by-n as m*n with modulo_ into a db of indices which encodes a ragged array. generally the index is any unique identifier; if you want numeric properties, though, e.g. index 4 is before index 5, then you'll need a more particular encoding.
 
 really, there are multiple interpretations of `(a b)`:
 

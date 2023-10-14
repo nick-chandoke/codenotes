@@ -1,6 +1,23 @@
 == best paradigms lang (substring relation notations)
 
-this document is supposed to be a terse spec of the ideal programming language. it's changed greatly since discoveries about sql and the relationship among [text|byte]strings, numbers, sequences, and strings.
+NB. grammar, like typing, checks only some aspects of a program. are those aspects so important? i say not. grammatical correctness does not imply sensible ideas. sensible ideas do not imply correct form, but any encoding should see the form be far easier to fix or enforce than the information assuming the form! certainly the form should be easy to enforce and simple & elegant enough to enforce even programmatically. no form's complexity should rival the complexity of identifying the code's actual schema.
+
+* never introduce constraints beyond a program spec. an example of badly adding constraint is creating a _separate_/unique boolean type. non-numeric booleans lose their natural power e.g. `+/(>&5)` to get the number of elts greater than 5, or using on a logical vector addition instead of AND to get the number of conditions matched; this would allow one to ask "does an element match at least n/m conditions?" instead of merely "does an element match all, one, or none of the conditions?" as would be accessible only by using AND or OR. we see that logical vectors are useful in `u/@:e.` where u may be `+` or `+.` or `*.`. such designs are not in other langs, however, because they suffer the same damn problem as ever: they're literal, not virtual. even if the logical vector were to be returned as a stream [scheme; sequences in racket], it'd use thunks or some other non-optimal implementation.
+* language is not a _tool_; it's an expression of truth! it's common for programmers to say that, "unlike natural languages, some programming languages are better than others." but this is incorrect: some natural languages are better than others! those with fewer and more regularly-enforecd rules are objectively better; they communicate the same thoughts by less information (i.e. they eschew redundant information) which means less computation (encoding & decoding). some languages feature recursion, and some do not. for those that do, it's apt for the recursive case to come at the end of a sentence, because then, like tail calls, there's no need to backtrack—to how where the recursive case relates to its context after processing it. furthermore, as simpler examples, it's apt to have modifiers follow nouns, because this is easier to remember. for example, "a large, green, rotten, spicy guacamole" is difficult to parse because the reader/listener is presented with a train of abstract qualities and cannot apply them to an image until they finally arrive at "guacamole." english and japanese follow this pattern. spanish does not: in spanish it'd be "un guacamole grande, verde, podrido y picante." at least japanese's grammar consistently uses attributive noun phrases whereas english (as it's commonly used) has different grammatical structures for using adjectives vs attributive noun phrases e.g. in the anime _kiniro mosaic_ an english character speaks the english, "...flows through my gold-as-honey town" which _is_ correct english but no english speaker would ever phrase it like that; they'd use _which_ instead: "flows through my town which is gold as honey." this is despite no one ever saying "avocado which is green, rotten, &c" for obvious reasons of brevity. the ideal solution would be to modify english's grammar to omit _which_ and always have attributes follow nouns.
+
+TODO: consider apl conditional statements: that it's guarded statements: if(AaBbCc...) where majiscules are conditions and miniscules are associated programs. the `if` construct basically does (or (and A a) (and B b) (and C c) ...)
+TODO: add macro/template (e.g. hxt,m4,lisp) considerations
+TODO: add note that relationality is inevitable; all data must each be stored somewhere, and each in exactly its own unique place. data "near" other data are related; _near_ is a relation (specifically in a metric space.) another example: multiple servers, multiple chatrooms. discord servers are all independent (i guess; i'm really not sure how it technically works) so each user, though persistent across all servers, is unable to open communication channels across multiple servers freely; one can open group communication channels whose members [set elements] are each known to each other irrespective of servers (thus all being known to each other (common scope) in global discord usernamespace), but one cannot simply join two [voice] chats of two different servers. in fact, one can't even join two [voice] chats of a single server. this might be technically easy yet purposefully disabled, or maybe it was designed needlessly restrictively and would require particular effort to enable. the latter case would demonstrate poor design in the form of not acknowledging natural relation of data [stored across multiple locations as is always necessarily true excepting c-style data unions.]
+
+loops are a bit of a silly concept because they're ubiquitous. obviously all programs have many relations. all sets of relations may be looped over whether that relation set be one-to-one or one-to-many, or w/e, or whether defined ad-hoc or by a rule.
+
+also, ad-hoc vs rules is a bad distinction. much better than defining rules as code is identifying sets which are, as all things should be, virtual & sparse, and which may have extra properties added to them, thus achieving variable/object/class definitions of universal facts (such as a function of type X -> X which acts on _all_ x∈X (at least as far as the type can express; were types to be completely descriptive, they'd be the functions themselves, thus revealing functions are mere relations of subets.) unioned with ad-hoc facts. we see the silliness of ad-hoc vs universal quantification as separate [alternative] designs when we consider algebras, which are all defined of axioms (which are ad-hoc) yet defined over the algebra's set; this duality reveals the truth that, simply, _all_ relations are specified by some relation of variables each of which is variably constrained, denoting some subset of some context-specified set. much like using a number (for 0..n-1) or pair of numbers to denote the number of times or indices over which to iterate. the j verb `}` is a good example of the power of ad-hoc sets; such functionality would, in other languages/designs, be done by a function rather than array. ultimately the pinnacle of coding is when the only "functions" are update/put/delete (generally x -> x'; put is `const x'` and delete is x'=∅) and select/get. update is a bit uncommon, used only to mutate sets, which is helpful only for 1. discarding information or 2. writing to persistent media. really point (1) isn't even needed if a runtime inferrs which data is henceforth unused. select is implicit in the mere mention of variables; this leaves all the rest of a program stored as "general data" (cf lexical-grammatical "code".) thus rather than "programming languages," we should have relational models, such as sql, prolog, or apl's array/rank model. these languages are all good because they focus on the only truth: relation.
+
+NOTE: this document is being superceded by its implementation, which features some improvements.
+
+this document is intended to be a terse spec of the ideal programming language. it's changed greatly since discoveries about sql and the relationship among [text|byte]strings, numbers, sequences, and strings.
+
+all information is filtered information as related to other information. this is seen clearly in sql's `select` statement. where `select f(a) from t` may be thought of "applying a function to" `a` which was extracted from `t`, it's more correct to see f(a) as `a` as it's related to some relations/vars of relation `f`. indeed, `f` is a unary relation in that it's a relation with a designated "hole" (free var), whose name is specified in `f`'s signature and is usefully bound only within `f`'s body.
 
 .blend of stack and non-stack
 
@@ -10,14 +27,19 @@ feature push & pop fns. if the stack is omitted, then it'll default to the defau
 
 all things being numbers and strings, they support arithmetic and substring, which uses python's index notation [i] or [i:j], except that it supports predicates also.
 
+.algebraic design
+
+before we delve into the language, i'd like to note that originally i'd thought that the language would have algebraic underlyings. however, i realize that algebra is too contrived. instead of modeling the world by algebras, imposing our assumptions, considering only information (again, datastrings) is better. whatever data we work with may permit some patterns or others, but only at that time—per program—should we design & use algebras. there's no reason to try to identify an algebra for the language itself. *use algebras & designs only for programs.*
+
+that said, there must still be a set of primitive operations & encodings that comprise the language. these should manipulate essential aspects of informaiton. thus we modify order & values at given positions. this is ultimately elegantly & succinctly represented by `set` & `substring`, which we express as index brackets `[]` which i discuss in detail below.
+
 ==== literals
 
-* regexes are denoted by a leading ρ; like in `sed`, the following character determines the delimiter e.g. `ρ-'-' is interpreted as a literal, not a regex in here because it's the delimiter-`
 * regexes are considered separate from strings. however, like strings & numbers, they're coerced by some operations e.g. `regex+str` equals `regex+literal(str)` where `literal()` converts a string into a regex that matches the string literal. `Ρexpr` complies `expr` into a regex.
 
 ==== general operators
 
-* any computation with a trailing `=` is shorthand for `x=expr(x,...)`, including indexing ops.
+* any computation with a trailing `=` is shorthand for `x=fn(x,...)`, including indexing ops.
   ** pure substitution vs mutative substitution is chosen by whether there's an `=` present
 
 ==== arithmetic
@@ -33,17 +55,18 @@ a leading `u` denotes unsigned. TODO: should it prefix an operator or a variable
 
 ==== strings
 
-* numbers are interpreted as digitstrings; x[i]=1 strings the ith bit of x
+* numbers are interpreted as digitstrings; `x[i]=1` sets the ith bit of x
+  ** more generally `x[i:j]=s` replaces the ith through jth bits by s, where s is a bitstring
+    *** even more generally, `x[i:j]=s` replaces the ith through jth digits by s where s is a digitstring of x's radix, and may notably be a function of `x[i:j].`
 
 .operations
 
-we generalize gmatch, match, find, find all, sub, and gsub by seeing them as traversals that may exit early by some predicate of loop state vars. this reduces the 6 functions to match, find, and sub that return a variable-sized substrings. substitution vs extraction is determined by presence of `=`. to choose between match or find,...idk, b/c idk why/when one would want to return indices rather than values there.
+we generalize gmatch, match, find, find all, sub, and gsub by seeing them as traversals that may exit early by some predicate of loop state vars. this reduces the 6 functions to `match`, `find`, and `sub` that return variable-sized substrings. `x[pat=repl]` shall correspond to lua `string.gsub(x,pat,repl)`, while `=` retains its usual meaning: `x[pat]=repl` means that x at `pat` is replaced by `repl`. `x[pat=repl]=repl` would be insensibly redundant. use only find; match is defined by find & substring. this is separate from `=` outside the clause which chooses whether we mutate a variable or not.
 
 * `#` (count)
 * select: `[i]` `[i:j]`; generalizes substring & find by allowing `i` or `j` to be an index or predicate
   ** using braces instead of brackets selects all; brackets selects first
-  ** replacement is done by using `=` inside the clause; this is separate from `=` outside the clause which chooses whether we mutate a variable or not.
-  ** generally we may select a predicated substring by a given index. the notation may be `x[v@I]` for index `I`. indexes tell how to traverse a string, and exist for efficiency. `[]` passes `v` as a value to `I`; for example, `I` may be binary search, whose traversal of `x` depends on `v` being an integer index of `x` by common numerical order and assumes that `x` is sorted.
+  ** generally we may select a substring; i'll refer to the method of selecting from the structure an _index_. the notation may be `x[v@I]` for index `I`. indexes tell how to traverse a string, and exist for efficiency. `[]` passes `v` as a value to `I`; for example, `I` may be binary search, whose traversal of `x` depends on `v` being an integer index of `x` by common numerical order and assumes that `x` is sorted.
     *** this is analagous to sql's indexes on computations of attributes.
   ** `select` evaluates to the empty value if none found
   ** like in lua's `string.gmatch`, selection with multiple captures may return multiple results.
@@ -56,7 +79,7 @@ we generalize gmatch, match, find, find all, sub, and gsub by seeing them as tra
   ** to append or prepend, replace `ρ^` or `ρ$` by a string
 * all permutations are virtual; they affect indexing, not the data as physically stored in memory
 
-you may have noticed that the above rules imply that strings are not of one index, though every string has a natural index. like in sql, we may define any indexes over any strings, and the index may be of any form [type]. also the language is truly not only plurality-agnostic, but information-agnostic; no string exactly identifies some information; only the combination of a string and parser indicates information.
+you may have noticed that the above rules imply that strings are not of one index, though every string has a natural index. like in sql, we may define any indexes over any strings, and the index may be of any form [type]. sql relations well show that it's no more correct, abstractly, to say that a thing has an index and a value, though data must have location in physical memory, which suggests a natural index of sorts, or that indices must be unique i.e. that their defining feature is that there's only one map, a surjection, from indices to values. also the language is truly not only plurality-agnostic, but information-agnostic; no string exactly identifies some information; only the combination of a string and parser indicates information.
 
 [TODO]
 * when & how should i allow selecting indices instead of values at those indices? consider natural indexes and other indexes.
@@ -101,6 +124,10 @@ again, the language is not reductionist; therefore expressions are relations [pr
 
 to suggest that multiple syntaxes is too non-standard is no more valid than suggesting that multiple variables, multiple control structures or design patterns, or multiple of anything else is too non-standard. there are no standards. people do not decide standards; rather data & systems have inextricable structure(s), and people recognize it or not. choose representations (syntaxes, indexes) appropriate for the information being represented for elegant display and traversal.
 
+.note on macros
+
+like picolisp or factor, prefer fexprs to macros. macros are typcially static. quoted programs are generally dynamic. this new lang's optimizer will determine at compile time which code can be reduced [simplified]. the reduction may be of code that expands into other code, or code that permits a simpler expression, or code that's guaranteed to evaluate to a static value, and that value will be kept in the `.data` section of the executable. there may be even more ways to optimize. regardless, macros will not be treated any differently from other code. that code may decode into more "code" is no different from code decoding into numbers or strings or digitstrings, since they're all themselves code. there's no escaping essential information regardless of its encoding. the fallacy of macros is that they still consider code (syntax, which assumes _language_) differently from data.
+
 ''''
 
 older stuff follows:
@@ -117,14 +144,19 @@ older stuff follows:
 
 i won't dwaddle on symbolic notation since i ideally want all glyphs to be dynamically generated (see bit-twiddling§blinkenlights) anyway.
 
-i still need a primitive for subset/selection, which is always by predicate.
-
-TODO: should i have ⊥? (×0) seems to also short-circuit. perhaps ⊥ should correspond to failure, which begets backtracking. that seems like a separate model from this algebraic one, though.
-TODO: consider co/product wrt adts
-TODO: how can both `/` & `+` be dual of `×`?
-TODO: how can `+` denote direct sum, disjoint union, and union?
-
 should short-circuiting be done by a construct rather than by a symbol, like list monad guards as the special construct and common logical values as the part supplied by the coder? likely so.
+
+''''
+
+* remember that prolog is more powerful than erlang,haskell,&c b/c it uses predicates which generalize constructor or argument pattern matching.
+* erlang principle: program for the positive case, and let the program crash. this eliminates bloat and makes finding bugs easier.
+* state vs purity is just whether things read & write things in *shared scope* vs *pass things* to each other. the message passing model (e.g. thread mailboxes) generalizes functions.
+* if something fails, then the "crash" should be limited to the subset of the program that failed. again, prefer living programs.
+* multicore is a very similar problem to distributed computing. erlang makes both transparent.
+  ** to be fair, a message/function/pure model might be much more appropriate for distributed computing or cloud applications than the method that i'm encouraging. that's tbd. of course a lang good for distributed computing must be defined abstract over machine or processor/core.
+* nested code is as silly as nested [data] structure[s], which is obvious when you consider that code is just another structure. the same flattening techniques as for data structures should be used for control flow, and consequently any techniques discovered to better express control flow can be used for data structuring.
+* recursion is mathematically sound and elegant. however, in coding, one should use a data structure, e.g. 1+ stack(s), to store earlier data to be accessed in a later computation; to use stack frames, a *particular* aspect of the *language's computing model*, is as poor an idea as using any asymmetric/special thing. speciality itself is always a bad idea! one would use a loop (goto&if) with stacks or w/e else structure you want.
+  ** classical math is not the ideal that code should strive for. neither is natural language. in fact, low-level computing is better than either, and is much more plain & truthful about the nature of information, structure, and meaning.
 
 ''''
 
@@ -214,6 +246,8 @@ in sql, to express a loop that may need to short-circuit, we must use the sole l
 the mapping over one t generally affects other t; we must use a fold and not a map if using iterative method.
 
 if using logical method then we'd iterate not by map nor fold, but by backtracking, which generalizes fold to include `fold` & `if`. as such the logical iteration/evaluation (they're unified under the logical model!) method is like an `if` inside a `while` loop. the loop would better short-circuit than loop over all `t` but do nop for `{t|p(t)}\τ` where `τ` is the set of elements for which f(t) has been already performed, unlike the set of `t` (implicitly given merely by the symbol `t`), `#τ(T)<=1` is correct! the expression `τ(T)` means `τ` at a given `T` i.e. `τ` parameterized by `T` or `τ` such that `T` i.e. the intersection of `τ` & `T`'s contexts. we thus see the program modifying itself while it runs: as part of unifiing the predicate (analagous to traversing a stack or ast for stack or applicative langs) side effects are performed which both perform `f` _and_ modify the system being unified (by changing `τ`,) which affects the unification itself, making `#τ<=1` make the program correct. thus the whole program is:
+
+NOTE: while(c){body} reduces to if(c){body} by inserting a stop modification: while(c||x){body;x=0}
 
 ----
 Ω∈π(S), ∀Ω α∈Ω.

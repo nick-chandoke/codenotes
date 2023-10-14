@@ -1,0 +1,615 @@
+== nixy's coding method
+
+TODO: merge w/factor notes' 1st section, _factor: good or bad?_.
+
+a quick guide to writing programs:
+
+recall the 4 fundamental facts of programs:
+  .. subset selection & relation (includes grouping, which is just subset identification which is the same as selection)
+    ... now that we know that we're discussing sets, _subset selection_ is redundant. i henceforth say _selection_.
+  .. en/decoding i.e. looking-up in a _relation_ [relational algebra]—a structure that generalizes associative array [structure/type] and, in symbolic systems like prolog, functions.
+    ... _structure_ is defined exclusively by abstract relations; i use _relation_ and _structure_ interchangeably.
+    ... strings are a good _de facto_ structure, though abstractly; using strings as general structures is impractical in most programming langs because these langs don't support fast substring selection, and do not consider strings as "numbers"
+    ... _number_ is a vagry. a sensible definition is the cardinals; but notice how i said _cardinals_ instead of _numbers_. again, the term _number_ is unhelpful. it's more sensible to consider particular rigorous mathematical structures such as rings, fields, normed vector spaces, the complex numbers, hyperreal numbers, ordinals, or any arbitrary algebraic structure.
+      .... computers are apt at calculating arithmetic, namely of integers and reals, and multidimensional relations thereof, such as complex numbers, real matrices, and neural networks (undirected graphs of arbitrary precision reals). we should strive to use these elegant structures directly, to avoid wasting cycles on converting between our chosen representations and the computer's internal representations. choose a program evaluation system and your representations together. i usually recommend array-based systems with apt consideration for ℤ/2, ℤ/n, ℤ, ℝ, ℂ, ℍ, &c, because these structures are elegantly related among each other, encode common natural properties of many aspects of reality, are simultaneously considerable as many structures (e.g. lattices or rings), and are universally understood which makes them immediately accessible to all programmers, mathematicians, and scientists alike.
+        ..... examples of natural structure in these structures: cycles in multiplying quaternions or modular arithmetic, as relate to cyclicality of ring buffers or running laps in a race
+  .. `eval` (parsing code ultimately into machine instructions then executing them)
+  .. neither jumping nor conditionality is a primitve! we can use subset selection & eval instead, and selection is merely selecting a relation from a set.
+. understand program abstractly:
+  .. understand everything in terms of relations e.g. `rel(attr1,attr2,...)`. i use this notation which is from relational algebra.
+  .. identify relations [joins]
+    ... note which, and from which, of these data must be calculated; this derives evaluation order.
+. choose an evaluation system e.g. ocaml, erlang, mozart, ada/spark, j, pony, sql, based on needs e.g. pretty output, dynamicism, safety/correctness, usability/portability, and elegance of encoding e.g. erlang's vm as a message-passing, multi-and-independent agent, concurrent, fault-tolerant system.
+. choose langs (namely relational models and runtimes)
+  .. know the language's _kernel_—the smallest essential set of primitives
+. specify abstract code into source code:
+  .. code in a relalg notation/system first, e.g. sql. such code concretely represents all programs w/o.r.t. execution system
+  .. consider security and execution system during initial design. e.g. if your system is like the producer-consumer model, then an inherently concurrent system is likely appropriate. *you should consider things like how to _truly_ properly initialize & cleanup resources with regard to async runtime errors!*
+
+the basic, usually good, assumptive approach: use sql(ite). it's small, supported everywhere, extensible via c, acid, concurrent, efficient, declarative, simple, pretty terse, interpreted, executable from within a repl (with pretty print) or within shell scripts, and supports multiple common output formats (e.g. html, csv, box drawings) and input formats (namely json and csv.) you'll likely want to use it with another good lang that has good support for strings, sequences, math, and complex traversals.
+
+NOTE: as prolog demonstrates, all programs can be expressed as 1st-order logic. hindey-milner is equivalent to 1st-order predicate logic. to its hilt, typed programming is predicates, and all higher-order logics can be expressed by 1st-order, so we may as well just say that all programs are 1st-order predicates.
+
+''''
+.2023 sep 11
+
+all coding is (re-)representation (of subsets), or conclusion. prolog demonstrates this well in that its horn clause bodies do not always concern their heads entirely, or that they imply a bodyless horn clause some of whose elements are constants (not all are variables). obviously horn clauses themselves are generally predicates that imply other predicates.
+
+to write a program, identify:
+
+. what information we want (not _data_—_information_! information is abstract, e.g. sequence/order, uniqueness, commutativity, bijectivity, &c)
+  .. how we want to relate infos
+. data (inputs) that have said info
+  .. subsets of data that we want to extract or relate
+. primitives that relate those infos (or relations of those infos directly, as is the case in prolog)
+  .. encodings that those primitves accept
+  .. ensure that the relations that you choose don't discard information that you'll need later!
+    ... or, if a relation R discards information but S does not, then you can P(R(Y),S(Y)).
+
+always consider which relations are mere transcoders versus those which discard information. an example of transcoding is structure reversal, which does not change the structure but merely its orientation, which is non-idempotent only in a context that has a "start" and an "end". an example of discarding is intersection / set difference / predicate application, which always returns a subset of its input. i say "input" singularly because for some reason i feel that all binary relations should be seen as curried unary functions, despite that relations generalize functions and may be legitimately super-binary.
+
+things that we do with information: transcode (only for the benefit of decoders), remove/intersect (everything else).
+
+=== examples of code derivation
+
+==== nub
+
+info that we want:
+* nub set
+* original sequence
+
+===== in prolog
+
+TODO
+
+===== in sql
+
+in sql we basically cheat b/c `group by` is essentially nub.
+
+[source,sql]
+----
+create table t(idx integer primary key autoincrement, letter text);
+insert into t(letter) values('c'),('a'),('t'),('a'),('m'),('a'),('r'),('a'),('n');
+select * from t;
+┌─────┬────────┐
+│ idx │ letter │
+├─────┼────────┤
+│ 1   │ c      │
+│ 2   │ a      │
+│ 3   │ t      │
+│ 4   │ a      │
+│ 5   │ m      │
+│ 6   │ a      │
+│ 7   │ r      │
+│ 8   │ a      │
+│ 9   │ n      │
+└─────┴────────┘
+select min(letter) from t group by letter order by idx; -- see note below
+┌─────────────┐
+│ min(letter) │
+├─────────────┤
+│ c           │
+│ a           │
+│ t           │
+│ m           │
+│ r           │
+│ n           │
+└─────────────┘
+-- the full-blown canonical, non-hacky way:
+.mode csv
+select group_concat(x,'') -- all rows condensed into one row whose single cell's value is "catmrn"
+  from (select substr(group_concat(letter,''),1,1) as x from t group by letter order by idx); -- one letter per row
+catmrn
+----
+
+i could have just put `letter` but i put `min(letter)` because link:https://www.sqlite.org/lang_select.html#bare_columns_in_an_aggregate_query[bare columns in aggregate queries] are not generally standard sql and i like good practice. `min` here means "select an element; the min? sure, any single element will do." it corresponds to head (`{.`) in the j version below. `{.y` for string `y`, in sql, is `substr(y,1,1)`.
+
+===== in j
+
+we can mimic sql by using key which preserves order yet groups:
+
+[source,j]
+----
+   ({./.])'abacadabra'
+abcdr
+----
+
+here's another way: `#~i.~=i.@:#`.
+
+. `=` is a predicate and thus is a variety of product (AND / set intersection); its output is a subest of its inputs. it does the "actual work."
+. `i.~` transmutes `y` for use with equality on indices. there is a bijection between elements of `y` and of `i.~y`; the elements were merely renamed, like alpha translation [lambda calculus] e.g. `\x y -> x-y*x` vs `\a b -> a-b*a`; they're the same if the symbols are vacuous.
+. `i.@:#` is the indices of the input array. this adds no new information in the sense that `y` already has these indices.
+. `#~` actually applies the information given by applying `=`, to `y`
+
+=== examples of data of various forms
+
+==== of complex relations
+
+* all structure is symmetry & asymmetry. _symmetry of P(O) under T_ is invariance of property P of object O under a transformation T. _transform_ is synonymous with _relation_. it's useful to consider symmetry link:https://en.wikipedia.org/wiki/Up_to[up to] some boundary of variation of the transform or object. symmetry is similar to link:https://en.wikipedia.org/wiki/Homomorphism[homomorphism]—the mathematical formalization of analogy.
+
+asymmetry is particularity and symmetry is non-particularity.
+
+also disjunction is coproduct which we know as choice from ADTs & `case` [haskell]. conjunction is product. _tacit_ is nothing more than abstraction, factoring. it's nothing more special than defining a function or instancing a type class.
+
+===== example 1
+
+NEXT: correct this, especially with a good version that handles conditionality / branching / nested vs distributed code (viz predicates) well. also:
+
+partitioning (generally identifying subsets) is conditionality: set A is given by a predicate; the set complement of A is given by the complement of A's corresponding predicate. "complement" is synonymous with "not". correspondingly, not(A)=AllChoices\A `intersect` not(AllChoices) i.e. {AllChoices | A's predicate}.
+
+----
+* each of nesting & functions (returning & accepting) is boo-boo.
+* `or b` is `else b`
+* `p and x` is `if p then x`
+* the crux of translating racket's `and` & `or` is that they're macros i.e. they delay evaluation. the only mechanisms for that in j are 3: 1. define a function then invoke later; 2. `".`; 3. +++`:n+++
+  ** in j the only ways to delay eval are gerunds, functions, and strings executed by `".`
+* NB. nesting is factoring; flatness is distribution.
+* prolog is like parser-based programming. i can do things like parse patterns of the head then put them in arbitrary positions in the bodies.
+* TODO: cf prolog metaprogramming vs digitstring/parser paradigm. remember that the only decent coding is just general code manipulation, elegantly described by a/symmetric relation syntaxes, and `eval`.
+  ** the power of the array & relational models is that they offer these a/symmetry operations! it's basically terse sql with many relational builtins. the only problem with j is that it still is a programming language, rather than a mere code system.
+  ** i want something with j's terseness (and j already basically is sql with terser syntax but without join, and with many builtin relations), prolog's model, like _
+
+------ control structures ------
+* loop is the symmetry primitive; it means "all"
+* `if` is the asymmetry primitive. it should be considered generally as "choice"
+* the asymmetry of "else" (dangling) is resolved by using `elseif true` instead of "else"
+* loop + `if` is filter. it's an operation over a set intersected with a predicate
+* fold is loop with state.
+* the reason that we have control structures is that *we don't want to evaluate/traverse all of the array's elements* either because processing all is expensive or we don't want to run the loop fn on each element for io or state updating reasons. otherwise evaluating predicates is fine.
+TODO: see loops like associating predicates with elements.
+! at least we can, for sets of (mutually exclusive?) predicates that we can afford to compute all of, just compute them all then just `(p i.1:)`. if you must stop evaluating at the 1st truthy predicate, then use `F:.`.
+* structure intersection grneralizes fn comp.
+* structures specified by intersection of symmetries (loopiness) & asymmetries (conditional jumps). this implies that a/symms are prims.
+* when traversing fsm `1 3 2 0`, each number is a goto statement; 1 says goto 3; 3 says goto 0. being that it's effectively goto obviously shows its general power. ^: is the loop operator; it just loops. this is akin to assembly which uses `jmp` to loop and `jne` &al to break. to break the loop just set the current index to itself; that'll be convergence.
+  ** each traversal sequence corresponds to the elements that it'll traverse. if it terminates, this can be traced to the full traversal; then one can fold over it.
+    *** remember that fold generalzes map (application to an array in j) and supports short-circuiting
+* a terminating _successive traversal_ (fold) with break conditions can be equivalently expressed as a loop over data where the loop's body applies a predicate to the current element and there chooses to break; or you can iterate over `([:{.~ p i.1:)`. for continue,...you can filter-out elements that you'll skip over.
+  ** tl;dr: filter instead of continue, take instead of break.
+TODO: consider unfold (F: or F.) as an alternative for while; it supports non-termination!
+TODO: consider arrows again; these are control structures considered as abstract structures, right?
+TODO: explore `[x] m@.v y` which is equivalent to `[x] m@.([x] v y) y`. `m@.n` sees `n` as the choice number. use i. or smth to convert e.g. a bool vec as an int to a choice num.
+NOTE: `^:` is conditional execution or many (0,1, or n). `@.` is choice execution which may be conditional if `]` is a choice.
+
+in j: it's basically use fold if you're looping over an array; else use power.
+
+i'm still a fan most of flattening preds (no nesting) then using effectively `cond`.
+
+an interesting loop example:
+adj(n1,n2). ... % data literals of the adj relation/predicate
+adj(X,Y):-adj(Y,X) % nonterminating clause supposed to encode commutativity
+
+however, the following terminates b/c there's no recursion and so no looping:
+adj_(n1,n2). ...
+adj(X,Y):-adj_(X,Y).
+adj(X,Y):-adj_(Y,X).
+
+if intersection is convergence and union increases the search space, then what is backtracking?
+
+----
+
+(pure) functions are verbose. i have to say `f(x,y)` instead of just `f`. suppose that i have many functions of `x` & `y`; now i must say e.g. `(if (p x) (f x y) (p y) (g x y) (p x y) (h x y))`—where, yes, `p` is overloaded. much like in prolog, `p(x)` is a different relation/rule from `p(x,y)` though they share the name `p`, which is actually irrelevant in any system except for prolog. anyway, that's some obnoxious repetition. "expressed tacitly," i.e. with the tacit information being the parameters to functions, the program is, in a uiua-like syntax: `!if applyAll [(p drop swap) f (p drop) g p h]` to apply a list of functions to the stack then have `if` evaluate that argument list. this is correct under non-strict evaluation. we dislike redundancy and thus prefer tacitity. another solution is to build-up a program as a list of sexps, then pass that sexp to `if`, which will fold through it, evaluating the next predicate or function only until a predicate matches: `(let z '(x y) in (map ((s) (s x y) (s . f) (s (f x y))) '(if ,@((p car) f (p cadr) g p h))))`. the lambda syntax is picolisp-like but, like pico's `let`, we can specify pairs of lambdas to be like racket's `match-lambda` or w/e that similar thing is in general scheme. in this example, `x` & `y` are dynamically resolved; their values at runtime are used. rather than calling a function with arguments, the arguments may be bound using a sort of fluid-let (like `parameterize` in racket.) haskell has semitacit syntax by its currying e.g. `(+1)`'s left arg is tacit.
+
+anyway, building-up expressions by specifying relations is what generally makes any code efficiently expressed "tacitly." it's all just efficiently associating subsets with other subsets—in this case, subsets of {x,y} with {p,f,g,h}, and a relation of those both with `if`. the ideal general expression is the pseudo-j expression `[if (p,[x y [x y]]),.[f g h],"0 _ [x y]]`, which associates each of `[f g h]` with argvec `[x y]`, and indexwise-associates that result—`[[f x y] [g x y] [h x y]]`—with the association of `p` with each of `[x y [x y]]`, leaving us with the total expression `[if [[[p x] [f x y]] [[p y] [g x y]] [[p x y] [h x y]]]]`. i'm using array lang primitives to bulid the same sexp that `cond` expands to, and considering that array primitves are specific (and so convenient) varieties of relational algebra's _join_, which is just a cumbersome version of ANDing & ORing predicates in prolog. as it turns-out, though, in this case the stack is the best encoding. we can only be as tacit as our code is symmetric.
+
+=== conditions/branching/choice by truth tables
+
+----
+if P:
+  if Q: A else: B
+else: if R or S: C
+else: D
+
+can be re-expressed as:
+
+P,Q:-A.
+P,not(Q):-B.
+% not(P),(R;S):-C. % by distributing product (AND) over coproduct (OR), this rule expands to the following two rules:
+not(P),R:-C.
+not(P),S:-C.
+not(P),not(R;S):-D. % if not(P) then Q is irrelevant.
+
+is represented in prolog as a truth table:
+
+cs(1,1,_,_):-A.
+cs(1,0,_,_):-B.
+%cs(0,R,S,_),(R;S):-C. % i'm not familiar enough with prolog to know whether this use of `;` is correct.
+cs(0,1,_,_):-C.
+cs(0,_,1,_):-C.
+cs(_,_,_,_):-D.
+
+?- r(p,q,r,s). % each of p,q,r,s can be specified inline here.
+
+this can be encoded as a matrix in j:
+
+1 1 2 2
+1 0 2 2
+0 1 2 2
+0 2 1 2
+2 2 2 2
+
+then `(p,q,r,s) (=+._1&=@]) cs`. to evaluate predicates only as necessary, do a nested loop like you'd do in c and use memoization.
+
+real-world example:
+
+i started with this racket scheme code:
+
+(define (fill? o)
+  (match o [(vector i oid count open low high limit stop trailext)
+            (let*-values ([(is_more_attractive is_less_attractive more_attractive ext oppext) (if (> count 0) (values <= >= min low high) (values >= <= max high low))]
+                          [(most_attractive) (more_attractive open limit)])
+              (when (and (or (sql-null? stop)
+                             (if (< stop 0) ; trailing; implies non-null ext
+                                 (let-values ([(newext should_test_lim) (if (>= (abs (- trailext oppext)) (abs stop))
+                                                                        (values sql-null #t)
+                                                                        (values (more_attractive trailext ext) #f))])
+                                   (query-exec D "update orders set ext = ? where oid = ?" newext oid)
+                                   should_test_lim)
+                                 ;; test non-trailing stop
+                                 (and (is_less_attractive stop oppext) (query-exec D "update orders set stop = null where oid = ?" oid) #t)))
+                         (is_more_attractive ext limit))
+                (+ changed-rows (call-with-transaction D (query-exec D set-fp most_attractive oid)
+                                                         (query-exec D deactivate-order i)
+                                                         (query-exec D activate-children oid)))))]))
+
+then i fully expanded its macros, then translated the resultant conglomerate of nested `if` and `let-values` into j, then reduced redundant booleans (e.g. `if somecond then 1 else 0`) to `cond`) which resulted in the following j:
+
+fill=: 3 : 0
+'i oid count open low high limit stop trailext'=.y
+'is_more_attractive is_less_attractive more_attractive ext oppext'=.(count>0){(>:`<:`>.,high;low),:(<:`>:`<.,low;high)
+most_attractive=.open more_attractive`:0 limit
+(VOID"_)`{{changed_rows+activate_children oid[deactivate_order i[most_attractive set_fp oid}}@.(((((]`(1[stops=:a:(I.oids=oid)}stop)@.(stop is_less_attractive`:0 oppext))`(should_test_lim[exts=:exts newext (I.oids=oid)}exts)@.(stop<0))"_)`]@.(stop=a:))*.ext is_more_attractive`:0 limit)''
+)
+
+then i identified predicates and their associated true & false branches, using the naming convention `pn` for logical values, and `pn[tf]` for the associate true or false branch:
+
+p1t=.{{changed_rows+activate_children oid[deactivate_order i[most_attractive set_fp oid}}
+p1f=.VOID"_
+p3t=.should_test_lim[exts=:exts newext (I.oids=oid)}exts
+p4t=.1[stops=:a:(I.oids=oid)}stop
+p3f=.]`g4t@.p4
+p2f=.(g3f`g3t@.p3)"_
+p2=.stop=a:
+p3=.stop<0
+p4=.stop is_less_attractive`:0 oppext
+p1=.(p2f`]@.p2)*.ext is_more_attractive`:0 limit
+p1f`p1t@.p1''
+
+start at the first/root predicate, p1, then trace through the predicates' structure:
+
+p1=.(p2f`]@.p2)*.ext is_more_attractive`:0 limit
+
+p1's truth value must always be determined because it is the root predicate. however, p2f might not be evaluated, depending on p2. the pattern `f"_`]@.p` is lisp `(or p f)`.
+
+the structure is:
+
+a,(b->b
+     ;(c->d
+         ;(e->f
+             ;e)))
+->g
+ ;h
+with
+a=.ext is_more_attractive`:0 limit
+b=.stop=a:
+c=.stop<0
+d=.should_test_lim[exts=:exts newext (I.oids=oid)}exts
+e=.stop is_less_attractive`:0 oppext
+f=.1[stops=:a:(I.oids=oid)}stop
+g=.changed_rows+activate_children oid[deactivate_order i[most_attractive set_fp oid
+h=.VOID
+
+which translates to the following truth table:
+%   a,b,c,d,e,f
+top(1,1,_,_,_,_):-g.
+top(1,0,1,1,_,_):-g. % c->d is equivalent to c,d
+% the following two rules encode e;f. e->f;e is the same as e,f;e which is, by commutativity of `;`, equivalent to `e;e,f` which is equivalent to just e b/c if e then 1 but if not e then e,f must be 0. see discussion after this truth table.
+top(1,0,1,0,1,1):-g.
+top(1,0,1,0,0,0):-g.
+top(0,_,_,_,_,_):-h.
+
+the purpose of having e->f;e is to conditionally execute f for effect. we'll refactor that into a separate truth table for whether to execute f. in retrospect it turns-out that f should not have been in `top` at all! instead, we should have the following:
+
+%   a,b,c,d,e
+top(1,1,_,_,_):-g.
+top(1,0,1,1,_):-g.
+top(1,0,1,0,1):-g.
+top(1,0,1,0,0):-g.
+top(0,_,_,_,_):-h.
+
+%     e
+execf(1):-f.
+
+as a general rule that i haven't proven, but seems obvious: we can separate all pure predicates from any side effects. each side effect entailed in a predicate gets its own truth table. when we're done, each truth table's predicates will be exclusively pure and the table will map to return values or side effects. notice that top does not use e; for both values of e we return g; thus we can omit e therefrom:
+
+%   a,b,c,d
+top(1,1,_,_):-g.
+top(1,0,1,1):-g.
+% more redundancy over the next 2 rules
+top(1,0,1,0):-g.
+top(1,0,1,0):-g.
+top(0,_,_,_):-h.
+
+%     e
+execf(1):-f.
+
+and we reduce that redundancy to get:
+
+%   a,b,c,d
+top(1,1,_,_):-g.
+top(1,0,1,1):-g.
+top(1,0,1,0):-g.
+top(0,_,_,_):-h.
+
+%     e
+execf(1):-f.
+
+and we again notice redundancy: regardless of d, we execute g!
+
+%   a,b,c
+top(1,1,_):-g.
+top(1,0,1):-g. % redundancy again
+top(1,0,1):-g.
+top(0,_,_):-h.
+
+%     e
+execf(1):-f.
+
+removing said redundancy:
+
+%   a,b,c
+top(1,1,_):-g.
+top(1,0,1):-g.
+top(0,_,_):-h.
+
+%     e
+execf(1):-f.
+
+there must be some need for d, though! it's just clear that it's not of `top`; it's probably actually of `execf`, then. recall that e=>not(d), and d=>c, and c=>not(b). these relations must be retained in the refactored truth tables.
+
+%   a,b,c
+top(1,1,_):-g.
+top(1,0,1):-g.
+top(0,_,_):-h.
+
+%     e
+execf(1):-f.
+
+top(1,0,1) can be read as parameters of relation top, or as top with the single boolean value resulting from a AND NOT(b) and c. the use of comma as both a parameter delimited and as logical AND is a pun.
+
+we can uniquely encode these bit vectors as integers, in case that suits your fancy. granted, we'd need a way to encode the "any" symbol (here denoted by the underscore character). perhaps we may use modular arithmetic to convert {0,1,2} to a boolean ring? otherwise we can encoded as the whole set of implied combinations (for `top`, 2^3^=8 positive integers) encoded as an array of ranges—in this case, [[5..7 g] [0..4 h]]. ranges naturally correspond pretty well to if-else in two ways:
+
+1. the rule
+
+[source,scm]
+----
+(if a
+    (if b X Y)
+    (when (and b c) Z))
+----
+
+is represented as
+
+----
+table entailed values ranges
+a b c 
+1 1 _ {110,111}       [6,7]
+1 0 _ {100,101}       [4,5]
+0 1 1 {011}           [3,3]
+----
+
+the behavior for conditions corresponding to range [0,2] is undefined, btw. naturally ranges are a more efficient encoding when contiguous sequences of underscores are longest. with only three predicates and so few underscores, ranges don't offer much benefit, but in the general case they should be pretty useful.
+
+2. underscores correspond to a sequence of ranges (namely each underscore at position n represents a range of size 2^n, minus any ranges corresponding to an underscore at some index less than n. e.g. `_ 1 _ _` has one of its 4 parameters bound, which means that it represents a set of size 2^3^. in fact, the set is given by the following j expression: `(1&,)&.(1&|.)"1#:i.2^3`), and each sequence of ranges corresponds to or represents its cartesian product. this is similar to using binary search to quickly lookup matching values in a `switch` block without fall-through (i.e. the program is invariant under reordering cases) when the cases are enumeration values (identifiers for integer literals). idk exactly where/how this may be useful—perhaps when using gpu's. it should, if exploited, enable extremely efficient & methodical/automatic/implicit/tacit/declarative coding.
+
+also, notice that refactoring into a truth table required separating predicates from effects!
+
+you may wonder how we "reduced" conditionality into flatness. it's actually the opposite; though we've reduced the nesting level, flat expressions are always longer expressions than any of their corresponding nested expressions. there are two steps to flattening:
+
+. `a,b;e` is expressed algebraically (under the link:https://en.wikipedia.org/wiki/Unification_(logic)[boolean ring]) as `a*b+e`. thus `a,(b;c)` is equivalent to `a,b;a,c` just as `a*(b+c)` is `ab+ac`. see also: <https://en.wikipedia.org/wiki/Algebraic_normal_form> & <https://en.wikipedia.org/wiki/Unification_(logic)>.
+. `a->b;c` is equivalent to `a,b;c` i.e. `if` is the same as `and`. consider the pseudo-identity `p->x;y`=>`p,x;y` but the converse is not true! all of `,`, `->`, and `;` are left associative.
+  .. this is demonstrated in that `if a && b then X else Y` is equivalent to `if a then (if b then X else Y) else Y`.
+
+NOTE: if, within a given truth table, we're allowed to evaluate all predicates without concern for side effects, then a->b;c is the same as a,b;c. however, if side effects are considerable, then with `a->b;c`, if a but not(b) then the expression would be false WITHOUT EVALUATING c! AND and OR's shorting behavior is simply described: AND shorts on the 1st nil, and OR shorts on the 1st non-nil.
+
+btw, some other identities:
+
+|=============
+| x->y;0 | x,y
+| x->x;y | x;y
+|=============
+
+using these identities, the original form:
+
+a,(b->b
+     ;(c->d
+         ;(e->f
+             ;e)))
+->g
+ ;h
+
+reduces to two statements, which succinctly (through nesting) express the above truth tables:
+
+a,(b;c,d;e)->g;h. % a distributes over the disjoint union of b, (c,d), and e.
+a,not(c),e->f. % d=>c but not(d) says nothing about c nor e. however, not(d)=>not(c),not(d).
+
+% h`g@.a*.b+.e+.c*.d
+1 1 _ _ _ -> g.
+1 0 1 1 _ -> g.
+1 0 1 0 _ -> h.
+1 0 0 _ 1 -> g.
+1 0 0 _ 0 -> h.
+0 _ _ _ _ -> h.
+
+and
+
+% f^:a*.e*.-.c
+1 _ 0 _ 1 -> f.
+
+these two are actually correct and the j expressions are easier & plainer than using truth tables. even if we don't use the truth tables in our program, they're still useful for reasoning about our program: its definition, nature/implications/behaviors, and control flow, which makes refactoring or modification _much_ easier!
+
+== tacitity, a/symmetry
+
+this section compares parser-oriented coding (wherein programming=metaprogramming) to combinator-oriented coding.
+
+preliminary reminders:
+* each scheme is encoding/decoding (either's definition implies the other's definition)
+* any encoded information can be decoded by potentially multiple schemes.
+  ** justine tunney's APE format is an excellent example of intersecting multiple encodings s.t. a single object may support them simultaneously.
+
+all _tacit_ schemes by definition omit information; the information is implicit. omission/assumption of some info is common to all encoded information that is to be decoded [parsed] e.g. parsing bytes by the jpg scheme sees the first few bits as a magic number; the number is encoded but not the fact that of _which_ bits encode the number.
+
+thus tacit is nothing special; it's everywhere. for example, consider the code `\x y -> x + y`. this may be considered "not tacit." that's incorrect, though: the fact of `\` representing a lambda is not specified in the code, nor the rest of the lambda syntax. that's tacit in the parser. to call it a _non-tacit function_, however, is correct because insofar as functions are concerned, this definition is entirely explicit; even the types are implied by `+` if we assume that the lambda is polymorphic (non-monomorphic).
+
+all schemes, are combinations of a/symmetries. consider `(a,[b])`. `(,)` has two axes of symmetry: one for each type argument. however, once these arguments become bound, `(,)` becomes an asymmetry, a constraint between. symmetry is a fact of nonconstraint i.e. variability (e.g. variable type, or variable size of a structure), and asymmetry is constraint (e.g. boundedness of a variable, fixedness of the size of a structure).
+
+NOTE: variables in reductionist models are not variables! they're merely symbols of literal values! suppose a function f(x,y). before `x` & `y` are bound, i.e. before `f` is invoked, they're free; however, before `f` is invoked, `f` is effectively useless, and the instant that it's invoked, it has meaning but `x` & `y` are then bound! by functions' recursive definition, we can inductively deduce that all "functions" in reductionist models are actually just values, as is demonstrated by functions supporting composition & evaluation but not observation nor modification. even in languages like j where functions are represented as strings and are displayable & modifiable, they are only such as strings, not properly as functions. by contrast, prolog programs have proper functions (though more generally, relations) as demonstrated by the fact that relations can be evaluated even when all parts related are entirely free. of course we may fully constrain a relation's parameters and thus arrive at a boolean result, and this may be said to be mere reduction, but it's a given that any structure's freedom may be constrained fully and is at that point reductive evaluation.
+
+NOTE: recursion/looping is symmetry, and termination/break conditions / base cases is asymmetry.
+
+the asymmetry is `(,)` and the symmetries are that `a` & `b` are free type variables and that the list's length is variable (even possibly infinite) as given by recursion which is a symmetry in the definition of the list type.
+
+=== examples of tacit encodings
+
+==== stacks
+
+fn comp is tacit; the tacit info is the stack effects. relative to composition/invocation. the tacit information exists; it's specified or derived in/by a function's definition. this is a nice separation, indeed, but it is _separation_ of information, _not omission_. programs may be any length, which implied by the stack's variable size, a freedom (symmetry) given by its recursive structure and [with] functions' recursive definition (functions may be defined of functions). functions' freedom to take or return as many values is not needed, as demonstrated by link:http://www.om-language.org/[om]; alternatively it's demonstrated by currying—that any n-ary function may be considered as a unary function that returns an (n-1)-ary function. this requires higher order functions. another example is functions implemented in assembly which exploits the stack's variable size to effectively store inputs & outputs.
+
+you might think that there is a tacit aspect of stack langs that i haven't mentioned: the place whence inputs are taken & where outputs are placed—that in applicative langs we must arrange these in complex ways by using binding clauses such as `let` yet we don't have that in stack langs. this is incorrect: the complex arrangement is seen in 1. specifying stack effects and 2. stack manip words such as `dup` and `take`. functions in applicative langs and stack langs share a common constraint: that their arguments are specified by an order rather than identifiers as in e.g. python `def f(x,y) ... f(y=3,x=4)`. strangely, some applicative langs' that support multiple outputs (e.g. scheme) have binding clauses that bind multiple outputs to multiple identifiers (e.g. `let-values`), which effectively trades output order for identifiers, but generally that language does not implicitly make functions' inputs available as identifiers at invocation time such as was done in the python example.
+
+the suck of ordered inputs or outputs is that the consideration of one implies extra consideration of the others much in the same way that removing the `2` of `(1 2 3)` changes the relation of `1` & `3`: they're now adjacent and while `1`'s index remains the same, `3`'s decrements. this is appropriate for a sequence but not for outputs, because outputs are not in a sequence per se; they're a set, but in stack langs are _encoded_ by a sequence and thus forced into the mechanics of sequences! were sets used instead, we'd have no need for stack manip words, and stack programming would be quite easy. of course this is impractical if we wouldn use many arbitrary labels; however, if we use useful limits, such as limiting functions to three variables—x, y, & z—then we can refer to them directly in fn exprs like we do in apl or j, as necessary, but if they aren't mentioned, then we assume that their order is (x,[y,[z]]).
+
+TODO: this may be an issue for arrays, but is it an issue for a stack? if i were do make `1 2 3` into `1 3` then 3 is still atop the stack and i deleted `2`, which can't be by accident!
+
+==== trains
+
+j trains are tacit by hiding information in the parsing of the train.
+
+=== conclusion
+
+. tacitity is syntactic. it's the separation of information: that some information is not present in some syntax, but is provided either in the parser or in related syntax specified elsewhere.
+. the tacit info may be a/symmetric; i.e. there's a relation between tacit facts and data given by syntax. generally the mapping is expressible by join [relalg] e.g:
+
+tacit: `(5,[a,b,c])` which corresponds to explicit `[(5,a),(5,b),(5,c)]`, literally given in the following langs:
+
+| sql     | `with t(x) as (values(5)), u(y) as (values('a'),('b'),('c')) select x,y from t join u;`
+| haskell | `(5,)<$>['a'..'c']`
+| j       | `'5',.'abc'`
+
+this generalizes easily to arbitrary relations:
+
+[source,sql]
+----
+with t(x) as (values(5)),
+     u(i,y) as (values(1,'a'),(2,'b'),(3,'c')),
+     fns(i,f) as (values(1,'f'),(2,'g'),(3,'h'))
+select f||'('||x||','||y||')' from t join u join fns using (i);
+----
+
+==== let's take tacit all the way
+
+implicit stuff is better than explicit. tacit style shows that. let's take it as far as we can, though. whereas tacit code implies relation of positional arguments, prolog implicitly composes predicates and has implicit (tacit) control flow. rather than changing a traversal manually or structuring data as particularly as we would in other models, we simply introduce more predicates in order to reduce search/traversal spaces. for example a triangular matrix is (TODO: something like) `I in 0..9,J in 0..9,I#=<J.` in prolog (it's `with t(a) as (select * from generate_series(0,9)) select group_concat(j.a) from t as i join t as j on i.a<=j.a group by i.a;` in sql) but `":\i.10` in j; which uses scan (`\`).
+
+=== some ground-breaking stuff
+
+consider the following relations:
+----
+ ['(';')']
+([ 0 ; 3 ],{)
+----
+
+this associates each of [0;3] with the select function, and relates 0 to '(' and 3 to ')' by joining on their indices.
+
+*as much as ever, separation & complection should be specified explicitly & elegantly by relations, where relations are implicitly entailed by terms being present across predicates. indeed, this is how prolog obviates join! `select A1,B1,B2 from a join b on A2>B1 where A1>5` is prolog `?- a(A1,A2), b(B1,B2), A2>B1, A1>5.`. this actually sees a funny dualism of `,`: it uses intersection of predicates to either enlarge or lessen the search space, depending on whether the predicate that it's intersecting is one of existential quantification or not! the predicate `a(A1,A2)` is "∃ relation whose name is a and whose args are 2."*
+
+NOTE: predicates may have local binds. these cannot be intersected from outside that scope. predicates with local binds share the same problem that functions with local binds do: they cannot be related from outside their scope. this is a problem with scope itself. tacit code is worthwhile at least for avoiding scoping.
+
+yk, a thing about predicates is that, as prolog demonstrates, every program can be seen as a loop that goes until predicates can be satisfied no more. this demonstrates looping (with predicates, which loops always have, since they are the termination conditions) as a primitive. furthermore, loops generalize statements just how arrays generalize atoms. `for` has symmetry matching arrays (sequences, including [a,b] which is given by `a+i.b-a`). `while` has whatever a/symmetries are implied by its predicate. `for` is often considered more convenient than `while` for looping over arrays, which is appropriate given that `for`'s symmetry matches arrays'; however, we should call `while` `loop` and give it as a parameter some predicate as per usual, but this predicate should be parameterized by other predicates (as predicates naturally are, given their definition (namely that mentioning parts of one predicate in another predicate implicitly relates/composes them) and con/dis-junction)—namely in the case of representing `for` by `loop`, having an expression that represents the predicate for looping over a range. e.g. we can define a predicate of syntax `[a,b]` that is defined as a closure that returns whether it should continue the loop: `((a b)(let (i a) (if (<= a b) (prog (set i (+ 1 i)) 1) 0)))`. to break on a condition `p`, just use loop condition `[a,b],not(p)`.
+
+note that relations & join generalize rectangular arrays & rank to relations regardless of shape and predicates more general than those only of shapes. furthermore expressiing multidimensional data is in the relational model than the array model b/c multidimensional indices are easily done and such arrays naturally support sparseness.
+
+the above j example is expressed by:
+
+. vs=.[[0],[1:#-2],[#-1]] NB. the vector of selection vectors (substrings, not general selections)
+. vs=.vs{A NB. where { acts on the atoms of vs but preserves its box structure. idk how tf to do that in j generally nor in this specific example.
+. but vs[1]=.(,&',')"0 vs[1] NB. "but" means "add [overriding] asymmetry rule". "but" has the same literal meaning as "and" (`,` in prolog) i.e. "yet"
+. return vs[0],'(',vs[1],')'
+
+even more ideally would be purely mathematical and in terms of only indices & predicates:
+
+. app[0:,rng,#]y NB. in an array-stack model, first rank then `app`, like any relation, is asserted/applied
+
+actually even better would be the stack model b/c it manipulates its state wrt itself. namely i want a list given by `i.@#`, then add a partition before its last elt and after its first. that's much easier than specifying ([0:,[1:#-2],#-1],y), *because the elts of that list are related*.
+
+so why the fuck is j _so_ much longer and less clear?! a few reasons:
+
+. amend is horrible for expressing applying a unary fn to a selection of `y`
+. functional, so we can't just identify indices then mutate them. instead we must unpack then repack data.
+
+*expressing evaluatable expressions by elegant combinatoric primitives is better than using functional combinators.* namely elegant combprims are varieties of join, expressed simply as relations with computations (namely those applied to selected variables in sql's `select` clause) and predicates (namely the join predicate) to filter and relate elements of various sets. the fact of one-to-many vs many-to-one vs many-to-many is really just many-to-many in that atoms are equivalent to singleton sets/sequences so 5 join [a,b,c] is the same as (x=[5]) join (y=[a,b,c]) which is the cartprod(x,y).
+
+.tl;dr
+we need sql but with:
+* better syntax
+* `eval`
+* builtin prims similar to apl/j
+
+or we can just use prolog, wherein each rule has symmetries by its free vars, asymmetries by its bound vars, and asymmetries of multiple rules e.g. a having two goals: one base condition and one recursive. all rules correspond to structures. find a good syntax & algebraic patterns implied by defining rules that make reasoning easy, in order to use the structure. for example, arrays are very easy: each axis represents a different symmetry axis. they have a nice graphical/syntactical representation. their syntax is convenient and specific, making some of its information tacit, present in its parser and algebraic operations or implications. symmetry is present to some extent in any context in which we can factor-out information: it's an invariant property/relation/predicate over the set of those data whence info was factored i.e. sets having common info.
+
+==== predicates generalize sql relations & functions
+
+and considering that intersecting predicates is implicitly sql join, then predicates join functions!
+
+consider the following relation:
+
+A   B   C    D  V
+0   0   0    0  3
+0   0   0    1  4
+1   0   2 1000  6
+nil nil 2    3 _1
+
+* it generalizes a 4-dimensional sparse or ragged array
+* the meaning of `nil` here is up to the programmer. it may be used like `a:` in j's selection vectors to denote "for all."
+* it's akin to a corresponding prolog "function" which has 4 inputs and one output
+
+a ragged array `4 6;1 2 3` can be represented as `4 6 nil;1 2 3`.
+
+prolog generalizes array programming. array programming has each variable refer to multiple things—namely an array of depth/raggedness and type homogeneity or heterogeneity. in prolog, each variable refers to multiple things of any relation to any other things. any structure is _implied_ by relations/facts, and the fact that each variable is "the set matching this predicate" implies multiplicity. to select substructure in array langs you use selection vectors (`x` for `{`) and shape selectors (such as rank (`"`) or `&.(x&|.)`); in prolog you use predicates. in prolog `X+Y` is just as `x+y` is in j except that in j _`x` & `y` are still arrays, not elements thereof_. therefore what in prolog is `X+Y,Y>5`, is `x+(#~(>&5))y` in j. *in prolog the variables are addressed as single variables, but the evaluation model implicitly derives a set of things matching the variable's entailed predicates, whereas in array langs each variable is an array but the array _operations_ dissect them according to rank.* whereas arrays can be selected from, variables _derive_ their corresponding set, and unlike array langs, these sets can be infinite.
+
+prolog is the best for coding in general. however, for logically simple dataflow programming, uiua is likely best.
+
+=== combinators
+
+consider the combinators at <https://combinatorylogic.com/table.html>, e.g. `λabcde.abc(de)`. functions have arbitrarily long sequences of inputs, so let's say that, like in lisp or prolog, all functions accept one input which is a sequence. then we have D~1~, `λ[a,b,c,d,e].abc(de)`. let's be practical, here: _five_ inputs? really? that aside, i see that the lambda preserves the order of the inputs; the only information that the lambda adds is a division between `c` & `d`. notice how many lambdas there are in that table of the linked webpage. there is a ridiculous variety. they can be much better expressed by stack manip words and partitioning functions. D~1~ can be simply expressed as `split[-2]`. the B combinator `λabc.a(bc)` is identically defined! B~1~ is `split[-3]`. a better syntax for these is just a selection & partition vector: `|2` for D~1~ & B, and `|3` for B~1~. for `λabcde.a(bde)(cde)`, `1(2,3)|2`: there are three distinct sequences: `1`, `(2,3)` and the last 2, `|2`. juxtaposition is `join`: (`1`=`a`) join (`(2,3)`=`bc`) join (`|2`=`de`), represented in j as `'a',,'bc',"0 1'de'`. yes the j version is uglier than lambdas here, but it obviates the need for lambdas entirely and is generally expressive, whereas apparently we need a whole flock of lambdas just to get anything done.
+
+really it seems pretty silly to bind positional arguments to names; like do you want them to be named or positional? mixing them seems to defeat both purposes. the point of stack langs is to be positional only, and the point of prolog is to be regardless of position insofar as predicates with common variables are implicitly unified, even though predicates' arguments are ordered. and both stack langs and prolog are obviously more ergonomic than applicative style.
+
+extra note: some can be defined elegantly as _selection vectors_ (`x` for `{` in j) of a vector of inputs e.g. `swap=:2 1`. typically swap would be thought of as a function, not a transcoding of an ordered abstract object.
+
+=== uiua
+
+if link:https://www.uiua.org/rtl[uiua's creator discourages reasoning about programs in terms of the stack, instead favoring arrays], then why use a stack at all? why not use another structure? stack machines are known to be simple and efficient. that's good. yet i encourage the exploration of other structures whose symmetries we may exploit for tacitness.
+
+=== declarative/relational/logical/predicate programming
+
+the "X" matrix is described obviously as `[|i|=|j|]` or `=&|` depending on notation or parsing context. we can do the same by a "clever" series of steps in an array lang—`(+.|.)=@(,"0"_1 _)~@i.`—but it's not what we want; it just happens to be equivalent, even though it entails the same information: namely how reverse relates to negation of indices: `|.` is equivalant to `({~<:@-@i.@#)`. now, this code is a direct translation from a uiua example. you may say, "we can shorten it by re-expressing the id matrix: `(+.|.)e.@i.`!" short but inelegant: it's more exploitation of things that have little to do with the actual idea that we want to express! so you've won the battle, but can you generalize such solutions? can you modify them if you want variants?
+
+we want to _specify what we want directly_ rather than just _get what we want somehow_.
+
+=== definitions & names
+
+==== introduction
+
+there's a common design of proglangs: defining individual programs (commonly: predicates, stacks for stack langs, functions for functional (λ calc) langs, or instruction sequences for von neumann architectures.) regardless of the programming paradigm, there's a common theme of identifying programs by name then combining them later. naming enables chunking [memory technique]. consider textual encoding of programs: we have streams broken by newlines and sometimes in _block style_—when parts of multiple lines have common column numbers, giving the code a tabular appearance. text is one dimensional but we can make it semitabular by breaking on newlines, and fully tabular by using block style. and then we have names, which replace long codes by shorter ones just so that we can read them. even though this is a concern of the view of the program, it's encoded as part of the program itself. oops. a proper technique would be to select the code to hide in a code editor/viewer, and mark the hidden part by a name. names do have proper places in programs, still—e.g. sql table and column names; they're a definite part of a program. interestingly, the very thing that demonstrates this is that the tables are, throughout the program, referenced and mutated often, and the set of tables is not dynamically modified. contrast this with local variables which are used only because: 1. it's commentary i.e. the name information could be encoded as a comment (or generally, program metadata); or 2. an applicative model is used, so the only way to compute an expression only once yet use its evaluated value as input to multiple functions is by binding it to a name then passing that name as input. in a stack model, (2) is expressed by unlabeled data duplicated via `dup` and stack shuffle words to change which program to which it's an input.
+
+so even in stack langs, which are supposed to do without local named binds, there are still global ones, or somehow it seems impossible to escape the need for some kind of names. this is due to textual encoding. recall the general problem: how do we relate programs of arbitrary size? well, composing predicates is easier than non-predicates because predicate composition obeys axioms such as commutativity and monotonicity. commonly type signatures are used to basically describe programs briefly. an improvement on that is describing programs by their algebraic properties, which are, of course, described like everything should be: by predicates (propositions), directly representing a/symmetries, ∃ vs ∀ quantification, freedom vs boundedness/constraint.
+
+anyway, there are many solutions to this problem, but what i at least want to be understood is that this is a view problem, not a language/model problem. aside from the solution that i described above, we can use multidemensional views, like j's multidimensional array display, or a 3D opengl space, or a relational desplay where each datum has an arrows pointing to other data sets. a 3D hypergraph would be a nice display.
+
+==== computable programs
+
+metaprogramming is composition & modification of programs. usually these operations consider programs only insofar as sequences. they consider programs as ordered compositions of programs. we can do much better: we can identify (even computationally, automatically prove) axioms of programs then compose them commutatively as we compose facts in prolog. programs ultimately composed of _axiomatic_ primitive programs, _primitives_ being just like the axioms of an algebraic structure. the primitives would be endowed (associated) with actual algebraic properties (expressed & defined as predicates). we should strive for primitives that have enough metadata to support, of programs:
+
+. canonicalizing (by *ordering* & *reducing*)
+. deriving, just as prolog derives sets from predicates
+
+so yes, programs should be totally ordered! they should not be mere reductions! reductionist programming has only one law: reduction. reductionist models don't afford axiomatic/propositional/logical reasoning about programs! programs should be stored in a relational structure and composed so freely—but not like sql—like prolog! sql is still reductionist! *prolog derives by implication.* not only should, but they should imply/entail composition with other programs! we should be enabled predicates over programs such as deriving a missing part of a stack program: `P=lengthInvariant([P,Q]).` by unifying primitives axioms; evaluating this query would produce sets of `P` & `Q` that, when applied in sequence, do not vary the length of the input. such example answers are `P=reverse,Q=reverse` and `P=behead,Q=(cons 0)`. however, this is just a limited version of prolog since it needlessly introduces a model beyond predicates—here namely the stack one, which sets order and thus severely limits expressibility. this is already natural in prolog seeing as all programs are themselves predicates.
