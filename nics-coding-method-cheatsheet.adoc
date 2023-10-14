@@ -137,7 +137,8 @@ NEXT: correct this, especially with a good version that handles conditionality /
 
 partitioning (generally identifying subsets) is conditionality: set A is given by a predicate; the set complement of A is given by the complement of A's corresponding predicate. "complement" is synonymous with "not". correspondingly, not(A)=AllChoices\A `intersect` not(AllChoices) i.e. {AllChoices | A's predicate}.
 
-----
+''''
+
 * each of nesting & functions (returning & accepting) is boo-boo.
 * `or b` is `else b`
 * `p and x` is `if p then x`
@@ -149,7 +150,7 @@ partitioning (generally identifying subsets) is conditionality: set A is given b
   ** the power of the array & relational models is that they offer these a/symmetry operations! it's basically terse sql with many relational builtins. the only problem with j is that it still is a programming language, rather than a mere code system.
   ** i want something with j's terseness (and j already basically is sql with terser syntax but without join, and with many builtin relations), prolog's model, like _
 
------- control structures ------
+.control structures
 * loop is the symmetry primitive; it means "all"
 * `if` is the asymmetry primitive. it should be considered generally as "choice"
 * the asymmetry of "else" (dangling) is resolved by using `elseif true` instead of "else"
@@ -185,7 +186,7 @@ adj(X,Y):-adj_(Y,X).
 
 if intersection is convergence and union increases the search space, then what is backtracking?
 
-----
+''''
 
 (pure) functions are verbose. i have to say `f(x,y)` instead of just `f`. suppose that i have many functions of `x` & `y`; now i must say e.g. `(if (p x) (f x y) (p y) (g x y) (p x y) (h x y))`—where, yes, `p` is overloaded. much like in prolog, `p(x)` is a different relation/rule from `p(x,y)` though they share the name `p`, which is actually irrelevant in any system except for prolog. anyway, that's some obnoxious repetition. "expressed tacitly," i.e. with the tacit information being the parameters to functions, the program is, in a uiua-like syntax: `!if applyAll [(p drop swap) f (p drop) g p h]` to apply a list of functions to the stack then have `if` evaluate that argument list. this is correct under non-strict evaluation. we dislike redundancy and thus prefer tacitity. another solution is to build-up a program as a list of sexps, then pass that sexp to `if`, which will fold through it, evaluating the next predicate or function only until a predicate matches: `(let z '(x y) in (map ((s) (s x y) (s . f) (s (f x y))) '(if ,@((p car) f (p cadr) g p h))))`. the lambda syntax is picolisp-like but, like pico's `let`, we can specify pairs of lambdas to be like racket's `match-lambda` or w/e that similar thing is in general scheme. in this example, `x` & `y` are dynamically resolved; their values at runtime are used. rather than calling a function with arguments, the arguments may be bound using a sort of fluid-let (like `parameterize` in racket.) haskell has semitacit syntax by its currying e.g. `(+1)`'s left arg is tacit.
 
@@ -198,18 +199,22 @@ if P:
   if Q: A else: B
 else: if R or S: C
 else: D
+----
 
 can be re-expressed as:
 
+----
 P,Q:-A.
 P,not(Q):-B.
 % not(P),(R;S):-C. % by distributing product (AND) over coproduct (OR), this rule expands to the following two rules:
 not(P),R:-C.
 not(P),S:-C.
 not(P),not(R;S):-D. % if not(P) then Q is irrelevant.
+----
 
 is represented in prolog as a truth table:
 
+----
 cs(1,1,_,_):-A.
 cs(1,0,_,_):-B.
 %cs(0,R,S,_),(R;S):-C. % i'm not familiar enough with prolog to know whether this use of `;` is correct.
@@ -218,14 +223,17 @@ cs(0,_,1,_):-C.
 cs(_,_,_,_):-D.
 
 ?- r(p,q,r,s). % each of p,q,r,s can be specified inline here.
+----
 
 this can be encoded as a matrix in j:
 
+----
 1 1 2 2
 1 0 2 2
 0 1 2 2
 0 2 1 2
 2 2 2 2
+----
 
 then `(p,q,r,s) (=+._1&=@]) cs`. to evaluate predicates only as necessary, do a nested loop like you'd do in c and use memoization.
 
@@ -233,6 +241,8 @@ real-world example:
 
 i started with this racket scheme code:
 
+[source,scm]
+----
 (define (fill? o)
   (match o [(vector i oid count open low high limit stop trailext)
             (let*-values ([(is_more_attractive is_less_attractive more_attractive ext oppext) (if (> count 0) (values <= >= min low high) (values >= <= max high low))]
@@ -250,18 +260,24 @@ i started with this racket scheme code:
                 (+ changed-rows (call-with-transaction D (query-exec D set-fp most_attractive oid)
                                                          (query-exec D deactivate-order i)
                                                          (query-exec D activate-children oid)))))]))
+----
 
 then i fully expanded its macros, then translated the resultant conglomerate of nested `if` and `let-values` into j, then reduced redundant booleans (e.g. `if somecond then 1 else 0`) to `cond`) which resulted in the following j:
 
+[source,j]
+----
 fill=: 3 : 0
 'i oid count open low high limit stop trailext'=.y
 'is_more_attractive is_less_attractive more_attractive ext oppext'=.(count>0){(>:`<:`>.,high;low),:(<:`>:`<.,low;high)
 most_attractive=.open more_attractive`:0 limit
 (VOID"_)`{{changed_rows+activate_children oid[deactivate_order i[most_attractive set_fp oid}}@.(((((]`(1[stops=:a:(I.oids=oid)}stop)@.(stop is_less_attractive`:0 oppext))`(should_test_lim[exts=:exts newext (I.oids=oid)}exts)@.(stop<0))"_)`]@.(stop=a:))*.ext is_more_attractive`:0 limit)''
 )
+----
 
 then i identified predicates and their associated true & false branches, using the naming convention `pn` for logical values, and `pn[tf]` for the associate true or false branch:
 
+[source,j]
+----
 p1t=.{{changed_rows+activate_children oid[deactivate_order i[most_attractive set_fp oid}}
 p1f=.VOID"_
 p3t=.should_test_lim[exts=:exts newext (I.oids=oid)}exts
@@ -273,22 +289,31 @@ p3=.stop<0
 p4=.stop is_less_attractive`:0 oppext
 p1=.(p2f`]@.p2)*.ext is_more_attractive`:0 limit
 p1f`p1t@.p1''
+----
 
 start at the first/root predicate, p1, then trace through the predicates' structure:
 
+[source,j]
+----
 p1=.(p2f`]@.p2)*.ext is_more_attractive`:0 limit
+----
 
 p1's truth value must always be determined because it is the root predicate. however, p2f might not be evaluated, depending on p2. the pattern `f"_`]@.p` is lisp `(or p f)`.
 
 the structure is:
 
+----
 a,(b->b
      ;(c->d
          ;(e->f
              ;e)))
 ->g
  ;h
+----
+
 with
+
+----
 a=.ext is_more_attractive`:0 limit
 b=.stop=a:
 c=.stop<0
@@ -297,8 +322,11 @@ e=.stop is_less_attractive`:0 oppext
 f=.1[stops=:a:(I.oids=oid)}stop
 g=.changed_rows+activate_children oid[deactivate_order i[most_attractive set_fp oid
 h=.VOID
+----
 
 which translates to the following truth table:
+
+----
 %   a,b,c,d,e,f
 top(1,1,_,_,_,_):-g.
 top(1,0,1,1,_,_):-g. % c->d is equivalent to c,d
@@ -306,9 +334,11 @@ top(1,0,1,1,_,_):-g. % c->d is equivalent to c,d
 top(1,0,1,0,1,1):-g.
 top(1,0,1,0,0,0):-g.
 top(0,_,_,_,_,_):-h.
+----
 
 the purpose of having e->f;e is to conditionally execute f for effect. we'll refactor that into a separate truth table for whether to execute f. in retrospect it turns-out that f should not have been in `top` at all! instead, we should have the following:
 
+----
 %   a,b,c,d,e
 top(1,1,_,_,_):-g.
 top(1,0,1,1,_):-g.
@@ -318,9 +348,11 @@ top(0,_,_,_,_):-h.
 
 %     e
 execf(1):-f.
+----
 
 as a general rule that i haven't proven, but seems obvious: we can separate all pure predicates from any side effects. each side effect entailed in a predicate gets its own truth table. when we're done, each truth table's predicates will be exclusively pure and the table will map to return values or side effects. notice that top does not use e; for both values of e we return g; thus we can omit e therefrom:
 
+----
 %   a,b,c,d
 top(1,1,_,_):-g.
 top(1,0,1,1):-g.
@@ -331,9 +363,11 @@ top(0,_,_,_):-h.
 
 %     e
 execf(1):-f.
+----
 
 and we reduce that redundancy to get:
 
+----
 %   a,b,c,d
 top(1,1,_,_):-g.
 top(1,0,1,1):-g.
@@ -342,9 +376,11 @@ top(0,_,_,_):-h.
 
 %     e
 execf(1):-f.
+----
 
 and we again notice redundancy: regardless of d, we execute g!
 
+----
 %   a,b,c
 top(1,1,_):-g.
 top(1,0,1):-g. % redundancy again
@@ -353,9 +389,11 @@ top(0,_,_):-h.
 
 %     e
 execf(1):-f.
+----
 
 removing said redundancy:
 
+----
 %   a,b,c
 top(1,1,_):-g.
 top(1,0,1):-g.
@@ -363,9 +401,11 @@ top(0,_,_):-h.
 
 %     e
 execf(1):-f.
+----
 
-there must be some need for d, though! it's just clear that it's not of `top`; it's probably actually of `execf`, then. recall that e=>not(d), and d=>c, and c=>not(b). these relations must be retained in the refactored truth tables.
+there must be some need for `d`, though! it's just clear that it's not of `top`; it's probably actually of `execf`, then. recall that e=>not(d), and d=>c, and c=>not(b). these relations must be retained in the refactored truth tables.
 
+----
 %   a,b,c
 top(1,1,_):-g.
 top(1,0,1):-g.
@@ -373,8 +413,9 @@ top(0,_,_):-h.
 
 %     e
 execf(1):-f.
+----
 
-top(1,0,1) can be read as parameters of relation top, or as top with the single boolean value resulting from a AND NOT(b) and c. the use of comma as both a parameter delimited and as logical AND is a pun.
+`top(1,0,1)` can be read as parameters of relation top, or as top with the single boolean value resulting from a AND NOT(b) and c. the use of comma as both a parameter delimited and as logical AND is a pun.
 
 we can uniquely encode these bit vectors as integers, in case that suits your fancy. granted, we'd need a way to encode the "any" symbol (here denoted by the underscore character). perhaps we may use modular arithmetic to convert {0,1,2} to a boolean ring? otherwise we can encoded as the whole set of implied combinations (for `top`, 2^3^=8 positive integers) encoded as an array of ranges—in this case, [[5..7 g] [0..4 h]]. ranges naturally correspond pretty well to if-else in two ways:
 
@@ -420,18 +461,23 @@ btw, some other identities:
 
 using these identities, the original form:
 
+----
 a,(b->b
      ;(c->d
          ;(e->f
              ;e)))
 ->g
  ;h
+----
 
 reduces to two statements, which succinctly (through nesting) express the above truth tables:
 
+----
 a,(b;c,d;e)->g;h. % a distributes over the disjoint union of b, (c,d), and e.
 a,not(c),e->f. % d=>c but not(d) says nothing about c nor e. however, not(d)=>not(c),not(d).
+----
 
+----
 % h`g@.a*.b+.e+.c*.d
 1 1 _ _ _ -> g.
 1 0 1 1 _ -> g.
@@ -439,11 +485,14 @@ a,not(c),e->f. % d=>c but not(d) says nothing about c nor e. however, not(d)=>no
 1 0 0 _ 1 -> g.
 1 0 0 _ 0 -> h.
 0 _ _ _ _ -> h.
+----
 
 and
 
+----
 % f^:a*.e*.-.c
 1 _ 0 _ 1 -> f.
+----
 
 these two are actually correct and the j expressions are easier & plainer than using truth tables. even if we don't use the truth tables in our program, they're still useful for reasoning about our program: its definition, nature/implications/behaviors, and control flow, which makes refactoring or modification _much_ easier!
 
