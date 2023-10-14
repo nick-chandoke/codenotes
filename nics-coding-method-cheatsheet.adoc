@@ -1,4 +1,5 @@
-== nixy's coding method
+= nixy's coding method
+:toc:
 
 TODO: merge w/factor notes' 1st section, _factor: good or bad?_.
 
@@ -50,19 +51,19 @@ always consider which relations are mere transcoders versus those which discard 
 
 things that we do with information: transcode (only for the benefit of decoders), remove/intersect (everything else).
 
-=== examples of code derivation
+== examples of code derivation
 
-==== nub
+=== nub
 
 info that we want:
 * nub set
 * original sequence
 
-===== in prolog
+==== in prolog
 
 TODO
 
-===== in sql
+==== in sql
 
 in sql we basically cheat b/c `group by` is essentially nub.
 
@@ -104,7 +105,7 @@ catmrn
 
 i could have just put `letter` but i put `min(letter)` because link:https://www.sqlite.org/lang_select.html#bare_columns_in_an_aggregate_query[bare columns in aggregate queries] are not generally standard sql and i like good practice. `min` here means "select an element; the min? sure, any single element will do." it corresponds to head (`{.`) in the j version below. `{.y` for string `y`, in sql, is `substr(y,1,1)`.
 
-===== in j
+==== in j
 
 we can mimic sql by using key which preserves order yet groups:
 
@@ -121,9 +122,9 @@ here's another way: `#~i.~=i.@:#`.
 . `i.@:#` is the indices of the input array. this adds no new information in the sense that `y` already has these indices.
 . `#~` actually applies the information given by applying `=`, to `y`
 
-=== examples of data of various forms
+== examples of data of various forms
 
-==== of complex relations
+=== of complex relations
 
 * all structure is symmetry & asymmetry. _symmetry of P(O) under T_ is invariance of property P of object O under a transformation T. _transform_ is synonymous with _relation_. it's useful to consider symmetry link:https://en.wikipedia.org/wiki/Up_to[up to] some boundary of variation of the transform or object. symmetry is similar to link:https://en.wikipedia.org/wiki/Homomorphism[homomorphism]—the mathematical formalization of analogy.
 
@@ -131,7 +132,7 @@ asymmetry is particularity and symmetry is non-particularity.
 
 also disjunction is coproduct which we know as choice from ADTs & `case` [haskell]. conjunction is product. _tacit_ is nothing more than abstraction, factoring. it's nothing more special than defining a function or instancing a type class.
 
-===== example 1
+==== example 1
 
 NEXT: correct this, especially with a good version that handles conditionality / branching / nested vs distributed code (viz predicates) well. also:
 
@@ -192,7 +193,7 @@ if intersection is convergence and union increases the search space, then what i
 
 anyway, building-up expressions by specifying relations is what generally makes any code efficiently expressed "tacitly." it's all just efficiently associating subsets with other subsets—in this case, subsets of {x,y} with {p,f,g,h}, and a relation of those both with `if`. the ideal general expression is the pseudo-j expression `[if (p,[x y [x y]]),.[f g h],"0 _ [x y]]`, which associates each of `[f g h]` with argvec `[x y]`, and indexwise-associates that result—`[[f x y] [g x y] [h x y]]`—with the association of `p` with each of `[x y [x y]]`, leaving us with the total expression `[if [[[p x] [f x y]] [[p y] [g x y]] [[p x y] [h x y]]]]`. i'm using array lang primitives to bulid the same sexp that `cond` expands to, and considering that array primitves are specific (and so convenient) varieties of relational algebra's _join_, which is just a cumbersome version of ANDing & ORing predicates in prolog. as it turns-out, though, in this case the stack is the best encoding. we can only be as tacit as our code is symmetric.
 
-=== conditions/branching/choice by truth tables
+== conditions/branching/choice by truth tables
 
 ----
 if P:
@@ -496,7 +497,7 @@ and
 
 these two are actually correct and the j expressions are easier & plainer than using truth tables. even if we don't use the truth tables in our program, they're still useful for reasoning about our program: its definition, nature/implications/behaviors, and control flow, which makes refactoring or modification _much_ easier!
 
-== tacitity, a/symmetry
+= tacitity, a/symmetry
 
 this section compares parser-oriented coding (wherein programming=metaprogramming) to combinator-oriented coding.
 
@@ -517,9 +518,9 @@ NOTE: recursion/looping is symmetry, and termination/break conditions / base cas
 
 the asymmetry is `(,)` and the symmetries are that `a` & `b` are free type variables and that the list's length is variable (even possibly infinite) as given by recursion which is a symmetry in the definition of the list type.
 
-=== examples of tacit encodings
+== examples of tacit encodings
 
-==== stacks
+=== stacks
 
 fn comp is tacit; the tacit info is the stack effects. relative to composition/invocation. the tacit information exists; it's specified or derived in/by a function's definition. this is a nice separation, indeed, but it is _separation_ of information, _not omission_. programs may be any length, which implied by the stack's variable size, a freedom (symmetry) given by its recursive structure and [with] functions' recursive definition (functions may be defined of functions). functions' freedom to take or return as many values is not needed, as demonstrated by link:http://www.om-language.org/[om]; alternatively it's demonstrated by currying—that any n-ary function may be considered as a unary function that returns an (n-1)-ary function. this requires higher order functions. another example is functions implemented in assembly which exploits the stack's variable size to effectively store inputs & outputs.
 
@@ -529,11 +530,11 @@ the suck of ordered inputs or outputs is that the consideration of one implies e
 
 TODO: this may be an issue for arrays, but is it an issue for a stack? if i were do make `1 2 3` into `1 3` then 3 is still atop the stack and i deleted `2`, which can't be by accident!
 
-==== trains
+=== trains
 
 j trains are tacit by hiding information in the parsing of the train.
 
-=== conclusion
+== conclusion
 
 . tacitity is syntactic. it's the separation of information: that some information is not present in some syntax, but is provided either in the parser or in related syntax specified elsewhere.
 . the tacit info may be a/symmetric; i.e. there's a relation between tacit facts and data given by syntax. generally the mapping is expressible by join [relalg] e.g:
@@ -554,11 +555,11 @@ with t(x) as (values(5)),
 select f||'('||x||','||y||')' from t join u join fns using (i);
 ----
 
-==== let's take tacit all the way
+=== let's take tacit all the way
 
 implicit stuff is better than explicit. tacit style shows that. let's take it as far as we can, though. whereas tacit code implies relation of positional arguments, prolog implicitly composes predicates and has implicit (tacit) control flow. rather than changing a traversal manually or structuring data as particularly as we would in other models, we simply introduce more predicates in order to reduce search/traversal spaces. for example a triangular matrix is (TODO: something like) `I in 0..9,J in 0..9,I#=<J.` in prolog (it's `with t(a) as (select * from generate_series(0,9)) select group_concat(j.a) from t as i join t as j on i.a<=j.a group by i.a;` in sql) but `":\i.10` in j; which uses scan (`\`).
 
-=== some ground-breaking stuff
+== some ground-breaking stuff
 
 consider the following relations:
 ----
@@ -604,7 +605,7 @@ we need sql but with:
 
 or we can just use prolog, wherein each rule has symmetries by its free vars, asymmetries by its bound vars, and asymmetries of multiple rules e.g. a having two goals: one base condition and one recursive. all rules correspond to structures. find a good syntax & algebraic patterns implied by defining rules that make reasoning easy, in order to use the structure. for example, arrays are very easy: each axis represents a different symmetry axis. they have a nice graphical/syntactical representation. their syntax is convenient and specific, making some of its information tacit, present in its parser and algebraic operations or implications. symmetry is present to some extent in any context in which we can factor-out information: it's an invariant property/relation/predicate over the set of those data whence info was factored i.e. sets having common info.
 
-==== predicates generalize sql relations & functions
+=== predicates generalize sql relations & functions
 
 and considering that intersecting predicates is implicitly sql join, then predicates join functions!
 
@@ -626,7 +627,7 @@ prolog generalizes array programming. array programming has each variable refer 
 
 prolog is the best for coding in general. however, for logically simple dataflow programming, uiua is likely best.
 
-=== combinators
+== combinators
 
 consider the combinators at <https://combinatorylogic.com/table.html>, e.g. `λabcde.abc(de)`. functions have arbitrarily long sequences of inputs, so let's say that, like in lisp or prolog, all functions accept one input which is a sequence. then we have D~1~, `λ[a,b,c,d,e].abc(de)`. let's be practical, here: _five_ inputs? really? that aside, i see that the lambda preserves the order of the inputs; the only information that the lambda adds is a division between `c` & `d`. notice how many lambdas there are in that table of the linked webpage. there is a ridiculous variety. they can be much better expressed by stack manip words and partitioning functions. D~1~ can be simply expressed as `split[-2]`. the B combinator `λabc.a(bc)` is identically defined! B~1~ is `split[-3]`. a better syntax for these is just a selection & partition vector: `|2` for D~1~ & B, and `|3` for B~1~. for `λabcde.a(bde)(cde)`, `1(2,3)|2`: there are three distinct sequences: `1`, `(2,3)` and the last 2, `|2`. juxtaposition is `join`: (`1`=`a`) join (`(2,3)`=`bc`) join (`|2`=`de`), represented in j as `'a',,'bc',"0 1'de'`. yes the j version is uglier than lambdas here, but it obviates the need for lambdas entirely and is generally expressive, whereas apparently we need a whole flock of lambdas just to get anything done.
 
@@ -634,19 +635,19 @@ really it seems pretty silly to bind positional arguments to names; like do you 
 
 extra note: some can be defined elegantly as _selection vectors_ (`x` for `{` in j) of a vector of inputs e.g. `swap=:2 1`. typically swap would be thought of as a function, not a transcoding of an ordered abstract object.
 
-=== uiua
+== uiua
 
 if link:https://www.uiua.org/rtl[uiua's creator discourages reasoning about programs in terms of the stack, instead favoring arrays], then why use a stack at all? why not use another structure? stack machines are known to be simple and efficient. that's good. yet i encourage the exploration of other structures whose symmetries we may exploit for tacitness.
 
-=== declarative/relational/logical/predicate programming
+== declarative/relational/logical/predicate programming
 
 the "X" matrix is described obviously as `[|i|=|j|]` or `=&|` depending on notation or parsing context. we can do the same by a "clever" series of steps in an array lang—`(+.|.)=@(,"0"_1 _)~@i.`—but it's not what we want; it just happens to be equivalent, even though it entails the same information: namely how reverse relates to negation of indices: `|.` is equivalant to `({~<:@-@i.@#)`. now, this code is a direct translation from a uiua example. you may say, "we can shorten it by re-expressing the id matrix: `(+.|.)e.@i.`!" short but inelegant: it's more exploitation of things that have little to do with the actual idea that we want to express! so you've won the battle, but can you generalize such solutions? can you modify them if you want variants?
 
 we want to _specify what we want directly_ rather than just _get what we want somehow_.
 
-=== definitions & names
+== definitions & names
 
-==== introduction
+=== introduction
 
 there's a common design of proglangs: defining individual programs (commonly: predicates, stacks for stack langs, functions for functional (λ calc) langs, or instruction sequences for von neumann architectures.) regardless of the programming paradigm, there's a common theme of identifying programs by name then combining them later. naming enables chunking [memory technique]. consider textual encoding of programs: we have streams broken by newlines and sometimes in _block style_—when parts of multiple lines have common column numbers, giving the code a tabular appearance. text is one dimensional but we can make it semitabular by breaking on newlines, and fully tabular by using block style. and then we have names, which replace long codes by shorter ones just so that we can read them. even though this is a concern of the view of the program, it's encoded as part of the program itself. oops. a proper technique would be to select the code to hide in a code editor/viewer, and mark the hidden part by a name. names do have proper places in programs, still—e.g. sql table and column names; they're a definite part of a program. interestingly, the very thing that demonstrates this is that the tables are, throughout the program, referenced and mutated often, and the set of tables is not dynamically modified. contrast this with local variables which are used only because: 1. it's commentary i.e. the name information could be encoded as a comment (or generally, program metadata); or 2. an applicative model is used, so the only way to compute an expression only once yet use its evaluated value as input to multiple functions is by binding it to a name then passing that name as input. in a stack model, (2) is expressed by unlabeled data duplicated via `dup` and stack shuffle words to change which program to which it's an input.
 
@@ -654,7 +655,7 @@ so even in stack langs, which are supposed to do without local named binds, ther
 
 anyway, there are many solutions to this problem, but what i at least want to be understood is that this is a view problem, not a language/model problem. aside from the solution that i described above, we can use multidemensional views, like j's multidimensional array display, or a 3D opengl space, or a relational desplay where each datum has an arrows pointing to other data sets. a 3D hypergraph would be a nice display.
 
-==== computable programs
+=== computable programs
 
 metaprogramming is composition & modification of programs. usually these operations consider programs only insofar as sequences. they consider programs as ordered compositions of programs. we can do much better: we can identify (even computationally, automatically prove) axioms of programs then compose them commutatively as we compose facts in prolog. programs ultimately composed of _axiomatic_ primitive programs, _primitives_ being just like the axioms of an algebraic structure. the primitives would be endowed (associated) with actual algebraic properties (expressed & defined as predicates). we should strive for primitives that have enough metadata to support, of programs:
 
