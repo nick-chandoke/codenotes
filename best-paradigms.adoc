@@ -10,6 +10,36 @@ TODO:
 * thinking that modularization is achievable is foolishly naïve. let's mathematically describe _modularity_: it's independence, polymorphism, interchangeability, literally relation `∀a∈A,b∈B (a,b)`; there are no constraints on any particular relations among subsets of `A` or `B`. surely this naturally occurs often, but naturally does not occur often. modularity is not something that we decide; it's an intrensic property of relation, and relation is the definition of any system that we're coding. therefore trying to enforce modularity is simply adding complexity in transformations (from the natural, non-modular space to the modularized space/representation) and masking the program's nature by trying to fool a coder into thinking that there's independence when there actually is not. as always, both extra complexity and non-natural expression complicate working with the code.
   ** the inevitability of non-modularity is yet another example of why organic programming reflects truth of code, and why we need tools to work with organic code, rather than trying to use constrained systems. ideally we should be able to visualize in/dependence, e.g. as a hexagonal or rectilinear grid vs a more organic graph.
 
+=== introduction: what's wrong with programming today?
+
+the majority of work in common programming is:
+
+* dealing with linguistic constraints. it usually sounds like, "how do i do <computation> in <lang> given <constraint>?" and the answer is always a work around, usually considered idomatic. this gives rise to so-called "design patterns."
+* dealing with execution/computational model constraints, such as strict vs non-strict eval
+* choosing and converting among data structures / types, usually for efficiency, though sometimes for elegance, and other times to provide whatever arbitrary structure some function takes
+  ** commonly one makes new types not for their structure, but for their assumed semantic meaning. this is seen in oop langs and haskell. in these, the types are not considered for their mathematical structure, but instead are effectively just JSON schemata checked by the type checker.
+
+even lisp has these issues. consider racket scheme. it has both the stream type (srfi 41) and the _sequence_ type. they do the same thing, but sequences are a little bit different and are a bit more efficient, i think. they are a different type. there exist functions to convert between the two types. closures (namely `closure : inputs ... -> (a . closure-or-nil)`) can accomplish the same behavior. they're all different types. `car` & `cdr` work on only the closure one, and stream functions work only on streams, and sequence functions only on sequences. each has basically the same behavior but in some places have tiny technical differences that have nothing to do with the program logic that they implement. why does this happen? it's because the problem is with the underlying single data structure with the execution model: the linked list with strict evaluation. the idea of a sequence/stream is non-strict evaluation and abstract representation of a sequence.
+
+.example
+[source,scm]
+----
+;; represents the infinite sequence `[i..]` by the "generator" pattern (as is commonly called in python)
+((cdr ((letrec ([L (λ (i) (cons i (λ () (L (add1 i)))))]) L) 0)))
+'(1 . #<procedure>)
+----
+
+did you know that racket scheme's virtual machine is more efficient for pure code but that chicken scheme's translates to c before execution and thus has no vm and so executes impure code faster?
+
+.example
+[source,scm]
+----
+((cdr ((letrec ([L (λ (i) (cons i (begin (set! i (add1 i)) (λ () (L i)))))]) L) 0)))
+'(1 . #<procedure>)
+----
+
+wow! so many ways to encode a simple idea, right!? haskell's `[i..]` is basically the tersest possible expression. it's built into the language. there's not much to computing, but what all there is should be implemented by the vm, not left to programers to implement, since they'll make all sorts of designs that disagree. the fact is that the language itself is the single point of design unification, and all programmers will implement different designs, so the only hope of decent synergy among many people's code is a vm with an interface (i.e. its opcodes/builtins/primitives) that doesn't force the programmer to worry about implementation details—namely efficiency and syntax. this is what makes j and prolog good.
+
 === functions
 
 a function is a particular variety of (sub)program that takes inputs and gives outputs. that inputs are free enables the subprogram much more than having fixed values. that being said, it could use fixed addresses, have those addresses mutated, then read from them. this is common in assembly, seen as setting registers values before invoking an instruction or reading output from a fixed register after invoking an instruction. however, like in assembly, pushing parameters to the 1-dimensional stack avoids some problems present in 0-dimensional registers, namely when two segments of code need access to common registers at different times; one is bound to overwrite the other's value. the error here is that independent data are kept in a common place that cannot simultaneously store them both.
