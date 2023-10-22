@@ -18,8 +18,16 @@ the majority of work in common programming is:
 * dealing with execution/computational model constraints, such as strict vs non-strict eval
 * choosing and converting among data structures / types, usually for efficiency, though sometimes for elegance, and other times to provide whatever arbitrary structure some function takes
   ** commonly one makes new types not for their structure, but for their assumed semantic meaning. this is seen in oop langs and haskell. in these, the types are not considered for their mathematical structure, but instead are effectively just JSON schemata checked by the type checker.
+* specifying symmetry, usually verbosely. e.g. factor has `find`, not `findAll`, and has `cut` but not `cutAll` (`u;.1` in j). thus loops and their termination conditions or domains must be specified _everywhere_. because loops are specified explicitly, they require a nontrivial amount of refactoring to change their traversal logic or domain. also nesting loops or traversing multiple structures in tandem is hell. excepting array languages and prolog, proglangs don't have builtin considerations of symmetry. prolog's symmetry is implication which derives total sets from predicates, and array langs are symmetric of axes. this is arguably the greatest of all defects.
+* abstraction devices—such as oop, subroutines, combinators—that serve only to factor/chunk the program for brevity or nicer _representation_, which usually means *syntax*, though sometimes factoring programs reveals underlying arrangements of logical aspects of the program and suggests a model.
 
-even lisp has these issues. consider racket scheme. it has both the stream type (srfi 41) and the _sequence_ type. they do the same thing, but sequences are a little bit different and are a bit more efficient, i think. they are a different type. there exist functions to convert between the two types. closures (namely `closure : inputs ... -> (a . closure-or-nil)`) can accomplish the same behavior. they're all different types. `car` & `cdr` work on only the closure one, and stream functions work only on streams, and sequence functions only on sequences. each has basically the same behavior but in some places have tiny technical differences that have nothing to do with the program logic that they implement. why does this happen? it's because the problem is with the underlying single data structure with the execution model: the linked list with strict evaluation. the idea of a sequence/stream is non-strict evaluation and abstract representation of a sequence.
+to my knowledge, only early uiua (sadly uiua's had some ugliness introduced since) and prolog don't suffer these issues. they both:
+* have implicit symmetry of their data
+* are only notation rather than a language, and so their syntax is arbitrary and has not arbitrary constraints/asymmetries, and their syntax represents programs directly (homoiconicity. uiua would be homoiconic if its higher-order fns' argument fns needed to be quoted. that would be a pain, though, and we can still quote them (delay their evaluation via the `^` operator) if we want.)
+* have one data structure
+* prolog has non-strict evaluation, and uiua has `^`
+
+even lisps (except pico lisp) has the "multiple data structure" issue. consider racket scheme. it has both the stream type (srfi 41) and the _sequence_ type. they do the same thing, but sequences are a little bit different and are a bit more efficient, i think. they are a different type. there exist functions to convert between the two types. closures (namely `closure : inputs ... -> (a . closure-or-nil)`) can accomplish the same behavior. they're all different types. `car` & `cdr` work on only the closure one, and stream functions work only on streams, and sequence functions only on sequences. each has basically the same behavior but in some places have tiny technical differences that have nothing to do with the program logic that they implement. why does this happen? it's because the problem is with the underlying single data structure with the execution model: the linked list with strict evaluation. the idea of a sequence/stream is non-strict evaluation and abstract representation of a sequence.
 
 .example
 [source,scm]
@@ -39,6 +47,140 @@ did you know that racket scheme's virtual machine is more efficient for pure cod
 ----
 
 wow! so many ways to encode a simple idea, right!? haskell's `[i..]` is basically the tersest possible expression. it's built into the language. there's not much to computing, but what all there is should be implemented by the vm, not left to programers to implement, since they'll make all sorts of designs that disagree. the fact is that the language itself is the single point of design unification, and all programmers will implement different designs, so the only hope of decent synergy among many people's code is a vm with an interface (i.e. its opcodes/builtins/primitives) that doesn't force the programmer to worry about implementation details—namely efficiency and syntax. this is what makes j and prolog good.
+
+=== interactivity, and program editors rather than programming languages
+
+programs are commonly written like initialization-until-termination, rather than, like prolog, being a collection of information storable on disk or in volatile memory, queryable like a server is, modifiable while running. aside from that, however, is a further concern of interactivity: cursors & views. the repl is a very poor, limited form of interactivity. text—the need for syntax and having it evaluated—is often, but not always, ill-suited. it's powerful because we can express arbitrarily complex queries quite well; but it is good for expressing queries, not designing them! design occurs in an interactive environment, such as the kakoune text editor.
+
+kakoune is one of the most interactive editors that i've found. it allows multiple selections simultaneously and saving them to registers, and in this way of manipulating multiple data simultaneously, follows the array paradigm. however, like array _languages_, the kakoune _editor_ shows the selections which the queries identify _as the query is being written_ and show the operations _as they're entered by the user_.
+
+editing data like this is at least as wonderful an improvement on the repl as the repl was on compiled programs. of course, there's no reason to confine ourselves to terminal emulators, text editors, or textual representations of data.
+
+suppose that i copy tabular data from a webpage, and when i paste it into text, it looks like this:
+
+----
+103.19.58.84	4145	Indonesia Banyuwangi	
+
+3980 ms
+	SOCKS4	High	1 minutes
+93.116.57.4	4153	Moldova Ungheni	
+
+380 ms
+	SOCKS4	High	1 minutes
+119.82.251.250	31678	Cambodia Phnom Penh	
+
+2140 ms
+	SOCKS4	High	1 minutes
+190.182.88.214	30956	Colombia 	
+
+2020 ms
+	SOCKS4	High	1 minutes
+
+[...]
+----
+
+my task is to turn it into a queryable sql database for both programmatic use and readability. any programmer would probably want to write regex or a parser. in kakoune, however, it's natural to select whitespace then replace with spaces. now we get the following output:
+
+----
+103.19.58.84 4145 Indonesia Banyuwangi 3980 ms SOCKS4 High 1 minutes 93.116.57.4 4153 Moldova Ungheni 380 ms SOCKS4 High 1 minutes 119.82.251.250 31678 Cambodia Phnom Penh 2140 ms SOCKS4 High 1 minutes 190.182.88.214 30956 Colombia 2020 ms SOCKS4 High 1 minutes
+----
+
+ok. i see that each record ends with "minutes". i'll insert a newline after those:
+
+----
+103.19.58.84 4145 Indonesia Banyuwangi 3980 ms SOCKS4 High 1 minutes
+ 93.116.57.4 4153 Moldova Ungheni 380 ms SOCKS4 High 1 minutes
+ 119.82.251.250 31678 Cambodia Phnom Penh 2140 ms SOCKS4 High 1 minutes
+ 190.182.88.214 30956 Colombia 2020 ms SOCKS4 High 1 minutes
+----
+
+i see some leading whitespace. let's remove that then identify fields. there's a variable, here: locations may be any number of names. they're always followed by regex `[0-9]+ ms`. however, rather than bothering with regex, we can simply go to the end of each line, do `6b`, and insert a field separator there:
+
+----
+103.19.58.84 4145 Indonesia Banyuwangi |3980 ms SOCKS4 High 1 minutes
+93.116.57.4 4153 Moldova Ungheni |380 ms SOCKS4 High 1 minutes
+119.82.251.250 31678 Cambodia Phnom Penh |2140 ms SOCKS4 High 1 minutes
+190.182.88.214 30956 Colombia |2020 ms SOCKS4 High 1 minutes
+----
+
+the remainder of field separators are obvious:
+
+. one after each of 1st & 2nd words
+. one before the 2nd word from the end
+  .. one before the word before that
+    ... one before the word before that
+
+----
+103.19.58.84   |  4145 | Indonesia Banyuwangi | 3980 ms | SOCKS4 | High | 1 minutes
+93.116.57.4    |  4153 | Moldova Ungheni      |  380 ms | SOCKS4 | High | 1 minutes
+119.82.251.250 | 31678 | Cambodia Phnom Penh  | 2140 ms | SOCKS4 | High | 1 minutes
+190.182.88.214 | 30956 | Colombia             | 2020 ms | SOCKS4 | High | 1 minutes
+----
+
+i've added spaces around delimiters and aligned them (using kakoune's `&` operator) for readability, just because i can effortlessly. "word" here means a substring of non-whitespace characters. notice how some locations depend on others.
+
+kakoune has many primitives that j has but many cursor-based ones, too:
+
+[options="header"]
+|==================================================================================
+| kak                          | j                | op
+| `/`                          | `i.`             | find
+| `"rZ`                        | `r=:<selection>` | store value in register `r`
+| `|`                          | `2!:1`           | exec cmd
+| `S`                          | `;.±[12]`        | split
+| `|.`                         | `<a-(>`, `<a-)>` | rotate
+| `p`, `P`, `A`, `a`, `i`, `I` | `,`              | append/prepend/insert
+| <a number n before cmd>      | `cmd^:n`         | execute a fixed number of times
+|==================================================================================
+
+kak does not support arithmetic nor conditional actions. for sorting we do `|sort`, and for grouping we: select, filter, delete (which also yanks), then paste elsewhere. this must be done for each group, though a macro makes that easy. its data & execution model are not nearly as efficient as bqn, rust, or go, but that's fine considering that the point of interactivity is to _derive_ dataflow programs, not execute them. one can easily write an efficient vm that executes kak commands i.e. programs.
+
+kakoune does not have fold but all loops (including fold) can be expressed easily in terms of a macro. the only shortcoming is that kakoune does not support looping until a predicate is false.
+
+ones that kakoune has that j does not are pretty much all selection-based ones—that is, kakoune's interactive aspect:
+
+[options="header"]
+|====
+| key                         | command
+| s                           | select
+| u                           | undo
+| d                           | delete
+| Z                           | store selection
+| j,k,l,h,J,K,L,H,f,t,E,e,b,B | modify selection / move cursor
+| ?                           | extend selection to next found search term
+| q                           | record macro (define subroutine interactively, though the user must not make mistakes lest they mis-record a macro!)
+|====
+
+the reason that kakoune's select is different from j's is that kakoune's does not have a return value; it selects without changing the buffer(s) (which, along with register values, is the program state). we can extract with `d`, or copy with `y`, or replace with `c`, or pipe to a program or a whole ton of other things, easily changing the buffer or not, seeing how we're changing it as we do it.
+
+the reason that j does not have kakoune's `d` is that, again, kakoune deletes what's selected; j has no facility for removing a single slice `[m:n]`, let alone multiple slices, nor for selecting them in the first place! of course j's regex library does support these.
+
+* obviously kakoune does not work on multidemensional arrays well, but then again, who actually uses rank 3+ arrays anyway? and if they do, why? as sql shows, we can do well with tables or vectors.
+* you don't really get runtime errors in kakoune
+
+note that neither vim nor emacs is any good for this, since they aren't interactive. they do still improve on repls, however: to execute commands, they use keybinds rather than language syntax, and they have undo! hell, even sql has undo: transactions!
+
+also note that interactive editing shares something in common with stack langs: both modify state. what in a stack lang is `dup`, in kak is `f<delim>yP`. yet obviously text buffers are a far more complex state than a stack! they also act as arrays, allowing subarray selection. comparing kak to stack machines is a bit silly, though, when stack machines are considered for their efficiency.
+
+all this to say: frontending langs with kakoune and its json-rpc is better than repls, but a generally configurable interactive environment that goes beyond the confines of text is even better. until text is deprecated in favor of opengl-based arbitrary data editors, repls should be deprecated in favor of kakoune/json-rpc. in fact, i'll take it even further: these things should be used for _all_ computer interactivity! do away with POSIX repls! use text editors instead, and simply enable choosing keybind profiles while the shell is open! at such a point, there's no concept of programming language vs interacting with a computer vs editing or viewing data: it's all just arbitrary manipulation & display profiles as the user prefers, though of course the underlying functionality must still be programmed. but the actual manipulation & display of data should no longer be "dead" programs and syntax, or even text! in a world with webgl and html tables, the idea that anyone confines themselves to displaying multidimensional data as text tables with double-newlines (looking at you, j), or that anyone writes code to align text columns is, if you really think about it, pathetic. in fact, i can in kakoune do `%<a-k>regex<ret>5WEd` to, for lines matching `regex`, delete their 5th word _in place_, which would be gold-only-knows-what in j, is something to think about. the fact that i don't immediately know how to express it in j is already enough! that the expression is longer is another thing, and the cherry on top is that i can't see what i'm doing in j as i type-out the syntax! i'm far more likely to make a mistake in j both because i can't see what i'm doing and because i must manage a long syntax blob!
+
+a kak/json-rpc sql editor would be wonderful.
+
+here's a good shell example: say i'm in a directory in kakoune (kakoune knows its current working directory). then i have a keybind to change directory; it just does `!find . -maxdepth 1 -type d` then `gkxd` to delete the 1st line, which is always `.` (great design, `find` authors!) now that all the cwd's subdirectories are listed, i just do `/` then start typing any regex, to identify the dir that i want to change to, then press enter. who needs bash completion? all i have to do is get to a given line then `xd_` to get the line without whitespace, then `|cd` to pipe the selection to `cd`. what if i want to do anything with multiple files? just `%<a-s><a-k>regex<ret>|rm`, and you actually get to see exactly which files you'll delete. it's very j-like how we select masks then passing them to functions (such as `rm`) rather than providing selection functions to other functions. it's very lisp-like (its macros) how we build-up commands and data to execute, then actually execute them—except that we do it on-the-fly and interactively and with strings.
+
+it's basically like "what if all commands that you execute in the shell were like `massren(1)` but if we didn't have to write massren?" here's how we do the same functionality as `massren` in kakoune:
+
+. `!ls` to paste the list of files of the working directory
+. `<a-s><a-k>regex<ret>` to filter only the files that we want to modify (or just manually delete or arrange files however you like)
+. `+"` (a keybind that i've made with the `surround.kak` script) to quote the filepaths
+. `ypi <esc>` to turn `"filepath"` into `"filepath" "filepath"`
+. modify filepaths as you want
+. `Imv ` as part of building-up the command to execute. prepends "mv " to every selected line
+. `<a-|>sh` to execute each command, ignoring its output, or to be safer, `$sh` to do the same but delete selected text on non-0 exit status
+
+aside from interactivity, *what makes kakoune such a good programming interface is that it has a very powerful selection mechanism.* selection is one half of programming: the other is relating selections. the selection may be related to another and both of a common datum (e.g. saving multiple selections into multiple registers, all of a common text buffer)—this sees relations of both positions & their corresponding values altogether—or the relation may be between a selection and a different selection—for example, deletion or replacement: i select a slice (of a string [array]) `[m:n]` then replace it by a new string that has a new length, at slice `[m:n2]`. this relates subsets of the buffer to each other and thus implicitly relates one buffer state to another.
+
+for good computer use we must have interactive programs interact with each other well. kak and kitty are good examples; they expose their states through environment variables and have syntaxes for external program invocation s.t. the running program can be passed arguments to their command line, and both kitty and kakoune listen for commands on sockets.
 
 === functions
 
@@ -82,7 +224,7 @@ the relational model (namely as per sqlite) is very good. it uses queries instea
 
 the only disambiguation needed is `as`. `join` can avoid most query nesting, and avoids all relation nesting; instead of nesting relations' scopes, it unions them.
 
-all programs are: cond (asymmetric exception), loop (when considering program as state machine), group, select, extract, put._ _extract_ removes from a structure and generalizes `split-at`, `partition`, &c. `put` generalizes insert & create.
+all programs are: cond (asymmetric exception), loop (when considering program as state machine), group, select, extract, put. _extract_ removes from a structure and generalizes `split-at`, `partition`, &c. `put` generalizes insert & create.
 
 a/symmetry can be seen in a map (alist) vs the `map` function (one fn over all data, where application to each datum does not affect other data in the structure being mapped over.) you can combine them: a `cond` inside a loop body. think of the `cond` clauses as exceptions to the norm, expressed by the `else` clause.
 
@@ -94,6 +236,146 @@ why not combinators? they must be used in moderation. one musn't shoehorn their 
 ----
 This might sound like a lot of quibbling over nothing, but there's a definite mental burden that goes unnoticed due to how omnipresent the burden is. It's why style guides often discourage very long functions. They note that it becomes hard to understand what the function is doing. What, precisely, makes it hard? It's that in these languages you can't just focus on the meaning of any single statement of the function; you always have to consider each statement in the full context of the rest of the function, and a larger context is more to have to keep in mind. In Mercury, when state variables aren't involved, only the goal you're looking at matters to the meaning of the goal. Even any variables referenced by the goal are like 'single-assignment' variables that you can be sure aren't having their meaning changed elsewhere in the function.
 ----
+
+consider a simple function, common in functional style: `map`. we'll consider it by a common variety: as it is in the factor proglang—namely that it accepts _one_ sequence argument. want two? use `2map`. want three? use `3map`. want more than that? write your own. fortunately scheme's definition is actually sensible: it accepts an n-ary fn and _n_ lists, mapping over them in tandem. this is allowed in lisp but not in factor because lisp functions may be variadic. in fact, this gets us some *relatively* apl-levels of implicit symmetry: `(curry map +)` pointwise-adds any number of lists, since `+` itself is variadic, the same as j's `+/`. sadly that's as "array" as a non-array (or relational) language gets.
+
+[source,scm]
+----
+(define xs (list (range 6)
+                 '(0 6 7 -2 1 6)
+                 '(100 200 56 27 35 1)))
+(apply map + (map (λ (x) (map cdr (filter (λ (x) (= 0 (modulo (car x) 2))) (map cons (range (length x)) x)))) xs))
+----
+
+resulting in `'(100 65 40)`. i used `map` 4 times, and each of `apply` and `filter` once.
+
+or in j:
+
+[source,j]
+----
+xs=:(i.6),0 6 7 _2 1 6,:100 200 56 27 35 1
++/((#$1 0"_)#])"1 xs NB. the version that i prefer. exploits shape, boolean masks, & rank.
++/((0=2&|@i.@#)#])"1 xs NB. literal translation of the scheme code. exploits boolean masks & rank.
+----
+
+this solution exploits j's rank and reshaping/extension rules! rather than pairing `i.@#` then filtering that for evens, we directly encode that result as `(#$1 0"_)` then filter by that mask by sticking a `#]` on the left: `((#$1 0"_)#])`. then i tack on `"1` to do it for each row. within the `"1` i tack on `+/` to sum each row. this is much easier to write in j not only because the syntax is terser and thus more manageable, but also because j's array model allows us to discuss structure in terms of rows easily. lisp's list model is too general to be useful. its generality means that the programmer must be more explicit/verbose, and that the vm can't optimize as much. it also forces the user to make their own models, but its sequential (vs random [arbitrary]) access is limited and encourages creating data structures rather than exploiting arrays' symmetry (structural regularity).
+
+in factor:
+
+[source,factor]
+----
+: xs ( -- x y z ) 6 <iota> [ 0 6 7 -2 1 6 ] [ 100 200 56 27 35 1 ] ;
+0 xs [ [ [ 1 + ] [ 2 rem 0 = ] bi ] 3dip + + and ] 3map [ ] filter nip
+----
+
+my factor solution exploits the stack: that i can use the stack in any way that i want within `3map`; it's free access to implicit program state. i used an external counter variable instead of zipping with `i.6`.
+
+i'm kind of cheating by using `3map`, but i don't consider that b/c factor should have written a single `map` which, like scheme, accepts a list of _n_ lists and applies an n-ary fn to them in tandem.
+
+a simpler solution:
+
+[source,factor]
+----
+xs [ + + ] 3map
+dup length <iota> [ 2 rem 0 = ] map
+swap [ and ] 2map [ ] filter
+----
+
+in sql:
+
+[source,sql]
+----
+% sadly we can't assign indices to sql rows. fortunately i.6 is equivalent.
+with t(x,y,z) as (values(0,0,100),(1,6,200),(2,7,56),(3,-2,27),(4,1,35),(5,6,1))
+select x+y+z from t where x%2=0;
+----
+
+that version sees the lists as being pointwise associated with each other, each being a separate attribute. it is fixed to three lists. a more general version, which accepts any number of lists, is as follows:
+
+[source,sql]
+----
+create table t(listNum,eltNum,value);
+insert into t values(0,0,  0),(0,1,  1),(0,2, 2),(0,3, 3),(0,4, 4),(0,5,5),
+                    (1,0,  0),(1,1,  6),(1,2, 7),(1,3,-2),(1,4, 1),(1,5,6),
+                    (2,0,100),(2,1,200),(2,2,56),(2,3,27),(2,4,35),(2,5,1);
+select * from t;
+┌─────────┬────────┬───────┐
+│ listNum │ eltNum │ value │
+├─────────┼────────┼───────┤
+│ 0       │ 0      │ 0     │
+│ 0       │ 1      │ 1     │
+│ 0       │ 2      │ 2     │
+│ 0       │ 3      │ 3     │
+│ 0       │ 4      │ 4     │
+│ 0       │ 5      │ 5     │
+│ 1       │ 0      │ 0     │
+│ 1       │ 1      │ 6     │
+│ 1       │ 2      │ 7     │
+│ 1       │ 3      │ -2    │
+│ 1       │ 4      │ 1     │
+│ 1       │ 5      │ 6     │
+│ 2       │ 0      │ 100   │
+│ 2       │ 1      │ 200   │
+│ 2       │ 2      │ 56    │
+│ 2       │ 3      │ 27    │
+│ 2       │ 4      │ 35    │
+│ 2       │ 5      │ 1     │
+└─────────┴────────┴───────┘
+select sum(value) from t where eltNum%2=0 group by eltNum;
+┌────────────┐
+│ sum(value) │
+├────────────┤
+│ 100        │
+│ 65         │
+│ 40         │
+└────────────┘
+----
+
+* if sql had a bit of abstraction then this would be elegant. i like sql's data storage & query model, though.
+* very interestingly, `listNum` was not part of the query! we expect `(listNum,eltNum)` to not be a multiset, but for this query, we can simply say that `eltNum` is a multiset and still get the result that we want!
+* this is the general data encoding method: sparse table where each spatial dimension has a column plus a column for each type of value associated with that point. you can simply associate multiple values with a single point by e.g. `values(x,y,v1),(x,y,v2)`. the ability to be sparse and non-unique very powerfully enables us in a way that apls do not. it's also very much easier to specify axes by name rather than using rank.
+  ** whereas factor & lisp (and most langs) see the three lists as separate, j and sql see them as part of one arrangement that can freely change shape.
+
+ideally we'd write it in something like prolog:
+
+----
+%pointwiseAssoc/2 takes seqs & rets a seq. all/1 converts all valid values into a seq. thus all(y) is a seq of seqs.
+x in X, i=iota(length(x)), r=pointwiseAssoc(i,x), r(j,y), even(j), result=fold(+,map(pointwiseAssoc, all(y))).
+x∈X, i=i.#x, r=i<->x, r(j,y), j|2==0, result=+/|:all(y). % better, apl-like notation. instead of +/|:all(y) we could've done map(+,all(y)) assuming that map works like in scheme.
+----
+
+masks are the same as predicates, except that predicates not only filter, but derive sets, too.
+
+.pure bullshit, pt 1
+
+let's take a look at absolute programming assery in practice.
+
+. `"hello" dup length <iota> [ "" 2sequence ] 2map` fails with "Generic word integer>fixnum does not define a method for the vector class.
+Dispatching on object: V{ 104 0 }". what the _fuck_ does that mean? WHY is it trying to use integer>fixnum? furthermore, isn't integer already a fixnum?!
+. `"hello" dup length <iota> [ "" 2sequence ] V{ } 2map-as` works fine. the problem is that `2map` tried to create a string out of a character and an integer, in some way that failed. i can't imagine how, given that `CHAR: h 0 "" 2sequence` and `104 0 "" 2sequence` both work. after poking around and pondering for about 10 minutes i realize the problem: each iteration of the map produces a 2-element string, and 2map, which, given its inputs, is equivalent to `"" 2map-as`, can't make a string out of strings. why? because, per its definition, it tries to make a string out of ELEMENTS; this confounding error message's useful implication is that a 2-element string cannot be seen as an integer codepoint and thus does not satisfy a fact of string's definition: that its elements are (representations of) codepoints. what we want is for `2map` to concat the strings, not try to match (2-element) strings as characters! our solution, then, is to collect the 2-element strings into a structure that can store anything (i'll use a vector), then flatten that into a single string:
+. `"hello" dup length <iota> [ "" 2sequence ] V{ } 2map-as "" [ append ] reduce` is what i want. well, actually, there is one small tweak.
+. `"hello" dup length <iota> [ number>string "" 2sequence ] V{ } 2map-as "" [ append ] reduce`. there we go. wait-! nope. guess what error i get: it's our old friend, "Generic word integer>fixnum does not define a method for the string class.
+Dispatching on object: "0""! what the fuck. can you guess the problem this time? it's that `2sequence` requires two elements, but number>string returns a singleton sequence, not an element. we can't just replace `"" 2sequence` by `append`, though, because our first parametr is a character, not a string! generally numbers may be any number of characters, so let's turn our character into a string then append it to the string representation of a number:
+. `"hello" dup length <iota> [ [ "" 1sequence ] [ number>string ] bi* append ] V{ } 2map-as "" [ append ] reduce` actually fucking works. and look how long that shit is! *101 characters*, not including `"hello" `.
+
+un-fucking-believable. so two questions and their answers:
+
+. why was such a simple idea so difficult to express?
+  .. the error messages were unhelpful. this is due to extreme ad-hoc polymorphism (a design that implies multiple data types).
+  .. we had to discern among various logically equivalent data types carefully: character vs string, string vs vector; and `append` vs sequence-from-elements
+  .. we had to convert among logically equivalent data types: `number>string`, `"" [ append ] reduce`
+. why is that expression so horrible?
+  .. the fn names are long
+  .. we needed a lot of quoting syntax, which is 4 characters extra each time: `[  ]`
+  .. simply specifying the type conversions is verbose
+
+so none of these things is a fault of the stack model. however, the stack model is good only for succinct code. when the operations are many and all practically logically worthless, then the stack makes reasoning difficult. tracking the stack through so many operations is difficult. however, when the operations are few, and the stack is actually exploited for its elegance, then it works well! then again, we're probably better-off using relations anyway, since they aren't nested, and are thus easier to write & refactor.
+
+the solution in j is 21 characters: `[;@:(,&.>)<@":"0@i.@#`. it's a bit cruddy itself because it requires boxing just to keep elements separate. or you can say that boxing is required to avoid padding. another solution is `[;@:(([<@,":@])"0) i.@#`, 23 characters long. if you remove the `;@:` and `<@` then you can see a list of values, which seems fine, but it's padded with spaces, thus adding extra erroneous information to the actual computation—the "linguistic constraint" common proglang design flaw. the j version is the same logic but, thanks to j's unified model (the array being its single structure), we don't need to specify as much:
+
+* `;` is "flatten", which in factor was `"" [ append ] reduce`.
+* `map` is implicit or modified by `"0`
+* atoms are not a different type from arrays; they're only a different rank, which is a difference as (in)considerable as factor sequences being different lengths
 
 .overview
 

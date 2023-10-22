@@ -10,7 +10,7 @@ recall the 4 fundamental facts of programs:
     ... now that we know that we're discussing sets, _subset selection_ is redundant. i henceforth say _selection_.
   .. en/decoding i.e. looking-up in a _relation_ [relational algebra]—a structure that generalizes associative array [structure/type] and, in symbolic systems like prolog, functions.
     ... _structure_ is defined exclusively by abstract relations; i use _relation_ and _structure_ interchangeably.
-    ... strings are a good _de facto_ structure, though abstractly; using strings as general structures is impractical in most programming langs because these langs don't support fast substring selection, and do not consider strings as "numbers"
+    ... strings are a good _de facto_ structure, though abstractly; using strings as general structures is impractical in most programming langs because these langs don't support fast substring selection, and do not consider strings as "numbers". really any recursive structure, works. the point of strings is that they support substrings (subsequences) such as regex matching, instead of just identifying elements e.g. `find :: (a -> Boolean) -> [a] -> Maybe a` which considers lists as distinct elements rather than sublists. sql tables—i.e. sets—are recursive and taking the substructure of a set always returns a set. lists support this, too; we only need, instead of `find`, some `sublists :: ([a] -> Int) -> [a] -> [a]`. the point of mapping the predicate to ℤ instead of ℤ/2 is that filtering generalizes to partitioning, which generalizes to grouping. to filter, and thus avoid accumulating any new memory for a group that'll be ignored anyway, we can simply map to any negative number. this being said, there'd hardly be any memory usage since of course we'd return indices rather than their corresponding elements, like how factor uses _slices_. anyway, strings support being matched against multiple patterns. so do arrays and sets. actually, any structure can be represent by predicates, and predicates can match against any values à la prolog. even without prolog's powerful unification, any language can map a pattern of any structure to matches. the most efficient way to do it, however, is for the structures to be defined of predicates, which are generally abstract, but may be specified in terms of both free and bound variables. generators (closures, like are used in python) correspond to prolog backtracking; they naturally beget structures by evaluating the generators until they're empty; and the generators are of the most general form—they imply a structure but are independent of any ADT or memory allocation or explicit traversal or shape! this alone was the core idea of digitstring programming. as we see, prolog obviates that design.
     ... _number_ is a vagry. a sensible definition is the cardinals; but notice how i said _cardinals_ instead of _numbers_. again, the term _number_ is unhelpful. it's more sensible to consider particular rigorous mathematical structures such as rings, fields, normed vector spaces, the complex numbers, hyperreal numbers, ordinals, or any arbitrary algebraic structure.
       .... computers are apt at calculating arithmetic, namely of integers and reals, and multidimensional relations thereof, such as complex numbers, real matrices, and neural networks (undirected graphs of arbitrary precision reals). we should strive to use these elegant structures directly, to avoid wasting cycles on converting between our chosen representations and the computer's internal representations. choose a program evaluation system and your representations together. i usually recommend array-based systems with apt consideration for ℤ/2, ℤ/n, ℤ, ℝ, ℂ, ℍ, &c, because these structures are elegantly related among each other, encode common natural properties of many aspects of reality, are simultaneously considerable as many structures (e.g. lattices or rings), and are universally understood which makes them immediately accessible to all programmers, mathematicians, and scientists alike.
         ..... examples of natural structure in these structures: cycles in multiplying quaternions or modular arithmetic, as relate to cyclicality of ring buffers or running laps in a race
@@ -30,6 +30,35 @@ recall the 4 fundamental facts of programs:
 the basic, usually good, assumptive approach: use sql(ite). it's small, supported everywhere, extensible via c, acid, concurrent, efficient, declarative, simple, pretty terse, interpreted, executable from within a repl (with pretty print) or within shell scripts, and supports multiple common output formats (e.g. html, csv, box drawings) and input formats (namely json and csv.) you'll likely want to use it with another good lang that has good support for strings, sequences, math, and complex traversals.
 
 NOTE: as prolog demonstrates, all programs can be expressed as 1st-order logic. hindey-milner is equivalent to 1st-order predicate logic. to its hilt, typed programming is predicates, and all higher-order logics can be expressed by 1st-order, so we may as well just say that all programs are 1st-order predicates.
+
+the "digitstring" design suggests you to *choose convenient encodings*. for example, suppose i've a relation of things, where some things may have dependencies. suppose that each thing has a positive integer uid, and that there's a thing with `uid=1` with the following dependencies:
+
+------
+  1
+ / \
+2   3
+    |
+    4
+------
+
+if i delete a thing then i want its dependencies to be removed, too. in sql i can express such deletion as a recursive query that joins the table with itself `on oid=parent` in order to identify the dependent subtrees. i can do similar things in other languages that have the tree data structure, though it's easiest in sql. but consider the point of uids: it's to identify a particular node. thus any index will do. the only property that it must have is uniqueness. i like the following indices:
+
+----
+;1
+;1;2
+;1;3
+;1;3;4
+----
+
+because they are unique yet also encode their dependencies, and such information is already known at insertion time; i no longer have the asymmetry of needing to derive the relation at query time. i've marginally increased the amount of stored data by being "redundant" but it's actually not redundant! this "redundancy" removes the need for writing a particular traversal! thus the more data was not for nothing: *it's effectively an alternative for a traversal, because the information encoded is the same information that the traversal would have derived.* of course some computation is still needed, but it's a very simple one: `delete n = map actualDelete (filter (startsWith n . uid) things)`. what if i want to delete only the dependencies but not thing with `uid=n`? simple: sort the filtered results then behead it then delete those; the encoding scheme guarantees that when lexiographically sorted, parents preceed children.
+
+btw, i used `;` as a field start marker rather than a separator because it's no longer asymmetric: each field has one. this makes parsing much easier. also the `;` denotes what's about to follow, so i can extend this scheme later if i want by using e.g. a `:` to denote that the next index refers not to a single thing, but a group of things and is thus a special groud id. anyway, easier to parse than if `;` were trailing e.g. `1;3;4;`.
+
+despite the misnomer "digitstring" programming, the design is not necessarily about strings. these indices, for example, can be stored in an efficiently packed array in j as `1 3 4` and, because j sees strings merely as arrays of characters, we can match an integer array prefix just as easily as a substring.
+
+as far as the redundancy of `;1;3` being a substring of `;1;3;4`, it should be the responsibility of the data storage system to efficiently store redundant data.
+
+this example demonstrates another principle of proper software design: specify algebraic properties (predicates) rather than specifying a specific encoding scheme that implicitly supports that property. for example, i had a sql db where i'd used nullity of some attribute to denote some property. now that i'm refactoring the sql logic into j, i don't know why i chose null instead of 0. are they logically the same? did i choose `null` just to make a query a bit more elegant looking e.g. `where attr` instead of `where attr<>0`? i left myself with only the implementation, not the abstract definition! remember that a definition is always abstract, specified in terms of axiomatic predicates!
 
 ''''
 .2023 sep 11
@@ -140,7 +169,7 @@ partitioning (generally identifying subsets) is conditionality: set A is given b
 
 ''''
 
-* each of nesting & functions (returning & accepting) is boo-boo.
+* each of nesting & functions (returning & accepting) is boo-boo. the fact that functions can be affected only by their parameters is severely limiting!
 * `or b` is `else b`
 * `p and x` is `if p then x`
 * the crux of translating racket's `and` & `or` is that they're macros i.e. they delay evaluation. the only mechanisms for that in j are 3: 1. define a function then invoke later; 2. `".`; 3. +++`:n+++
@@ -322,12 +351,42 @@ d=.should_test_lim[exts=:exts newext (I.oids=oid)}exts
 e=.stop is_less_attractive`:0 oppext
 f=.1[stops=:a:(I.oids=oid)}stop
 g=.changed_rows+activate_children oid[deactivate_order i[most_attractive set_fp oid
-h=.VOID
+h=.VOID"_
+----
+
+which, after we separate effects from predicates (thus making all predicates pure):
+
+----
+% predicates
+a=.ext is_more_attractive`:0 limit
+b=.stop=a:
+c=.stop<0
+d=.should_test_lim
+e=.stop is_less_attractive`:0 oppext
+% b/c `∀x.x AND 1 = x`, we remove `f`.
+% return values or actions
+A=.{{exts=:exts newext (I.oids=oid)}exts}}
+B=.stops=:a:(I.oids=oid)}stop
+C=.changed_rows+activate_children oid[deactivate_order i[most_attractive set_fp oid
+D=.VOID"_
+----
+
+with these new symbols, we revise the structure to:
+
+----
+a,(b->b
+     ;(c->d
+         ;e))
+->g
+ ;h
 ----
 
 which translates to the following truth table:
 
 ----
+a b c d e
+
+
 %   a,b,c,d,e,f
 top(1,1,_,_,_,_):-g.
 top(1,0,1,1,_,_):-g. % c->d is equivalent to c,d
@@ -471,31 +530,76 @@ a,(b->b
  ;h
 ----
 
-reduces to two statements, which succinctly (through nesting) express the above truth tables:
+reduces to two statements:
 
 ----
 a,(b;c,d;e)->g;h. % a distributes over the disjoint union of b, (c,d), and e.
 a,not(c),e->f. % d=>c but not(d) says nothing about c nor e. however, not(d)=>not(c),not(d).
 ----
 
+which succinctly (through nesting) express the above truth tables:
+
 ----
 % h`g@.a*.b+.e+.c*.d
+a b c d e
 1 1 _ _ _ -> g.
 1 0 1 1 _ -> g.
 1 0 1 0 _ -> h.
 1 0 0 _ 1 -> g.
 1 0 0 _ 0 -> h.
 0 _ _ _ _ -> h.
-----
 
-and
-
-----
 % f^:a*.e*.-.c
+a b c d e
 1 _ 0 _ 1 -> f.
 ----
 
-these two are actually correct and the j expressions are easier & plainer than using truth tables. even if we don't use the truth tables in our program, they're still useful for reasoning about our program: its definition, nature/implications/behaviors, and control flow, which makes refactoring or modification _much_ easier!
+`d` is an impure predicate, so we would create a truth table for it:
+
+----
+a b c
+1 0 1 -> exts=:exts newext (I.oids=oid)}exts.
+----
+
+then `d` stays as it is in the truth tables, being an alias for `should_test_lim`. thus we're left with:
+
+----
+% h`g@.a*.b+.e+.c*.d
+a b c d e
+1 1 _ _ _ -> g.
+1 0 1 1 _ -> g.
+1 0 1 0 _ -> h.
+1 0 0 _ 1 -> g.
+1 0 0 _ 0 -> h.
+0 _ _ _ _ -> h.
+
+% f^:a*.e*.-.c
+a b c d e
+1 _ 0 _ 1 -> f.
+
+% {{exts=:exts newext (I.oids=oid)}exts}}^:a*.c*.-.b
+a b c
+1 0 1 -> exts=:exts newext (I.oids=oid)}exts.
+----
+
+thus we use the following code:
+
+[source,j]
+----
+a=.ext is_more_attractive`:0 limit
+b=.stop=a:
+c=.stop<0
+d=.should_test_lim[exts=:exts newext (I.oids=oid)}exts
+e=.stop is_less_attractive`:0 oppext
+f=.1[stops=:a:(I.oids=oid)}stop
+g=.changed_rows+activate_children oid[deactivate_order i[most_attractive set_fp oid
+h=.VOID"_
+h`g@.a*.b+.e+.c*.d
+f^:a*.e*.-.c
+{{exts=:exts newext (I.oids=oid)}exts}}^:a*.c*.-.b
+----
+
+these two are actually correct and the j expressions are easier & plainer than using truth tables. even if we don't use the truth tables in our program, they're still useful for reasoning about our program: its definition, nature/implications/behaviors, and control flow, which makes refactoring or modification _much_ easier! it forces us to separate predicates from effects, and enables us to reduce/simplify predicates.
 
 = tacitity, a/symmetry
 
@@ -598,12 +702,20 @@ so why the fuck is j _so_ much longer and less clear?! a few reasons:
 *expressing evaluatable expressions by elegant combinatoric primitives is better than using functional combinators.* namely elegant combprims are varieties of join, expressed simply as relations with computations (namely those applied to selected variables in sql's `select` clause) and predicates (namely the join predicate) to filter and relate elements of various sets. the fact of one-to-many vs many-to-one vs many-to-many is really just many-to-many in that atoms are equivalent to singleton sets/sequences so 5 join [a,b,c] is the same as (x=[5]) join (y=[a,b,c]) which is the cartprod(x,y).
 
 .tl;dr
-we need sql but with:
+sql would be better if it had:
 * better syntax
 * `eval`
 * builtin prims similar to apl/j
 
 or we can just use prolog, wherein each rule has symmetries by its free vars, asymmetries by its bound vars, and asymmetries of multiple rules e.g. a having two goals: one base condition and one recursive. all rules correspond to structures. find a good syntax & algebraic patterns implied by defining rules that make reasoning easy, in order to use the structure. for example, arrays are very easy: each axis represents a different symmetry axis. they have a nice graphical/syntactical representation. their syntax is convenient and specific, making some of its information tacit, present in its parser and algebraic operations or implications. symmetry is present to some extent in any context in which we can factor-out information: it's an invariant property/relation/predicate over the set of those data whence info was factored i.e. sets having common info.
+
+''''
+
+purity is, like tacitness, not real. there's no such thing as "stateful vs not"; everything is information and it's all somewhere. but to say that the state monad (or any other closure) is "pure" is stupid; it behaves exactly like a stateful object in java. it has the exact same information and behavior and thus permits the exact same reasoning.
+
+now one may say that a computation is pure iff it can be automatically reversed. this is a useful & suitable definition. in this way all reductive models are impure.
+
+purity has nothing to do with state; modification is not impure. suppose that `S[I]=:4` to set an arbitrary structure S at index I. now all references to `S[I]` are different. that's still reversable so long as we retain all prior values of `S[I]` or can compute the "prior" value of `S[I]`. i quote "prior" because we often do not need a prior value per se; we can simply re-derive that value. for example, if `S[I]` used to be the result of `f(x)`, then we can simply retain `f` and `x` rather than retaining a prior `S[I]`. if may have & use constraints that to determine prior values, too. an obvious example is `S[I]++`; to reverse it, just do the inverse operation: `S[I]--`. this sees mutation as mere relations with time. this means that we can derive the state given any time.
 
 === predicates generalize sql relations & functions
 
