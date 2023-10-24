@@ -115,7 +115,7 @@ there's nothing like `Maybe`'s `fmap`. should there be? `: fmapMaybe ( ..a q: ( 
 
 i guess that the expected idiom for `if*`, `when*`, `?if`, &c is `keep and` e.g. `obj [ pred ] keep and [ fn ] [ else ] if*`. that's not really better than `obj dup pred [ fn ] [ drop else ] if`. they're equivalent, though, so if you find yourself using `if*` &c, then use `keep and`.
 
-the lesson is that `if` is the primitive selective evaluator and is perfectly simple and free, and it's not worth the time trying to find something nicer than plain `if`, except some obvious ones like `if-empty`. i'm unsure for stack machines, and especially specifically for factor's implementation, how `bi ?`'s speed compares with `if`'s. i imagine that naïve code is optimized well in any stack language, and especially in factor, which is designed to be fast. i'm not worrying about the efficiency of things like an `if` inside a `loop`. if you're so concerned about speed, and you can put a fixed size to your data, then use `math.vectors`, whose ops are auto-optimized to simd when possible; or use a gpu or stack/array lang like lang5, xy, &c.
+the lesson is that `if` is the primitive selective evaluator and is perfectly simple and free, and it's not worth the time trying to find something nicer than plain `if`, except some obvious ones like `if-empty`. i'm unsure for stack machines, and especially specifically for factor's implementation, how `bi ?`'s speed compares with `if`'s. i imagine that naïve code is optimized well in any stack language, and especially in factor, which is designed to be fast. i'm not worrying about the efficiency of things like an `if` inside a `loop`. if you're so concerned about speed, and you can put a fixed size to your data, then use `math.vectors`, whose ops are auto-optimized to simd when possible; or use a gpu or array primitives implemented in factor.
 
 === design
 
@@ -142,7 +142,7 @@ the lesson is that `if` is the primitive selective evaluator and is perfectly si
 * supports binary data well, viz as structs, simd vectors, and specialized [packed per data type] arrays. this should make factor a good lang for hacking binaries. by the optimizing compiler, operations on tehse binary structures can approach c's speed. un/boxing is implicit.
 * the _destructors_ lib supports deterministic cleanup/finalization of {see §5) external resources (e.g. file handle, network connection). this contrasts the usual gc model.
 * syntax macros are called _parsing words_. these words are evaluated at parse time and may perform arbitrary computations. the `syntax` vocabulary contains many.
-* extremely good [syntax] macros! an ideal mix of rebol & lisp macros.
+* extremely good [syntax] macros!
   ** backslash is needed to refer to a fn without execution e.g. `\ drop` pushes `drop`; `drop` alone would execute it. `\ drop` is different from `[ drop ]`. idk why, aside from being slightly briefer, one would use `\` instead of quotation.
   ** quotations are sequences
   ** the following are is implemented as factor macros, so they're expanded before runtime: named local binds, square and curly brackets, quote marks, and colon for fndefs. (meta-circular)
@@ -465,7 +465,7 @@ to write amazing code, master the following: drop, dup, dip, swap; cleave[-curry
 * `dip`: pop, apply, push back
 * `x -rot` = `[ x ] 2dip`; think of `x y z -rot` as inserting `z` before `x y`
   ** think of `rot` as moving `x y z` in front of `z`. i personally can imagine more easily moving one object rather than rotating a sequence. so `rot` (non-negative `rot`) moves `x` forward; `-rot` moves `z` backward.
-* `q keep` = `dup q dip`. use `keep` when you've `x y` but want `f(x,y) y` e.g. `{ 0 1 } 4 [ suffix ] keep` leaves `{ 0 1 4 } 4`
+* `q keep` = `dup q dip`. "keep" means "squirrel away"—store f(x) lower on the stack for later use.
 * `bi`,  `tri`,  `cleave`: apply many fns upon top elem
 * `bi*`, `tri*`, `spread`: apply pointwise fns upon data
 * `bi@`, `tri@`,  `apply`: apply one fn upon many data
@@ -635,7 +635,7 @@ seq
 cleave
 ----
 
-then we just need to shuffle the stack. this demonstrates equivalance of bullet notation and `cleave` in source code. neither accounts for evaluation conditionality. in actual code you'nd never use `cleave` on a singleton; you'd just use `[ first 12 * dup 50 <= ]`. however, if a macro were to expand a bulleted list, it'd expand to `cleave` on a singleton, unless it were trying to be clever.
+then we just need to shuffle the stack. this demonstrates equivalence of bullet notation and `cleave` in source code. neither accounts for evaluation conditionality. in actual code you'nd never use `cleave` on a singleton; you'd just use `[ first 12 * dup 50 <= ]`. however, if a macro were to expand a bulleted list, it'd expand to `cleave` on a singleton, unless it were trying to be clever.
 
 anyway, continuing, we install some sensible combinators:
 
@@ -952,6 +952,27 @@ caveats & mistakes:
 * `"thing horo nee" any-char repeat1 ws+ list-of parse` returns a singleton vector of a vector! this is because `list-of` calls `any-char repeat1` which matches the whole string; then `list-of` tries to break on spaces, but there's no more input, so it returns that single vector of characters in a vector.
 * error about gensym: then check to see if you forgot `suffix` after your parser
 * error about `length` not having method for `parser`: you probably put 2+ parsers on the stack but forgot to put them into a sequence. especially with `ensure`, ensure that you do `<q> ensure <parser> 2seq`
+* for words like `set-at` which consume a structure and don't leave it on the stack, use `keep`: `H{ } [ "val" "k" rot set-at ] keep` leaves H{ { "k" "val" } } on the stack
+  ** use `over adjoin`
+  ** use `[ _initAssoc set-at ]` or `[ set-at ] curry` or `[ set-at ] keep`
+  ** use `over [ change-at ] dip` or `_q curry [ change-at ] pick [ 3curry call ] dip`
+
+----
+2000 1000 [ 10 65 4 7 ] [ [ + ] curry bi@ 2dup . . ] each
+----
+
+1010
+2010
+1075
+2075
+1079
+2079
+1086
+2086
+
+--- Data stack:
+2086
+1086
 
 ==== EBNF
 
@@ -983,3 +1004,76 @@ this being said, it probably is sometimes reasonable to want to parse until a gi
 .decoding ebnf grammar
 
 terminal: blank or ∈ ["'|{}=()[].!&*+?:~<>]
+
+=== debugging
+
+* if using a higher order fn, mimic it by running its argument at the top level e.g. if `[ f ] each` isn't working, test `f` with the arguments that you expect
+  ** if `each`, `map`, `reduce`, or any other traversal over a sequence, is failing, then the easiest way & most direct way to debug it is to stick a `1 head` after the input sequence.
+* check the stack signature (ctrl+i)
+* when testing code that mutates structures, use `clone`, so that each test starts from the correct initial structure! e.g. do `H ( -- h ) H{ { 0 HS{ } } { 2 HS{ } } } ;` to define initial hashmap, then in all of your tests, do `H clone words ...`. `clone` makes a shallow copy.
+  ** depending on your code, you may want `clone` for production execution anyway!
+
+consider the following code:
+[source,factor]
+----
+: groupby ( vals keys -- groups ) ! like /. in j or `group by` in sql
+  H{ } over [ swap [ HS{ } ] 2dip [ set-at ] keep ] each -rot swap ! h ks vs
+  [ swapd [ over adjoin ] curry [ change-at ] pick [ curry call ] dip ] 2each ; inline
+
+{ 0 2 4 0 7 1 100 56 35 } { 0 2 4 0 2 4 0 2 4 } groupby
+----
+
+i kept getting the output:
+
+----
+H{
+    { 0 HS{ 0 1 2 35 4 100 7 56 } }
+    { 2 HS{ 0 1 2 35 4 100 7 56 } }
+    { 4 HS{ 0 1 2 35 4 100 7 56 } }
+}
+----
+
+i took a couple of hours to realize that it was because the `HS{ }` was one object, used as all values for the hash map! using `HS{ } clone` fixed the problem, giving the correct output: `H{ { 0 HS{ 0 100 } } { 2 HS{ 56 2 7 } } { 4 HS{ 1 35 4 } } }`.
+
+=== relational-array factor
+
+* virtual sequences:
+  ** `reversed` class
+  ** slices. see "subsequences and slices" in the factor docs.
+    *** `head-slice`
+  ** `<iota>`
+  ** define your own instances of the virtual sequence protocol, namely implementing `virtual@`. rotations would be defined easily as virtual sequences.
+  ** numeric ranges:
+    *** `[a..b]`, `[0..b)`, &al
+    *** `<range>`
+* `map` everywhere implicitly like j
+  ** make a version of rank/join (generally: relate)
+  ** singleton arrays, not atoms; this enables them to support map & rank
+* [each|map|redue]-index are useful words!
+* vector operations
+
+=== using the stack well
+
+* despite aptly being called "factor", coupling is important, too! however data are always used together, couple them into a single item on the stack, as early as you can.
+  ** curry when you can. this reduces the number on items on the stack and appropriately couples a fn with its arg. build-up programs incrementally as early as you can.
+    *** exploit that programs are sequences e.g. `[ "v1" "v2" ] [ "k1" "k2" ] [ H{ } set-at ] [ 2each ] keep first .` set-at is effectful, consuming our hash table. `keep` leaves the program `[ H{ } set-at ]` atop the stack; the hash table is thus still on the stack, contained in the sequence; `first .` prints it.
+* any time that data have an attribute in common, where that attribute is relevant to some fn that the data are passed to, put the data in a sequence then iterate over it.
+
+basically: express symmetries as sequences and asymmetries as relations of sequences. these relations are commonly themselves sequences. `[ H{ } set-at ]` is a sequence/relation of two distinct things paired particularly, and this relation is passed to `2each`, which relates a matrix (having two axes [of symmetry]) to an operation (program).
+
+=== examples of good programming
+
+.state, currying, a/symmetry obvious in code
+[source,factor]
+----
+[ HS{ } HS{ } ] ! list 1
+[ "hs1" "hs2" ] ! list 2
+[ over [ H{ } set-at ] dip ] [ 2map ] keep ! accumulating into a list of hash sets, to keep them in scope for later modification
+                                           ! running 2map under keep leaves the hash table quotation atop the stack
+second first ! extract hash map from quotation
+dup . ! print hash table
+[ [ "beans" "jeans" ] [ over adjoin ] 2map . ] dip ! insert into, then print, each hash set
+. ! print hash table
+----
+
+this code generalizes easily to any number of key/value pairs. this elegant encoding keeps few elements on the stack, even if it's "strange" that we retain the hash table within the quotation passed to `2each`. after all, we're always setting values of hash table, so why not couple it with `set-at`?

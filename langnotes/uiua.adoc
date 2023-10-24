@@ -42,7 +42,7 @@ my interest in uiua in order:
   ** apparently, though i'ven't yet seen explicit acknowledgement of it: like j, parsing is from the left yet evaluation from the right. this enables such things as:
     *** `[1 2_3_4 5_6]` being illegally non-rectangular yet `⍛0[1 2_3_4 5_6]` is rectangular. this implies that the array literal is not evaluated once it's on the stack, but is instead modified by a later operation, namely `(⍛0)`, before being a datum usable in the program.
       **** TODO: actually, given that arrays are actually constructed by using couple & join, this evaluation note may be incorrect! then again, the fact of how `'` works clearly implies that parsing is from the left.
-    *** `≡'⊢⇌` is equivalant to `≡(⊢⇌)`, which means that `⊢⇌` isn't evaluated immediately upon being "pushed to the stack"; instead of being pushed to the stack-then-evaluated altogether as is done in factor, the expression `⊢⇌` is, as given by `'`, known to not evaluate but instead be arguments of `≡`.
+    *** `≡'⊢⇌` is equivalent to `≡(⊢⇌)`, which means that `⊢⇌` isn't evaluated immediately upon being "pushed to the stack"; instead of being pushed to the stack-then-evaluated altogether as is done in factor, the expression `⊢⇌` is, as given by `'`, known to not evaluate but instead be arguments of `≡`.
 * has operations that distinctly run on all elts (e.g. arithmetic) or whole array (e.g. `reverse`)
 * arrays like j: homo, char, num, but fns instead of boxes
 * multiline strings (each line starts with `$`)

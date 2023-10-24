@@ -144,7 +144,7 @@ see that? installed a new package right from within the repl. didn't take a seco
 j uses data instead of functions e.g. sort takes a datum literal rather than a λ; this datum is usually a computation of another datum
   ** examples:
     *** `y/:(-.2|y)`—notice how `y` appears twice! we can put that expression in λ double braces or express it tacitly: `/:([:-.2&|)`
-    *** `(#~(2|{."1))@:(,.~(i.@:#))` is equivalant to haskell `filter(odd.fst).zip[0..]`. the haskell is much more obvious to understand upon glancing it! why: //TODO: reshape i.n to #y. j, like digitstring programming, uses relation by common indices. reshape is closer to the actual meaning, too; it doesn't consider #y; like [0..] it extends. overtake fills w/0's which works well. consider how to exploit j's _semantics_—the implicit stuff! TODO: consider ANDing character sets expressed as bitvectors of length 26 (indices, not necessarily of the usual order) as form of set intersection. //TODO: again, part of exploiting verb agreement, framing, fill, replication, &c: exploit frame agreement (-#cf); i'd've probably not considered that, instead explicitly filling the arrays then matching them up!
+    *** `(#~(2|{."1))@:(,.~(i.@:#))` is equivalent to haskell `filter(odd.fst).zip[0..]`. the haskell is much more obvious to understand upon glancing it! why: //TODO: reshape i.n to #y. j, like digitstring programming, uses relation by common indices. reshape is closer to the actual meaning, too; it doesn't consider #y; like [0..] it extends. overtake fills w/0's which works well. consider how to exploit j's _semantics_—the implicit stuff! TODO: consider ANDing character sets expressed as bitvectors of length 26 (indices, not necessarily of the usual order) as form of set intersection. //TODO: again, part of exploiting verb agreement, framing, fill, replication, &c: exploit frame agreement (-#cf); i'd've probably not considered that, instead explicitly filling the arrays then matching them up!
       **** infinite list `[0..]` is nicer than `[0.#y]`, expressed as `i.@:#`.
         ***** j uses a hook to elegantly compute #y and zip with y, which in haskell would require a λ: `\y->zip[0..(length y)]y`; or maybe some clever applicative use of `(->a)` would work, albeit likely not too elegantly.
       **** in j rather than using a filter function we map an array to a logical vector then take a subsequence; another hook is used here, as well as `{."1` instead of `fst` *inside* `filter`. j stays flat.
@@ -153,7 +153,7 @@ j uses data instead of functions e.g. sort takes a datum literal rather than a �
         ***** in other words, j supports both a/symmetric relations by a common set of devices, whereas haskell supports them by different classes of devices and the devices don't elegantly relate across classes. not only that, but typcially symmetries are encoded by traversals which are encapsulated in functions. this produces a glut of functions that each works well but that orchestrate poorly.
   ** fns suck b/c they're black boxes and require higher order fns and don't allow us things like decoupling y from a fn of y in this example; instead we could use some x and y. ad-hoc maps are more powerful b/c they support arbitrary relations! the idea of fns' power is that they operate independent of their input, but that means extra coupling!
 
-j is terse but not as terse as a beginner might suppose. this is because j primitives combine with others and each primitive is, although powerful, not too specific, since that'd hinder combinability. j primitives are designed such that they avoid a pattern very common in other languages: complex functions that return extraneous information which is discarded by the caller. this is particularly enabled by j's array/index design. j is functional but unlike many functional languages, it uses arrays instead of linked lists, and its arrays are tuned. this means that we as j programmers do not consider "traversing structures to extract substructures"; instead we identify indices then apply some substructure primitive like _elements between_ or _elements at_ indices. *everything in j is mask-oriented.* this means more primitives but the input is decoupled logic. also most j primitives are 2 characters, not 1, thus nearly doubling the length that one would expect of an apl equivalant.
+j is terse but not as terse as a beginner might suppose. this is because j primitives combine with others and each primitive is, although powerful, not too specific, since that'd hinder combinability. j primitives are designed such that they avoid a pattern very common in other languages: complex functions that return extraneous information which is discarded by the caller. this is particularly enabled by j's array/index design. j is functional but unlike many functional languages, it uses arrays instead of linked lists, and its arrays are tuned. this means that we as j programmers do not consider "traversing structures to extract substructures"; instead we identify indices then apply some substructure primitive like _elements between_ or _elements at_ indices. *everything in j is mask-oriented.* this means more primitives but the input is decoupled logic. also most j primitives are 2 characters, not 1, thus nearly doubling the length that one would expect of an apl equivalent.
 
 j has some special constraints that individually are not helpful, but altogether are extremely amazing:
 
@@ -179,7 +179,7 @@ the use of binary or unary functions is appropriate because of the point given i
     *** TODO: how does this generalize? `value_B_ {~ key_B_ i. key_A_` creates a new attribute vector whose values are effectively functions of `key_A_`: namely looking-up keys in a map key->value. this resultant attribute vector has the same length as `key_A_`. generally (in sql) `A join B` results in a table of count `A*&#B`, which is returned as a transient table. the only information that `join` adds to any other query is the map between rows of `A` with those of `B`. all queries are always only of the input attribute vectors; thus our concern of how to translate sql to j is, separately & orthogonally: 1. queries, and 2. a relation of `A`'s indices with those of `B`, which is generally represented as a table with a column for each table being joined. yes, the concept of tables still holds despite us using only individual attribute vectors! attribute vectors "being of a common table" is the fact of their data being related by common index. naturally it follows that the join among tables is itself a table: a matrix of indices where the column tells which attribute vector to index into.
       **** NB. can i use ~: instead to be more elegant?
     *** insofar as i'm using an array model instead of prolog, i'd like to represent joins as i would any other relation, elegantly, lazily, in terms of relations (of indices, to defer lookup and avoid any potential efficient data packing complications). i want the query and expressions of relations to be as implicit as they are in prolog, done as an (e)DSL in j.
-* sql has only strings, no characters; j has only characters & arrays. thus in j we need boxes to work with strings of various lengths. sql's design seems better here, at least for strings. however, generally boxes enable ragged arrays, which sql does not support. TODO: how would we equivalantly encode ragged arrays in sql? is j's or sql's method better?
+* sql has only strings, no characters; j has only characters & arrays. thus in j we need boxes to work with strings of various lengths. sql's design seems better here, at least for strings. however, generally boxes enable ragged arrays, which sql does not support. TODO: how would we equivalently encode ragged arrays in sql? is j's or sql's method better?
 * sqlite is dynamically typed and permits hetrogeneous relations; j forces homogenous arrays of flat arrays, but not boxed ones.
 * neither j nor sql has lambdas. both have higher-order functions (adverbs, conjunctions; `select` clauses like `group by`, `filter`, `sort by`, each of which accepts an expression, which is effectively a λ)
 * trying to work with sequences in sql is torturous/impractical
@@ -192,7 +192,7 @@ or you know how you need to traverse a tree in a direction determined by the str
 
 and you know how you must consider these things _for every structure that you use_: list, heap, binary tree, rose/finger tree, rope,...? and you know how you must convert among all the structures, and how that's usually a pain in the ass both on its own and especially when confounded by typing concerns? and you know how each structure usually has its own type and then one needs to write CRUD methods for each structure, usually as a horrible mess of ad-hoc polymorphism and monomorphic methods, and _it's still shit_ after painfully trying to make it more decent?
 
-yeah, fuck that load. just use flat arrays, like j does. a multidimensional array in j has order but no nesting. sql's relations are overall a poorer version, with sql tables being structurally equivalant to rank-2 arrays, and higher rank arrays being equivalent to joined tables. though practically unusable for sequence operations, sql is much better for set-theoretic operations than j, including efficient queries. that *permit* _multiple_ hierarchies.
+yeah, fuck that load. just use flat arrays, like j does. a multidimensional array in j has order but no nesting. sql's relations are overall a poorer version, with sql tables being structurally equivalent to rank-2 arrays, and higher rank arrays being equivalent to joined tables. though practically unusable for sequence operations, sql is much better for set-theoretic operations than j, including efficient queries. that *permit* _multiple_ hierarchies.
 
 .what about boxes in j?
 
@@ -708,7 +708,7 @@ that cells must match dyadic rank makes reasoning easy; it's explicit! for examp
 
 the rank used by a verb, given an arg or two, is min(verbrank,argrank,0). naturally this partitions into frame and cells. TODO: update this phrasing so that it doesn't bear mentioning, and more precisely & appropriately discuss negative ranks.
 
-NOTE: allow replication to be automatic! don't specify rank 0 if equivalant output would be inferred from replication. the interpreter only _usually_ optimizes that poor loop structure. see <https://code.jsoftware.com/wiki/Vocabulary/quote> point (5) about using floating point (e.g. `1.`) to force non-suppression of the rank conjunction.
+NOTE: allow replication to be automatic! don't specify rank 0 if equivalent output would be inferred from replication. the interpreter only _usually_ optimizes that poor loop structure. see <https://code.jsoftware.com/wiki/Vocabulary/quote> point (5) about using floating point (e.g. `1.`) to force non-suppression of the rank conjunction.
 
 .when acting on each row might seem like acting on columns, which is an illusion
 ----
@@ -1283,7 +1283,7 @@ verbs i've yet to classify:
 
 append (combine):
 , rank _ append. note that unary `,` generalizes `,/`
-,: append rows (or add 1 to dimension then append). x,(,:y) is equivalant to x,:y
+,: append rows (or add 1 to dimension then append). x,(,:y) is equivalent to x,:y
 ,. ,"_1
 ; boxed append
 NOTE: ; and ,: both preserve original inputs to some extent
@@ -1647,7 +1647,7 @@ A.2 NB. lol, idk. combination can be encoded by bit vectors and thus integers
 subset selection is usually thought of as extraction, though this is folly; there's no extraction; there's only identification. thus subsetting, partitioning, and grouping are all the same concept: marking, anyhow, subsets. permutation is grouping but with order and, usually, with the constraint that #y=#~:y, though this constraint may be dropped by using behavior like #2.
 
 u"n NB. select axes. if n is a b then y's rank is b for both monadic & dyadic case, and x's rank is a.
-{. }. {: }: NB. { means "take", } means "drop", . means first, : means last. thus }: means "drop last". NOTE: for `{.` and `}.`, x<0 works from the end.  thus `}:` & `{:`, both of which have only monadic valences, are redundant anyway; they're equivalant to `_1&}.` & `_1&{.` respectively.
+{. }. {: }: NB. { means "take", } means "drop", . means first, : means last. thus }: means "drop last". NOTE: for `{.` and `}.`, x<0 works from the end.  thus `}:` & `{:`, both of which have only monadic valences, are redundant anyway; they're equivalent to `_1&}.` & `_1&{.` respectively.
 ~.1 NB. nub. equivalent to (~:y)#y
 ~:1 NB. a logic vector of items found of the nub; it replaces newly-encountered items by 1, and those already encountered by 0.
 {2 NB. subset by indices. mnemonic: { looks like ∈.
@@ -1696,7 +1696,7 @@ x u\y NB. apply u to x-chunks of y. windowed if x>0, not windowed if x<0. _n ]\ 
 u\.y NB. apply u to y then to its tail .... optimized for fold i.e. u/\. .
 \1 NB. like scan but does not necessarily accumulate; each row's output is unrelated to the others' outputs. this makes it a very poor choice for scan i.e. the u/\ form.
 u/. & u/.. NB. x of y. `x agg/. y` is equivalent to sql `select agg(y) group by x` where x is commonly a fn of y. for each group, `agg` is applied to each list of all y commonly grouped by their unique, correspondent elt of x. requires that #x=#y. maps `agg` over a datum of shape [(x,[y])]. /.. passes the keys (of x) to u i.e. sql `select agg(x,y) group by x`. agg is commonly `v/`, so get used to `+//.`
-x u .v y 2 NB. array product. preceeding space is required. equivalant to `x u@v"(>:lv) _]y` (or `x u@:v"(>:lv) _]y`?) where lv is v's left rank. like the common matrix product, the array product requires, at least for rank-2 arrays, that they be of shapes (a b) (b c). this reflects `v"(>:lv) _`—that each element of x is matched to all of y (rank 0 y), and each cell of each of x's row is matched to y's column (see example below).
+x u .v y 2 NB. array product. preceeding space is required. equivalent to `x u@v"(>:lv) _]y` (or `x u@:v"(>:lv) _]y`?) where lv is v's left rank. like the common matrix product, the array product requires, at least for rank-2 arrays, that they be of shapes (a b) (b c). this reflects `v"(>:lv) _`—that each element of x is matched to all of y (rank 0 y), and each cell of each of x's row is matched to y's column (see example below).
 u\.2 NB. like \ , u\.2 is a window fn, but the complement of \'s windows; rather than each row being a fn on [i,i+x], it's y but with the subarray of indices [i,i+x] removed.
 
 NOTE: u/.y is oblique; x u/.y is key, and x u/..y is key dyad! key always requires the "group by" expression!
@@ -1797,7 +1797,7 @@ applying verbs cyclically, e.g. to :
 
 [source,j]
 ----
-   (<:`>:)"0]3 10 6 30 NB. equivalant to (<:3),(>:10),(<:6),(>:30)
+   (<:`>:)"0]3 10 6 30 NB. equivalent to (<:3),(>:10),(<:6),(>:30)
 2 11 5 31
 ----
 
@@ -1969,14 +1969,14 @@ _6 2.66667 1
 
 if your train needs access to both x & y then it must be a fork. given that all forks can express all hooks quite easily, and computations that cannot be expressed by hooks, one should probably use only forks. true, the dyadic hook is nicer syntax by eschewing the cap and bind. so i suggest that one consider that there's only one concept—fork—and that hook is just prettier syntax. so do whatever seems nicest. just don't wonder about "forks vs hooks." hook is just nicer syntax for a class of monadic fork.
 
-the relation between forks and function composition: `[:%:[:+/*` is equivalant to `%@:(+/)@:*:` and although there are NVV trains there exist no VVN trains. this makes sense in the monadic case b/c there's no reason to have a function that discards its only argument. in the dyadic case you'll need to use some form of constant function, probably `n"_`, but that's generally g(f(x,y),c) which can be coded tacitly as `[:g&c f`. while VVN `f g c` is neater, that parse pattern probably already denotes something else.
+the relation between forks and function composition: `[:%:[:+/*` is equivalent to `%@:(+/)@:*:` and although there are NVV trains there exist no VVN trains. this makes sense in the monadic case b/c there's no reason to have a function that discards its only argument. in the dyadic case you'll need to use some form of constant function, probably `n"_`, but that's generally g(f(x,y),c) which can be coded tacitly as `[:g&c f`. while VVN `f g c` is neater, that parse pattern probably already denotes something else.
 
 ===== using bind (`&`)
 
 binding x to a train is the same as making the train dyadic with its left argument bound:
 
-* `x&(uv)` is equivalant to `(x&u v)` is equivalant to `{{x(u v)y}}` is equivalant to `{{x u v y}}`
-* `x&(ghf)` is equivalant to `(x&g h x&f)` is equivalant to `{{x(ghf)y}}`
+* `x&(uv)` is equivalent to `(x&u v)` is equivalent to `{{x(u v)y}}` is equivalent to `{{x u v y}}`
+* `x&(ghf)` is equivalent to `(x&g h x&f)` is equivalent to `{{x(ghf)y}}`
 
 modifiers (adverbs, conjunctions) compose verbs. , works! 
 
@@ -2108,7 +2108,7 @@ examples:
 
 the mnemonic for `(u v) y`=`y u v y` is that `u v` stays in the same place there; `v` is to the left of `u` so its value is passed as `u`'s right argument, but of course this can happen only after `v` has been applied, and naturally, since `v` is right of `u`, `v`'s argument is the right argument, `y`. `u`'s left argument must be filled, so it uses the left argument, `x`, if available; else `y`.
 
-NOTE: monadic hook (g f) is equivalant to fork (] g f). hook & fork dyadically are not usefully related: g(x,f(y)) vs h(g(x,y),f(x,y)). however conceptually equivalent, the fork `([-.-.-)` is not equivalent to hook `(-.-.)` because `[` is dyadic: left, not identity.
+NOTE: monadic hook (g f) is equivalent to fork (] g f). hook & fork dyadically are not usefully related: g(x,f(y)) vs h(g(x,y),f(x,y)). however conceptually equivalent, the fork `([-.-.-)` is not equivalent to hook `(-.-.)` because `[` is dyadic: left, not identity.
 NOTE: hook (u]) is equivalent to u~
 
 since we aren't passing fns in j, instead running computations on data y then relating those results to y, hooks are apt, since that's exactly what a hook is: g(y,f(y))! in other words, using datum literals in lieu of λ's naturally gives rise to the hook pattern.
@@ -2305,7 +2305,7 @@ all loops are traversals. they are symmetric operations of structures, expressin
 
 * to select symmetric substructure, j deals with this by simply being an array language, i.e. every operation has map, and every verb has rank (which is always used with axis order, which is permutable by `|:`) i.e. subset (subaxis, specifically) selection.
 * to identify arbitrary element subsets, apply (map) a function whose codomain is {0,1} or ℤ—a mask of whether each element belongs to the filtered set, or more generally, partition ids.
-  ** often masks are applied via `#` to filter an array. otherwise `~.` filters an array in a particular way. `~.` is equivalant to hook `#~~:`
+  ** often masks are applied via `#` to filter an array. otherwise `~.` filters an array in a particular way. `~.` is equivalent to hook `#~~:`
   ** there are special primitives for identifying singleton or empty sets: `i.`, `i:`, `e.`. these are not necessary; we can use set-theoretic operations instead. however, these primitives are efficient because they are short-circuting traversals and they also always return atoms, about which j can optimize.
 * for traversals where elements are positionally related, j features `/`, `;.`
   ** traversals over sets (arrays whose order is irrelevant) are done by the same except that the argument verb must be commutative.
@@ -2415,10 +2415,10 @@ NB. data =: ((}:@;@:((,&'_')) each)) each ({ (((({.@;:@":) every) each) comp)) N
 i'll discuss the last sentence from its right to its left:
 
 . `every each` in the repl evaluates to adverb `(&>)(&.>)`. we know that it's an adverb b/c (every each)0 error says `(adv noun)`.
-  .. recall that `&.` is a conjunction. thus `&.>` matches the CV modifier train pattern which is equivalant to the conjunction whose right argument is bound. a conjunction whose left parameter only is free is an adverb.
+  .. recall that `&.` is a conjunction. thus `&.>` matches the CV modifier train pattern which is equivalent to the conjunction whose right argument is bound. a conjunction whose left parameter only is free is an adverb.
   .. `&` is a conjunction, as specified in the error msg resulting from evaluating `0&0`. `&>` follows CV pattern and is thus an adverb.
 . then `every each` matches the AA train pattern and is therefore an adverb whose parameter is applied to `every`.
-. if we weren't to link `grades` into `comp` then `comp -: ]&.> comp` and `comp -: <&>&.> comp`. `{.@;:@":` basically does nothing; what it technically & actually does is converts numbers (namely `grades`) into strings. that's it. `":` converts to string, then `;:` boxes and adds an extra dimension, then we remove said extra dimension by using `{.`. all of this is ridiculous nonsense and i don't know why the example features it. we could easily have equivalantly yet more clearly used `<@":` instead of `{.@;:@":`. in fact, *`data` is equivalantly defined by `}:@;@:(,&'_'@": each) each { comp`. i've no idea why anyone wouldn't use that form.*
+. if we weren't to link `grades` into `comp` then `comp -: ]&.> comp` and `comp -: <&>&.> comp`. `{.@;:@":` basically does nothing; what it technically & actually does is converts numbers (namely `grades`) into strings. that's it. `":` converts to string, then `;:` boxes and adds an extra dimension, then we remove said extra dimension by using `{.`. all of this is ridiculous nonsense and i don't know why the example features it. we could easily have equivalently yet more clearly used `<@":` instead of `{.@;:@":`. in fact, *`data` is equivalently defined by `}:@;@:(,&'_'@": each) each { comp`. i've no idea why anyone wouldn't use that form.*
 . unary `{` produces the cartesian product. you may be surprised that it's unary, rather than `... each` being its left argument. however, remember that `each` is an adverb; its left argument is applied, resulting in a verb; a verb cannot be the left argument of another verb; namely here `u&.>` cannot be the left argument of `{`. this exemplifies potential confusion entailed in parsing j's context-sensitive grammar. however, if you're familiar with parts of speech, as you must be to use j anyway, then parsing won't be tricky. this being said, spacing, parens, comments, and keeping sentences short help readability, and should be used appropriately.
 . discussion of `}:@;@:((,&'_') each)`:
 . `(,&'_') each` appends an underscore to each field
@@ -2984,7 +2984,7 @@ NB. using Ap instead of A to get the correct result:
 MBBQ*QQMBB**Q
 ----
 
-this demonstrates that, for ordinal `x`, `y/:x` means "x specifies y's positions in output." this is a bit interesting when you consider that `y/:x` is equivalant to `y{~/:x`. furthermore, consider how `/:` is akin to join in sql:
+this demonstrates that, for ordinal `x`, `y/:x` means "x specifies y's positions in output." this is a bit interesting when you consider that `y/:x` is equivalent to `y{~/:x`. furthermore, consider how `/:` is akin to join in sql:
 
 [source,sql]
 ----
@@ -3138,7 +3138,7 @@ Note: Partitions `(x u/. y)` are processed through the same code as `(x u;.1 y)`
 
 use these few efficient, powerful primitives; they make writing elegant, terse, efficient code brainless, which means rapid software development. these primitives form a basis for logical/programmatic systems:
 
-| `x { y`            | subsequences by index mask. the most general, powerful selector. x may be unboxed, but that can select only items of y; for multidimensional indexing, x must be boxed. the boxed form generalizes the unboxed form: `(a,b,c){y` is equivalant to `(a;b;c){y`. because it's more powerful, i'll consider only the boxed form. each item of each box is an axis' index e.g. `(<0 2){y` is equivalant to `2{0{y`. if multiple axes are boxed together, e.g. `<a b;c d e`, then each item of the box is still an axis; thus a & b are indices of axis 0; then c, d, & e are indices of axis 1. suppose that `y` is a matrix. then this specification returns a 2 3 array whose first row is items of the ath row, columns at the cth, dth, and eth indices; and whose 2nd row is the cth, dth, and eth items of the bth row. see example below.
+| `x { y`            | subsequences by index mask. the most general, powerful selector. x may be unboxed, but that can select only items of y; for multidimensional indexing, x must be boxed. the boxed form generalizes the unboxed form: `(a,b,c){y` is equivalent to `(a;b;c){y`. because it's more powerful, i'll consider only the boxed form. each item of each box is an axis' index e.g. `(<0 2){y` is equivalent to `2{0{y`. if multiple axes are boxed together, e.g. `<a b;c d e`, then each item of the box is still an axis; thus a & b are indices of axis 0; then c, d, & e are indices of axis 1. suppose that `y` is a matrix. then this specification returns a 2 3 array whose first row is items of the ath row, columns at the cth, dth, and eth indices; and whose 2nd row is the cth, dth, and eth items of the bth row. see example below.
 | `x u/.. y`         | subsequences by equivalence mask. preserves element adjacency only per class. works on sequences with non-adjacent subsequences. not just subset! partitions are evaluated in order given by `~.x`, and each partition's elements' order matches that of `y`
 | `x u;.[12] y`      | irregularly-sized sublists by boolean split mask. preserves element adjacency.
 | `x u;.[03] y`      | [regular] subarray(s) by hyperrectangle [and movement vector]
@@ -3159,7 +3159,7 @@ UVWXY
 LMNO
 QRST
 VWXY
-   (2 1,:4 4) ];.0 A NB. equivalant to (2 4,.1 4)];.0 A
+   (2 1,:4 4) ];.0 A NB. equivalent to (2 4,.1 4)];.0 A
 LMNO
 QRST
 VWXY

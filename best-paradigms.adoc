@@ -256,16 +256,25 @@ or in j:
 xs=:(i.6),0 6 7 _2 1 6,:100 200 56 27 35 1
 +/((#$1 0"_)#])"1 xs NB. the version that i prefer. exploits shape, boolean masks, & rank.
 +/((0=2&|@i.@#)#])"1 xs NB. literal translation of the scheme code. exploits boolean masks & rank.
+((0=2|i.@#)#])x+y+z['x y z'=.xs NB. j version of sql solution #1 except that it uses iota instead of abusing the coincidence that x=i.6
+(0=2|x)#x+y+z['x y z'=.xs NB. literal translation of sql solution #1
+(](((1&{)@$@[#:i.@#@]){{x+//.&(f&#)y[f=.0=2|x}}]),)xs NB. sql solution #2 translated to j, as tacitly as i could muster. filtering & grouping may be done in either order
+cols+//.&(m&#)flat[m=.0=2|cols=.1{"1($xs)#:i.#flat=.,xs NB. same, explicit. notice the elegance of m defined defined of cols which is defined of flat. it would be elegantly expressed in a stack lang.
++/((0=2|[:i.1{$)#"1])xs NB. effectively the same b/c +/ effectively sums columns
+((1 0$~#)#])+/xs NB. the easy way. easy b/c +/ relates by column, and returns a single row so there's no need for "1
+(#~1 0$~#)+/xs NB. same thing, refactored
 ----
 
 this solution exploits j's rank and reshaping/extension rules! rather than pairing `i.@#` then filtering that for evens, we directly encode that result as `(#$1 0"_)` then filter by that mask by sticking a `#]` on the left: `((#$1 0"_)#])`. then i tack on `"1` to do it for each row. within the `"1` i tack on `+/` to sum each row. this is much easier to write in j not only because the syntax is terser and thus more manageable, but also because j's array model allows us to discuss structure in terms of rows easily. lisp's list model is too general to be useful. its generality means that the programmer must be more explicit/verbose, and that the vm can't optimize as much. it also forces the user to make their own models, but its sequential (vs random [arbitrary]) access is limited and encourages creating data structures rather than exploiting arrays' symmetry (structural regularity).
+
+also it's a real pain not being able to, wherever, push stuff to a stack for use later. the stack has not scope. that's nice. in applicative langs, though, we have scoped "local" binds. shoehorning everything into some set of combinators is generally poor design.
 
 in factor:
 
 [source,factor]
 ----
 : xs ( -- x y z ) 6 <iota> [ 0 6 7 -2 1 6 ] [ 100 200 56 27 35 1 ] ;
-0 xs [ [ [ 1 + ] [ 2 rem 0 = ] bi ] 3dip + + and ] 3map [ ] filter nip
+0 xs [ [ [ 1 + ] [ 2 rem 0 = ] bi ] 3dip + + and ] 3map sift nip
 ----
 
 my factor solution exploits the stack: that i can use the stack in any way that i want within `3map`; it's free access to implicit program state. i used an external counter variable instead of zipping with `i.6`.
@@ -276,10 +285,43 @@ a simpler solution:
 
 [source,factor]
 ----
-xs [ + + ] 3map
+xs [ + + ] 3map ! [ + + ] 3map is analagous to x+y+z in the 1st sql solution below
 dup length <iota> [ 2 rem 0 = ] map
-swap [ and ] 2map [ ] filter
+swap [ and ] 2map sift
 ----
+
+this shows how high-order programming usually shouldn't be used. higher-order fns means nested fns, which means complexity. this flat style, though it iterates twice, is much clearer and is idiomatic of j. higher-order fns are especially difficult in the stack paradigm because we must track many levels of nested execution simultaneously, tracking which inner fns modify the stack, and how they return values to outer layers. in the sql versions below, `sum` is the only aggregate fn. `where` (`filter`) can be done with a predicate or as i've used it here, with the identity program, filtering-out falses. `group by` may be higher-order or not, as j's `u/.` may be considered higher-order, or may be `</.` which is not higher-order, and a verb may be applied afterward.
+
+TODO: when are higher-order functions required? technically or practically? what does this consideration of higher-order fns imply about metaprogramming? should mp be avoided, too? just as higher-order fns can be flattened into a sequence of first-order fns, can mp be analagously flattened? under which models or not?
+
+also, the explicit j solution translated into factor:
+
+[source,factor]
+----
+! helpers
+: AND ( arr mask -- filtered ) swap [ and ] 2map sift ; inline
+: hs>arr ( hs -- arr ) array>> [ tombstone? ] reject ; inline ! why hash sets don't implement the seq protocol, idk.
+: groupby ( vals keys -- groups ) ! like /. in j or `group by` in sql
+  H{ } over [ swap [ HS{ } clone ] 2dip [ set-at ] keep ] each -rot swap ! h ks vs
+  [ swapd [ over adjoin ] curry [ change-at ] pick [ curry call ] dip ] 2each ; inline
+
+: xs ( -- X ) [ [ 0 6 7 -2 1 6 ] [ 100 200 56 27 35 1 ] ] 6 <iota> prefix ; ! now a list of lists
+xs [ flatten dup length <iota> [ [ 2 rem 0 = ] map ] keep ] [ first length [ rem ] curry ] bi map over AND [ AND ] dip groupby >alist [ second hs>arr sum ] map
+----
+
+TODO: re-write this now that i've considered exploiting coupling and a/symmetries, as the beans/jeans example below shows.
+
+* `/mod` would've given a seq of (listNum,eltNum), vs `rem`.
+* this is actually incorrectly defined, even though i happen to get the same answer here. the defect is that i used a hash set when i should have used a list; /. allows duplicates, which is generally what we want here!
+* `over AND [ AND ] dip` associated the mask with two vectors then applied it to each in two different steps. in the array model i'd have the mask as one argument then AND it with each of any number of vectors. i can express this is factor by putting the arrays to filter into a sequence (here `2sequence`) then ``map``ping over it with `[ mask AND ]`. of course, better than just array mappings is more general mappings, like i imagine that k uses. i've yet to compare k to sql.
+* the ability to pass around a pointer is uncommon in functional langs, such as in scheme, j, haskell. it's probably uncommon in python, perl, ruby, etc, and i imagine it's still commonly done in langs that were originally non-functional such as c++ or java.
+* TODO: how can passing around pointers make things easier? e.g. if we append pointers rather than values then we can we are _relating_, not just accumulating values into a structure! e.g. `: H ( -- h ) H{ } ; HS{ } "hs1" HS{ } "hs2" 4dup [ H set-at ] 2bi@ drop nip [ "beans" over adjoin ] [ "jeans" over adjoin ] bi* H .` modifies the hash table and thus the hash table is seen as a relation of the two input hash sets! we modify the hash sets after we add them to the hash table, which means that the hash table relates unidimensional relations. pointers are actually extremely useful: they relate actual objects rather than just values of objects! with pointers, we have actual _objects_ whereas in a purely functional framework we have only identifiers for values. (in prolog this isn't an issue, b/c symbols are abstract, not mere placeholders for values.) sadly, pointers are, like functions, unidirectional arrows. see my sql notes about using relations to encode digraphs.
+* using `4dup` here is silly. it's there so that after i set H, i still have the vectors on the stack to modify afterward. it ends-up retaining the strings "hs1" & "hs2", too, which i remove by `drop` & `nip`. we immediately know that `4dup` is silly here, but do you see why? it's because there's obvious *symmetry*: the pattern `(V{ } k) ...`; thus we should use a symmetry primitive (namely `map` in factor, or just use j's implicit symmetry) rather than `4dup`. factoring _code_ is not the only factoring to do! factor things into symmetries, too! to factor-out symmetries of a relation [expression] is to identify them separately while identifying the asymmetry relation of them both: `expr` factors into `asymm(symm1,symm2)`.
+  ** i would say that "any time that you go from one thing to multiple, put those multiple in an array then map over it" but why not always have _everything_ in an array and map over it?! use singleton arrays which are equivalent to their single member, and we can even encode the empty object by using the empty array! no need for `f`, _and_ our empty object retains type symmetry! we can use relations instead of arrays; any relation works pretty well, though virtual relations (set-theoretic predicates in prolog) is freeest. virtual tables in sql are either as good or nearly so.
+  ** `bi`, `2bi@`, `tri*`, &al relate fns & data. if factor were better-designed, all these combinators would be discarded and an equivalent to j's rank would be used instead. like in j, plurality would be implicit, so there'd be no syntax bloat of encapsulating everything in array brackets.
+  ** how i'd actually write it: `[ HS{ } HS{ } ] [ "hs1" "hs2" ] [ over [ H{ } set-at ] dip ] [ 2map ] keep second first dup . [ [ "beans" "jeans" ] [ over adjoin ] 2map . ] dip .`
+
+NOTE: in factor, _vectors_ have variable size and _arrays_ have fixed size.  _shaped arrays_ (`arrays.shaped` vocabulary) is like arrays as in typed racket or array langs.
 
 in sql:
 
@@ -335,6 +377,9 @@ select sum(value) from t where eltNum%2=0 group by eltNum;
 * very interestingly, `listNum` was not part of the query! we expect `(listNum,eltNum)` to not be a multiset, but for this query, we can simply say that `eltNum` is a multiset and still get the result that we want!
 * this is the general data encoding method: sparse table where each spatial dimension has a column plus a column for each type of value associated with that point. you can simply associate multiple values with a single point by e.g. `values(x,y,v1),(x,y,v2)`. the ability to be sparse and non-unique very powerfully enables us in a way that apls do not. it's also very much easier to specify axes by name rather than using rank.
   ** whereas factor & lisp (and most langs) see the three lists as separate, j and sql see them as part of one arrangement that can freely change shape.
+* *the relational model maintains relations throughout all computations*. in the j version, i had to manually and meticulously maintain relations among intermediate values within computations. i effectively had to ensure that each operation had the correct shape, which is fine, but unnecessary in sql b/c, rather than shapes, we have relations—*inextricable* associations among attributes. in sql we can pretty much say exactly what we want without needing to convert our thought into steps in an execution model. the *invariance* of relations is what enables us such freedom. it's exactly what makes prolog so nice: prolog programs are exactly statements of variance and invariance. it's implication, tacit logic. functions (or data structures) satisfy the same effect in non-relational programming, though we must be explicit in our use of them—a form of boilerplate code. relation actually literally _is_ invariance! relation is represented in all code that's factored of other code.
+  ** invariance is seen in sql triggers and frp. invariance is 1. less to specify (tacit!) and 2. less to manage (less reasoning, safer)
+  ** see next section for more on this
 
 ideally we'd write it in something like prolog:
 
@@ -344,7 +389,59 @@ x in X, i=iota(length(x)), r=pointwiseAssoc(i,x), r(j,y), even(j), result=fold(+
 x∈X, i=i.#x, r=i<->x, r(j,y), j|2==0, result=+/|:all(y). % better, apl-like notation. instead of +/|:all(y) we could've done map(+,all(y)) assuming that map works like in scheme.
 ----
 
+.fns, frp, relations, and implications
+
+functions can mimic relations to an extent if everythng is tacit e.g:
+
+----
+x1 is "abc",p is last(x1),x2 is append(x1,reverse(x1)).
+% p=:'z'. % how to make this set x1's last to 'z'?
+----
+
+if `x2` is defined of `x1` as an expression, not beta-reduced to a value, then `x2` implicitly has a different value whenever `x1`'s value is changed. this is easily accomplished by defining `x2` as a function of `x1` rather than as the result of `append(x1,reverse(x1))`. in j:
+
+[source,j]
+----
+   x1=:'abc'
+   p=:{{{:x1}}
+   x2=:{{x1,|.x1}}
+   x2''
+abccba
+   x1=:'bats'
+   x2''
+batsstab
+   NB. there's still no way to modify p such that x2's output/value changes! we're using fns, not relations!
+   NB. however, we can define p as a function that returns indices of a structure s, then `for idx in p(s): s[idx]=f(s[idx])`
+----
+
+so we can mimic reactive programming by defining everything as functions i.e. defining them as relations rather than values, but dependencies are only one way. thus in the functional model we're still unable to identify a substructure by predicate, name it, then change the value of the named thing in order to change the value of the structure. we can easily do this in c, however:
+
+[source,c]
+----
+#include <stdio.h>
+#define P for(int i=0;i<3;i++)printf("%i ",x[i]);printf("\n");
+int main(){int x[]={10,22,30},*p=x+1;P *p=55; P return 0;}
+----
+
+prints
+
+--------
+10 22 30
+10 55 30
+--------
+
+sadly c can only refer to single indices, not substrings nor any arbitrary structure.
+
+summary:
+* if all expressions are evaluated only at query time then that's frp.
+* unlike relations, frp is unidirectional
+* if a structure supports efficient arbitrary indexing, then we can define fns that return indices, then use those indices to get values, then apply a function to them, then use those outputs to set the original structure at the indices.
+
 masks are the same as predicates, except that predicates not only filter, but derive sets, too.
+
+TODO: in prolog, how to do `S is 'abc',last(S,B),R is _S_but_with_'z'_instead_of_B`?
+
+''''
 
 .pure bullshit, pt 1
 
@@ -1130,7 +1227,7 @@ is impossible!
 
 the problem is when k == p: x is the mean of the first p values, but for k > p x is the most recent ema value. the variation of behavior (program structure/shape) being dependent on or partitioned by sgn(p - k) is asymmetry; rather than being symmetric about (p - k), or even asymmetric about (p - k) on (> 0), but instead (p - k) on sgn(p - k).
 
-NOTE: asymmetry is here described by the syntax "asymmetric about _value_ on _equivalence relation_" where the number of partitions resulting from the equivalence relation is called the _degree_ of asymmetry. if "symmetric about" is used, then the "on" clause must be omitted; this case means that there does not exist any equivalance relation of program structure/shape; exactly one shape describes the program (in reduced/simplified form.)
+NOTE: asymmetry is here described by the syntax "asymmetric about _value_ on _equivalence relation_" where the number of partitions resulting from the equivalence relation is called the _degree_ of asymmetry. if "symmetric about" is used, then the "on" clause must be omitted; this case means that there does not exist any equivalence relation of program structure/shape; exactly one shape describes the program (in reduced/simplified form.)
 
 therefore we must use `cond` (or `case`) instead of merely `if`, since `cond` supports an arbitrary number of degrees of asymmetry, whereas `if` supports only 2. any attempts to represent the desired program:
 

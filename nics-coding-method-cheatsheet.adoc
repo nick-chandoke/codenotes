@@ -753,7 +753,7 @@ if link:https://www.uiua.org/rtl[uiua's creator discourages reasoning about prog
 
 == declarative/relational/logical/predicate programming
 
-the "X" matrix is described obviously as `[|i|=|j|]` or `=&|` depending on notation or parsing context. we can do the same by a "clever" series of steps in an array lang—`(+.|.)=@(,"0"_1 _)~@i.`—but it's not what we want; it just happens to be equivalent, even though it entails the same information: namely how reverse relates to negation of indices: `|.` is equivalant to `({~<:@-@i.@#)`. now, this code is a direct translation from a uiua example. you may say, "we can shorten it by re-expressing the id matrix: `(+.|.)e.@i.`!" short but inelegant: it's more exploitation of things that have little to do with the actual idea that we want to express! so you've won the battle, but can you generalize such solutions? can you modify them if you want variants?
+the "X" matrix is described obviously as `[|i|=|j|]` or `=&|` depending on notation or parsing context. we can do the same by a "clever" series of steps in an array lang—`(+.|.)=@(,"0"_1 _)~@i.`—but it's not what we want; it just happens to be equivalent, even though it entails the same information: namely how reverse relates to negation of indices: `|.` is equivalent to `({~<:@-@i.@#)`. now, this code is a direct translation from a uiua example. you may say, "we can shorten it by re-expressing the id matrix: `(+.|.)e.@i.`!" short but inelegant: it's more exploitation of things that have little to do with the actual idea that we want to express! so you've won the battle, but can you generalize such solutions? can you modify them if you want variants?
 
 we want to _specify what we want directly_ rather than just _get what we want somehow_.
 
