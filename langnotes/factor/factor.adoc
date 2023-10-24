@@ -1076,4 +1076,4 @@ dup . ! print hash table
 . ! print hash table
 ----
 
-this code generalizes easily to any number of key/value pairs. this elegant encoding keeps few elements on the stack, even if it's "strange" that we retain the hash table within the quotation passed to `2each`. after all, we're always setting values of hash table, so why not couple it with `set-at`?
+this code generalizes easily to any number of key/value pairs. this elegant encoding keeps few elements on the stack, even if it's "strange" that we retain the hash table within the quotation passed to `2each`. after all, we're always setting values of hash table, so why not couple it with `set-at`? it's so simple that one may fail to realize that it's a variety of metaprogramming that macros cannot enable. for this, one truly must use call/eval and be able to extract subprograms from a (quoted) program. it's even easier in factor because the hash map is not a program that we need to evaluate; it's a datum itself!
