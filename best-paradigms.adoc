@@ -305,7 +305,7 @@ also, the explicit j solution translated into factor:
   H{ } over [ swap [ HS{ } clone ] 2dip [ set-at ] keep ] each -rot swap ! h ks vs
   [ swapd [ over adjoin ] curry [ change-at ] pick [ curry call ] dip ] 2each ; inline
 
-: xs ( -- X ) [ [ 0 6 7 -2 1 6 ] [ 100 200 56 27 35 1 ] ] 6 <iota> prefix ; ! now a list of lists
+: xs ( -- X ) { { 0 6 7 -2 1 6 } { 100 200 56 27 35 1 } } 6 <iota> prefix ; ! now a list of lists
 xs [ flatten dup length <iota> [ [ 2 rem 0 = ] map ] keep ] [ first length [ rem ] curry ] bi map over AND [ AND ] dip groupby >alist [ second hs>arr sum ] map
 ----
 
@@ -319,7 +319,7 @@ TODO: re-write this now that i've considered exploiting coupling and a/symmetrie
 * using `4dup` here is silly. it's there so that after i set H, i still have the vectors on the stack to modify afterward. it ends-up retaining the strings "hs1" & "hs2", too, which i remove by `drop` & `nip`. we immediately know that `4dup` is silly here, but do you see why? it's because there's obvious *symmetry*: the pattern `(V{ } k) ...`; thus we should use a symmetry primitive (namely `map` in factor, or just use j's implicit symmetry) rather than `4dup`. factoring _code_ is not the only factoring to do! factor things into symmetries, too! to factor-out symmetries of a relation [expression] is to identify them separately while identifying the asymmetry relation of them both: `expr` factors into `asymm(symm1,symm2)`.
   ** i would say that "any time that you go from one thing to multiple, put those multiple in an array then map over it" but why not always have _everything_ in an array and map over it?! use singleton arrays which are equivalent to their single member, and we can even encode the empty object by using the empty array! no need for `f`, _and_ our empty object retains type symmetry! we can use relations instead of arrays; any relation works pretty well, though virtual relations (set-theoretic predicates in prolog) is freeest. virtual tables in sql are either as good or nearly so.
   ** `bi`, `2bi@`, `tri*`, &al relate fns & data. if factor were better-designed, all these combinators would be discarded and an equivalent to j's rank would be used instead. like in j, plurality would be implicit, so there'd be no syntax bloat of encapsulating everything in array brackets.
-  ** how i'd actually write it: `[ HS{ } HS{ } ] [ "hs1" "hs2" ] [ over [ H{ } set-at ] dip ] [ 2map ] keep second first dup . [ [ "beans" "jeans" ] [ over adjoin ] 2map . ] dip .`
+  ** how i'd actually write it: `[ HS{ } HS{ } ] { "hs1" "hs2" } [ over [ H{ } set-at ] dip ] [ 2map ] keep second first dup . [ { "beans" "jeans" } [ over adjoin ] 2map . ] dip .`
 
 NOTE: in factor, _vectors_ have variable size and _arrays_ have fixed size.  _shaped arrays_ (`arrays.shaped` vocabulary) is like arrays as in typed racket or array langs.
 

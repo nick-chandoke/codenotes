@@ -198,6 +198,8 @@ ga selects last buffer, like alt-tab.
 
 === non-interactive use
 
+NOTE: filter mode (`-f`) *does not load your usual kakrc*; you cannot use custom keybinds in the script that you pass to `-f`!
+
 ==== example
 
 ----

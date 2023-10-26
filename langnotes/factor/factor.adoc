@@ -225,6 +225,15 @@ USE: util
 
 because generic words are potentially many (and can often collide) the module system requires that you, at least in the listener, `USE:` providing vocabs despite having already `USE:`'d a module which itself `USE:`'d that same module. e.g. if my `util` module uses `io` for `stream-contents` (which is not generic but is defined in terms of `stream-contents*` which _is_ generic), then if you `USE: util` in the listener, you'll be prompted to `USE: io` so that `stream-contents` can be resolved. this affects only generic words. this is a price of dynamicism.
 
+=== running factor scripts
+
+* if envar `DISPLAY` is not set then factor will run in a text repl
+* there's no man nor info page, and `factor -h` sets the global var `h` to `t`, which is definitely not what we'd expect. to learn about invoking the factor interpreter, see "command line arguments" in the docs.
+* see "scripting cookbook" in the docs for more info
+* when you run factor, you'll probably want to put in `~/.local/bin` a script that `cd`'s to the factor install location then runs `./factor -i=factor.image "$@"`. because there's a gnu coreutil called `factor` (which factors prime numbers) ensure that `$HOME/.local/bin` is early in your `PATH`.
+  ** strangely, though, even though `factor` in a terminal runs the number factorer, the `#!/usr/bin/env factor` in a factor script runs factor.
+* scripts don't need `MAIN:`; the program is executed like most scripting langs
+
 === exploring code & learning factor
 
 NOTE: _ciif_ := "code in input field"
@@ -551,7 +560,7 @@ loop
 * `map-find`: dual of `filter-map` as `find` is dual of `filter`
 * `seq [ ] each` pushes each elt of seq to the stack
 
-.multi-parameter fold accumulator example
+disable.multi-parameter fold accumulator example
 
 we'll test whether all items in a sequence equal by using a 2-part accumulator; one part is the element to test equality against, and the other is a boolean of whether all of the elements so far have equaled:
  
@@ -815,6 +824,7 @@ USING: io.launcher io.encodings.utf8 ;
 
 NOTE: use `with-disposal`, or more likely, `with-<input|output>-stream`.
 
+* `run-detached` truly runs a separate bg proc, so that you never need to use `nohup`
 * `obj run-process` is the simple synchronous execution of a cmdline string or array of strings.
 * `stream-contents` replaces the process on the stack with its output.
 * though `echo` supports `-e` to not output trailing newline, remember that we can trim trailing newline by `[ CHAR: \n = ] trim-tail`
@@ -1037,6 +1047,7 @@ i took a couple of hours to realize that it was because the `HS{ }` was one obje
 
 === relational-array factor
 
+* shaped arrays
 * virtual sequences:
   ** `reversed` class
   ** slices. see "subsequences and slices" in the factor docs.
@@ -1049,15 +1060,198 @@ i took a couple of hours to realize that it was because the `HS{ }` was one obje
 * `map` everywhere implicitly like j
   ** make a version of rank/join (generally: relate)
   ** singleton arrays, not atoms; this enables them to support map & rank
-* [each|map|redue]-index are useful words!
+* [each|map|reduce]-index are useful words!
 * vector operations
+* `strings.tables` vocab for printing arrays e.g. `sa{ { 0 2 3 4 } { -6 6547 1 0 } } [ number>string ] shaped-map shaped-array>array format-box.`.
+  ** `format-box` formats like j boxed arrays
+  ** `format-table` formats like j unboxed arrays
+
+when all your data are stored in arrays, manual recursion/looping is rare. a great deal of loops in scalar style is done without looping by encoding the loop variables as arrays e.g. i.6 instead of looping with a counter variable. because virtual sequences are easy to define in factor, we can freely, efficiently define most loops as virtual sequences then use `2each`, `2map`, &c.
+
+.factor/j bilateral translation table
+[options="header"]
+|=============================================================================
+| factor                                 | j
+| `shaped-shaped-binary-op`              | dyadic verbs
+| `shape`                                | `$ y`
+| `reshape`                              | `x $ y`
+| `nths`                                 | `{`
+| `set-nth`, `map`                       | `x m} y`
+| `subseq-index`, suffix arrays          | `E.`
+| `member?`                              | `e.`
+| `index-or-length`                      | `x i. y`
+| `[ reverse ] dip index-or-length`      | `x i: y`
+| `sorted-index`                         | `x I. y`
+| `reverse`                              | `\|.y`
+| `suffix`,`prefix`,`append`             | `x,y`
+| `flatten`                              | `,y`
+| `split-indices`                        | `x u;.±[12] y`
+| `flip`                                 | `\|:y`
+| `=`                                    | `-:`, `=`
+| `without`                              | `x-.y`
+| `members`                              | `~.`
+| `loop`, `while`, `times`               | `^:`
+| `reduce`                               | `u/y`
+| `cartesian-map`                        | `x u/y`
+| `accumulate*-as`                       | `u\y`
+| `reverse accumulate*-as`               | `u\.y`
+| `group`, `clump`                       | `x u\ y`
+| `swap`, `dup`                          | `~`
+| `[ and ] filter`                       | `x#y`
+| `length`                               | `#y`
+| `>base`                                | `x#:y` (unmixed bases)
+| `sort`, `inv-sort`                     | `/:~`, `\:~`
+| the `random` vocabulary                | `?`, `?.`
+| juxtaposition                          | `@`
+| `call`                                 | `".y`
+| `y string>number x or`                 | `x".y`
+| the `prettyprint` vocab                | `":`
+| the `math.bitwise` vocab               | `b.`
+| `v bi@ u`                              | dyadic `u&v`
+| `curry`                                | `m&v`, `u&n`
+| `<iota>`                               | `i.y`
+| `dup length <iota> [ and ] 2map sift`  | `I.y` (where y is a boolean vector)
+| `y dup v u`                            | `(u v)y`
+| `y v x swap u`                         | `x(u v)y`
+| `f h bi g`                             | `(f g h)y`
+| `f h 2bi g`                            | `x(f g h)y`
+| `CONSTANT:`, `SYMBOL:`, `set`          | `=:`
+| fried quotations (discouraged)         | `=.`
+| <implemented below>                    | `x u/. y`
+| <unimplemented>                        | `x\|.y`
+| <unimplemented>                        | `x\|.!.f y`
+| <unimplemented>                        | `"`
+| <unimplemented>                        | `&.`
+| `<groups>`, `<clumps>`, `delete-slice` | `x u\.y`
+| ???                                    | `/:`
+| ???                                    | `~:y`
+| ???                                    | `x#:y` (mixed bases)
+|=============================================================================
+
+`accumulate*-as` example: `"hello" "" [ suffix ] { } accumulate*-as`.
+
+the following are in j but are not useful in j or factor: `x|:y`, 
+
+the following are not in j and are nice: `join`, `interleave`, `index`. `flip-text` is an example of the `[ [ M at ] transmute ] map` pattern, which is a relational primitive. the `random` vocabulary is extensive.
+
+.`x u\ y` when x<0 (*mistakenly written*; `group` already does this!)
+[source,factor]
+----
+! [ u ] map afterward if you please
+: xu\y ( x y -- xu\y )
+  [ length <iota> [ 1 + ] map ] keep
+  [ [ [ mod 0 = ] curry ] dip swap filter ] dip
+  swap split-indices harvest ; inline
+
+4 10 <iota> xu\y . ! outputs { { 0 1 2 3 } { 4 5 6 7 } { 8 9 } }
+----
+
+NEXT: outfix (x u\. y) should be trivial to implement in terms of infix
+
+.key
+[source,factor]
+----
+: /. ( vals keys -- groups )
+  H{ } over [ swap [ HS{ } ] 2dip [ set-at ] keep ] each -rot swap
+  [ swapd [ over adjoin ] curry [ change-at ] pick [ curry call ] dip ] 2each ; inline
+----
+
+.i. & multidimensional i.
+[source,factor]
+----
+! print-mat works only on 2d arrays of numbers. we can easily extend it to any dimension, though.
+: print-mat ( a -- ) [ number>string ] shaped-map shaped-array>array format-box. ; inline
+
+: print-cube ( c -- )
+  ! we must format the whole table then add line breaks so that all of the columns widths are equal even across
+  ! line breaks.
+  [ shape second ] keep [ number>string ] shaped-map shaped-array>array concat format-table
+  [ length <iota> [ 1 + ] map ] keep
+  [ [ [ mod 0 = ] curry ] dip swap filter ] dip
+  swap split-indices harvest { "" } join [ print ] each ; inline
+
+: print-cube/boxed ( c -- ) [ [ number>string ] map { } 1sequence format-table ] shaped-map shaped-array>array
+  [ [ concat ] map format-box. ] each ; inline
+
+! each ATOM is a multidemensional index. e.g. { 2 2 3 } multi-i. { 36 } reshape is a shape error but { 12 } works, even though its `shape` is { 2 2 3 }. in this way sa's are like everything's boxed, except that there's no raze or unbox.
+
+! creates a shaped array of multidimensional normal (unshaped) arrays.
+! i could make them shaped arrays but i can't find any way to flatten them, so i see no point in doing so;
+! it only introduces an extra step of converting back to a normal array.
+: mi. ( shape -- arr ) zeros [ second ] map-shaped-index ; inline ! firsts were 0; idk what they're for.
+
+! a block version. it seems that block arrays can't be used for anything, so...*shrug*
+: mi.-block ( shape -- arr ) [ zeros >shaped-array ] [ length 1array [ <block-array> ] curry ] bi [ second ] prepose map-shaped-index ; inline
+: i. ( shape -- arr ) [ product <iota> >shaped-array ] [ reshape ] bi ; inline
+
+  { 4 2 3 } mi. [ [ 10 + ] map ] shaped-map print-cube/boxed
+┌──────────┬──────────┬──────────┐
+│ 10 10 10 │ 10 10 11 │ 10 10 12 │
+├──────────┼──────────┼──────────┤
+│ 10 11 10 │ 10 11 11 │ 10 11 12 │
+└──────────┴──────────┴──────────┘
+┌──────────┬──────────┬──────────┐
+│ 11 10 10 │ 11 10 11 │ 11 10 12 │
+├──────────┼──────────┼──────────┤
+│ 11 11 10 │ 11 11 11 │ 11 11 12 │
+└──────────┴──────────┴──────────┘
+┌──────────┬──────────┬──────────┐
+│ 12 10 10 │ 12 10 11 │ 12 10 12 │
+├──────────┼──────────┼──────────┤
+│ 12 11 10 │ 12 11 11 │ 12 11 12 │
+└──────────┴──────────┴──────────┘
+┌──────────┬──────────┬──────────┐
+│ 13 10 10 │ 13 10 11 │ 13 10 12 │
+├──────────┼──────────┼──────────┤
+│ 13 11 10 │ 13 11 11 │ 13 11 12 │
+└──────────┴──────────┴──────────┘
+  { 2 2 2 } mi. [ length { } 1sequence ] shaped-map print-cube/boxed
+┌───┬───┐
+│ 3 │ 3 │
+├───┼───┤
+│ 3 │ 3 │
+└───┴───┘
+┌───┬───┐
+│ 3 │ 3 │
+├───┼───┤
+│ 3 │ 3 │
+└───┴───┘
+  { 4 2 3 } i. print-cube
+0  1  2
+3  4  5
+
+6  7  8
+9  10 11
+
+12 13 14
+15 16 17
+
+18 19 20
+21 22 23
+----
+
+[TODO]
+* compare `>array` vs `shaped-array>array`
+* consider relations, beyond mere arrays. consider using mutable states in arrays. relations are more general than rank.
+
+it seems that `>array` can be used to flatten like `,/` in j.
+
+.padding example
+[source,factor]
+----
+sa{ { 0 2 3 4 } { -6 6547 1 } } ! error: no-abnormally-shaped-arrays
+sa{ 0 2 3 4 } sa{ -6 6547 1 } pad-shapes ! well, actually pad-shapes seems to do nothing somehow.
+----
 
 === using the stack well
 
 * despite aptly being called "factor", coupling is important, too! however data are always used together, couple them into a single item on the stack, as early as you can.
-  ** curry when you can. this reduces the number on items on the stack and appropriately couples a fn with its arg. build-up programs incrementally as early as you can.
+  ** curry when you can. this reduces the number on items on the stack and appropriately couples a fn with its arg. build-up programs incrementally as early as you can. an example is `1 xs [ / ] with map` or the equivalent `xs [ 1 swap / ] map`. the naive way is to think of `/` as a binary operation which takes two args, and assume that those two args should be provided as arguments on the stack. however, here one arg is an atom and the other a sequence, so we can't simply apply it nor can we use `2map`. a novice might put `1` on the stack then retain it beyond its consumption by `/`: `1 xs [ over [ / ] dip swap ] map`. that's unnecessary hell. or they may do a less elegant thing: creating a sequence of a constant: `xs dup length 1 <repetition> swap [ / ] 2map`. these just make stack langs look bad.
     *** exploit that programs are sequences e.g. `[ "v1" "v2" ] [ "k1" "k2" ] [ H{ } set-at ] [ 2each ] keep first .` set-at is effectful, consuming our hash table. `keep` leaves the program `[ H{ } set-at ]` atop the stack; the hash table is thus still on the stack, contained in the sequence; `first .` prints it.
 * any time that data have an attribute in common, where that attribute is relevant to some fn that the data are passed to, put the data in a sequence then iterate over it.
+* if you're having trouble orienting composition/currying of fns throughout a stack process, then just define a helper fn or combinator. stack langs work best when each word has a short definition.
+* manual recursion really is rare! surprisingly, even `(split)`'s definition is non-recursive!
+* if you're resorting to `fry` (fried quotations), you're almost certainly not using the stack well
 
 basically: express symmetries as sequences and asymmetries as relations of sequences. these relations are commonly themselves sequences. `[ H{ } set-at ]` is a sequence/relation of two distinct things paired particularly, and this relation is passed to `2each`, which relates a matrix (having two axes [of symmetry]) to an operation (program).
 
@@ -1066,13 +1260,13 @@ basically: express symmetries as sequences and asymmetries as relations of seque
 .state, currying, a/symmetry obvious in code
 [source,factor]
 ----
-[ HS{ } HS{ } ] ! list 1
-[ "hs1" "hs2" ] ! list 2
+{ HS{ } HS{ } } ! list 1
+{ "hs1" "hs2" } ! list 2
 [ over [ H{ } set-at ] dip ] [ 2map ] keep ! accumulating into a list of hash sets, to keep them in scope for later modification
                                            ! running 2map under keep leaves the hash table quotation atop the stack
 second first ! extract hash map from quotation
 dup . ! print hash table
-[ [ "beans" "jeans" ] [ over adjoin ] 2map . ] dip ! insert into, then print, each hash set
+[ { "beans" "jeans" } [ over adjoin ] 2map . ] dip ! insert into, then print, each hash set
 . ! print hash table
 ----
 
