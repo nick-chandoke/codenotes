@@ -1070,69 +1070,77 @@ when all your data are stored in arrays, manual recursion/looping is rare. a gre
 
 .factor/j bilateral translation table
 [options="header"]
-|=============================================================================
-| factor                                 | j
-| `shaped-shaped-binary-op`              | dyadic verbs
-| `shape`                                | `$ y`
-| `reshape`                              | `x $ y`
-| `nths`                                 | `{`
-| `set-nth`, `map`                       | `x m} y`
-| `subseq-index`, suffix arrays          | `E.`
-| `member?`                              | `e.`
-| `index-or-length`                      | `x i. y`
-| `[ reverse ] dip index-or-length`      | `x i: y`
-| `sorted-index`                         | `x I. y`
-| `reverse`                              | `\|.y`
-| `suffix`,`prefix`,`append`             | `x,y`
-| `flatten`                              | `,y`
-| `split-indices`                        | `x u;.±[12] y`
-| `flip`                                 | `\|:y`
-| `=`                                    | `-:`, `=`
-| `without`                              | `x-.y`
-| `members`                              | `~.`
-| `loop`, `while`, `times`               | `^:`
-| `reduce`                               | `u/y`
-| `cartesian-map`                        | `x u/y`
-| `accumulate*-as`                       | `u\y`
-| `reverse accumulate*-as`               | `u\.y`
-| `group`, `clump`                       | `x u\ y`
-| `swap`, `dup`                          | `~`
-| `[ and ] filter`                       | `x#y`
-| `length`                               | `#y`
-| `>base`                                | `x#:y` (unmixed bases)
-| `sort`, `inv-sort`                     | `/:~`, `\:~`
-| the `random` vocabulary                | `?`, `?.`
-| juxtaposition                          | `@`
-| `call`                                 | `".y`
-| `y string>number x or`                 | `x".y`
-| the `prettyprint` vocab                | `":`
-| the `math.bitwise` vocab               | `b.`
-| `v bi@ u`                              | dyadic `u&v`
-| `curry`                                | `m&v`, `u&n`
-| `<iota>`                               | `i.y`
-| `dup length <iota> [ and ] 2map sift`  | `I.y` (where y is a boolean vector)
-| `y dup v u`                            | `(u v)y`
-| `y v x swap u`                         | `x(u v)y`
-| `f h bi g`                             | `(f g h)y`
-| `f h 2bi g`                            | `x(f g h)y`
-| `CONSTANT:`, `SYMBOL:`, `set`          | `=:`
-| fried quotations (discouraged)         | `=.`
-| <implemented below>                    | `x u/. y`
-| <unimplemented>                        | `x\|.y`
-| <unimplemented>                        | `x\|.!.f y`
-| <unimplemented>                        | `"`
-| <unimplemented>                        | `&.`
-| `<groups>`, `<clumps>`, `delete-slice` | `x u\.y`
-| ???                                    | `/:`
-| ???                                    | `~:y`
-| ???                                    | `x#:y` (mixed bases)
-|=============================================================================
+|======================================================================================
+| factor                                                   | j
+| `shaped-shaped-binary-op`                                | dyadic verbs
+| `shape`                                                  | `$ y`
+| `reshape`                                                | `x $ y`
+| `nths`                                                   | `{`
+| `set-nth`, `map`                                         | `x m} y`
+| `subseq-index`, suffix arrays                            | `E.`
+| `member?`                                                | `e.`
+| `index-or-length`                                        | `x i. y`
+| `[ reverse ] dip index-or-length`                        | `x i: y`
+| `sorted-index`                                           | `x I. y`
+| `reverse`                                                | `\|.y`
+| `suffix`,`prefix`,`append`                               | `x,y`
+| `flatten`                                                | `,y`
+| `split-indices`                                          | `x u;.±[12] y`
+| `flip`                                                   | `\|:y`
+| `=`                                                      | `-:`, `=`
+| `without`                                                | `x-.y`
+| `intersect`                                              | `x([-.-.)y`
+| `members`                                                | `~.`
+| `loop`, `while`, `times`                                 | `^:`
+| `if`, `if*`, `?`                                         | `@.`
+| `reduce`                                                 | `u/y`
+| `cartesian-map`                                          | `x u/y`
+| `accumulate*-as`                                         | `u\y`
+| `reverse accumulate*-as`                                 | `u\.y`
+| `group`, `clump`                                         | `x u\ y`
+| `swap`, `dup`                                            | `~`
+| `[ and ] filter`, `[ [ ] curry replicate ] 2map harvest` | `x#y`
+| `length`                                                 | `#y`
+| `>base`                                                  | `x#:y` (unmixed bases)
+| `sort`, `inv-sort`, `sort-strings`                       | `/:~`, `\:~`
+| the `random` vocabulary                                  | `?`, `?.`
+| juxtaposition, `compose`, `prepose`                      | `@`
+| `call`                                                   | `".y`
+| `y string>number x or`                                   | `x".y`
+| the `prettyprint` vocab                                  | `":`
+| the `math.bitwise` vocab                                 | `b.`
+| `v bi@ u`                                                | dyadic `u&v`
+| `curry`                                                  | `m&v`, `u&n`
+| `<iota>`                                                 | `i.y`
+| `dup length <iota> [ and ] 2map sift`                    | `I.y` (where y is a boolean vector)
+| `y dup v u`                                              | `(u v)y`
+| `y v x swap u`                                           | `x(u v)y`
+| `f h bi g`                                               | `(f g h)y`
+| `f h 2bi g`                                              | `x(f g h)y`
+| `CONSTANT:`, `SYMBOL:`, `set`, `:` & `:`                 | `=:`
+| fried quotations (discouraged)                           | `=.`
+| `<groups>`, `<clumps>`, `delete-slice`                   | `x u\.y`
+| `concat`                                                 | `,/`
+| `sort-by`                                                | `x/:y`
+| <implemented below>                                      | `x u/. y`
+| <unimplemented>                                          | `x\|.y`
+| <unimplemented>                                          | `x\|.!.f y`
+| <unimplemented>                                          | `"`
+| <unimplemented>                                          | `&.`
+| <unsupported>                                            | `/:y`
+| ???                                                      | `~:y`
+| ???                                                      | `x#:y` (mixed bases)
+| `drop y`                                                 | `y"_`
+|======================================================================================
 
-`accumulate*-as` example: `"hello" "" [ suffix ] { } accumulate*-as`.
+TODO: generalize fork & hook to n-ary.
 
-the following are in j but are not useful in j or factor: `x|:y`, 
-
-the following are not in j and are nice: `join`, `interleave`, `index`. `flip-text` is an example of the `[ [ M at ] transmute ] map` pattern, which is a relational primitive. the `random` vocabulary is extensive.
+* `q map-index` is a terser version of `[ length <iota> ] keep q 2map`
+* `accumulate*-as` example: `"hello" "" [ suffix ] { } accumulate*-as`. or we can even faithfully recreate `/`'s behavior of not computing the nth row from its predecessor: `dup length [1..b] [ head ] with map`.
+* usually we'll use `index` or `find-index`, not `index-or-length`.
+* the following are in j but are not useful in j or factor: `x|:y`. i'm curious how `/:y` and `~:y` can be useful both generally and specifically in j, and for those j-specific uses, what can we use in factor instead?
+* the following are in factor but not in j and are nice: `join`, `interleave`, `index`. `flip-text` is an example of the `[ [ M at ] transmute ] map` pattern, which is a relational primitive. the `random` vocabulary is extensive. `follow` is fold that supports short-circuiting.
+* i'm curious how often rank is used. in factor (and indeed, scheme, haskell, etc), rank _1 is implicit. for rank 0 just `flatten` (if needed) then `cartesian-map`. pointwise is `2map`. to do like `+/` on a matrix which effectively sums columns in parallel, . there are even virtual sequences for cartesian products, `x ;"0 y`.
 
 .`x u\ y` when x<0 (*mistakenly written*; `group` already does this!)
 [source,factor]
@@ -1152,7 +1160,7 @@ NEXT: outfix (x u\. y) should be trivial to implement in terms of infix
 [source,factor]
 ----
 : /. ( vals keys -- groups )
-  H{ } over [ swap [ HS{ } ] 2dip [ set-at ] keep ] each -rot swap
+  H{ } over [ swap [ V{ } clone ] 2dip [ set-at ] keep ] each -rot swap
   [ swapd [ over adjoin ] curry [ change-at ] pick [ curry call ] dip ] 2each ; inline
 ----
 
@@ -1242,6 +1250,75 @@ it seems that `>array` can be used to flatten like `,/` in j.
 sa{ { 0 2 3 4 } { -6 6547 1 } } ! error: no-abnormally-shaped-arrays
 sa{ 0 2 3 4 } sa{ -6 6547 1 } pad-shapes ! well, actually pad-shapes seems to do nothing somehow.
 ----
+
+==== examples of deriving relational/array-stack programs
+
+.parse command line
+
+goal: separate part of the command line from the rest. namely: separate switches "-c" & "-s" and their following arguments from everything else, preserving order.
+
+a scalar-functional-applicative programmer's go-to method would be looping with accumulator states:
+
+----
+(let loop ([xs cmdargs] [acc1 '()] [acc2 '()])
+  (if (null? xs)
+      (values (reverse acc1) (reverse acc2))
+      (let ([x (car xs)] [rst (cdr xs)])
+        (if (or (equal? x "-c") (equal? x "-s"))
+            (loop (cdr rst) (cons (car rst) (cons x acc1)) acc2)
+            (loop rst acc1 (cons x acc2))))))
+----
+
+which i could of course write in factor, but scalar code in factor is horrible, so i'd like to save myself the likely pain.
+
+kakoune method: "find '-[cs]', extend selection to next word, delete, paste in new place." one doesn't even need to think about how to derive a program because it's so natural. it's not altogether immediately obvious, but each step is immediately obvious given the current state! obviously we want to find strings like "-c" or "-s" which is obviously is expressed by the regex `-[cs]`; then we want the next words. then we're done selecting. to separate, of course we delete. now that we've deleted it, we must retain it, so we must paste it, but obviously we want to paste it in a location distinct from their original one. done.
+
+j method:
+
+. "find '-c' or '-s'". "find" means "select", "match", "identify". to identify, j uses bit masks. so we do `{{((<'-c')=y)+.(<'-s')=y}}"0 args`. lol, jk. it's funny how that's what my mind went to after writing the scheme code above. good j uses arrays and forks wherever possible, which is usually. thus to derive programs, we ask ourselves "which array primitives work best for my needs?" it's a good variety of constraint! `;` is just better than boxing both things. now we've an array. a common pattern is that "x=a or x=b" is "any? (= x) [a b]", which, when x is a set, is generally expressed as "not null x∩[a b]". anyway, all this thought derives `mask=.(e.&('-c';'-s'))args`.
+. then we want to select the following indices, too. this means that all `1`'s successors are set [to 1], too. it's not obvious to me how to do this; ideally i'd use some kind of verb that maps selected indices values to other indices, here that set bits are nth, and (n+1)th indices should be set to 1. but no such one exists. this would be easily done as `>:&.I.args` if an inverse were defined for `I.`. anyway, permutations are 1:1 maps between elements, which is what we want here. specifically, we want the nth indices to be related to their successors. this particular, simple permutation is expressed by rotation or shifting: `mask=.(+._1&(|.!.0))mask`.
+. now we've a mask that has two values—0 or 1—which partitions our data. to finish our solution, we only need to apply this mask as a partition: `mask</.args`. done.
+
+the whole solution altogether:
+
+[source,j]
+---------------------------------------------------------------------------
+NB. the solution that we derived. it's explicit b/c we built in in parts,
+NB. then stuck all those parts together.
+((+._1&(|.!.0))@(e.&('-c';'-s')) args)</.args
+
+NB. refactored to tersest, tacit form.
+(</.~(+._1|.!.0])@e.&('-c';'-s'))args
+---------------------------------------------------------------------------
+
+using array style in factor is much like using j except that we're freer. remember that the most general description of the solution is to:
+
+. identify -c & -s
+. extend the identification to their following args
+. separate this identified subsequence from the rest
+
+the j solution is perfect, then, at least insofar as its logic: it identifies by a mask, then modifies that mask by relating the mask to a permutation of itself i.e. we relate the mask to a relation of the mask's indices to themselves. then we apply that mask to partition.
+
+[source,factor]
+----
+ dup [ swap { "-c" "-s" } member? and ] map-index
+dup f prefix [ or ] 2map /.
+----
+
+which leaves the following hash table on the stack:
+
+----
+H{ { t V{ "mysess" "-s" "catapult" "-c" "berry" } }
+   { f V{ "-f" "-n" } } }
+----
+
+i prefer to define my own symbolic primitives e.g. `ALIAS: ⇄ swap` to make code terse & clean. by these, the solution is:
+
+----
+↟ [ ⇄ { "-c" "-s" } ∋ A ] Mi ↟ f prefix [ V ] 2M /.
+----
+
+my factor solution uses `f prefix` analagously to `_1|.!.0`. i'm afforded that b/c `2map` iterates a number of times equal to the length of the shorter list, not caring if two lists have different lengths.
 
 === using the stack well
 

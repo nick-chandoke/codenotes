@@ -986,8 +986,6 @@ to unset verbs, use `4!:55 <'expiredname'`.
   ** stdin & stdout are obverses. e.g. `toupper&.stdin''` is a program which prints an uppercase version of stdin
 * `exit` takes a dummy arg
 
-some badass shit: `rev=. |.`(|.@}: , {:)@.(LF&=@{:)`
-
 NOTE: if you do not invoke `exit` then the script will end in the repl
 
 === filesystem
@@ -1142,7 +1140,6 @@ my solution is `>./(0 E. y)+/;._1 y` which is appropriate because `E.` & `;.` id
 
 ''''
 
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ad-hoc relation hierarchy:
 seqs (relations with meaningful order)
   sets (relations without significant order)
@@ -1185,7 +1182,6 @@ numbers are simple and have much built-in structure with which mathematicians ar
 
 algebraic sequence hierarchy:
   multilinear maps (arrays), which is a recursive type whose base case is the linear map, which is, like all true base cases, a binary relation.
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 GRADE:
 x/:y does nothing if x is monotonicity increasing, because /: computes an order of x, so for monotonically increasing x, the derived permutation sequence that /: uses is `i.#x`.
@@ -1940,6 +1936,8 @@ z dup f1 dup [ swap f2 ] dip f4 swap f3 .
 
 ''''
 
+NOTE: the fork is ubiquitous because the even tines are unary fns and the odd ones are binary. with functions, all outputs are only useful if they're passed as inputs. forks accomodate both (unary) composition (use `@:` or `[:`) and binary application. because ternary fns are rare (and don't even exist in j), the fork works well for most computations. forks still don't elegantly express asymmetric computations, though.
+
 one should really think in terms of _combinators_ rather than _tacit_. trains are useful as combinators. there's no benefit _per se_ to avoiding lambdas, though.
 
 TODO: consider `x(v4(v6 v0 v1 C v2 v3)v5)y` where C accepts v4 & v5 as arguments, but, as per usual, v6...v3 accept the outputs of `x v4 y` & `x v5 y`. this is obviously possible in langs with higher-order functions (a symmetric & recursive consideration of functions, as opposed to j's ad-hoc specification of parts of speech.) a good syntax for higher-order combinators would, like all notations, be in terms of a/symmetries. something like (fork v4 (fork (*-.C)) v5)
@@ -2329,9 +2327,7 @@ this constitutes the total theoretical set of loops/traversals.
 | (/:m&i.)y               | sort y by collation sequence m
 | /:@i.{]                 | sort y by collating seq x
 | ((dom ,a.) i. y){cod,a. | tr
-| (#~p)                   | filter y by predicate p (hook)
-| (p#])                   | filter y by predicate p (fork). preferred b/c it generalizes more easily. generally unary hook `uv` is equivalent to fork `]uv` or `[uv` or `([u])v`; note however, that this last form enables swapping argument order!
-| ...`f`g@.p+2*q+...      | map conditions to computations. assumes that conditions p,q,... are mutually exclusive i.e. that their sum is in set p,q,....
+| (#~p)                   | filter y by predicate p
 | 'colN' {{y{"1~ x i.~col1;col2;...}} T | index by column name by using headers
 | v&.>                    | <@v"0 but simpler
 | '-'E.a.                 | ascii code of '-'
@@ -2762,8 +2758,8 @@ cool use of `i.` as map:
 ----
 NB. buy, sell, and exit are functions of an input order
 NB. a single character, to buy, sell, or exit a stock trade, is stored at index 4 of an order array.
-(buy`sell`exit@.'bse'i.4{) order
-   (('bse'&i.@:>@:(1&{)){+:`%:`*:`:0@:>@:{.) 4;'s'
+   {{(('bse'i.>1{y){+:`%:`*:)`:0 >{.y}}          NB. explicit
+   ({. ([ {{y`:0 x}} +:`%:`*: {~ 'bse'i.])&> {:) NB. tacit! actually works! just another fork.
 2
 ----
 
@@ -2800,8 +2796,6 @@ naturally this happened because i did not use a systematic method for identifyin
 choice is the elegance-killer. elegance is, in its greatest form, most elegant, i.e. optimized. the only way to consistently get that grade of quality is by systematic reasoning, which means that the reasoning is encoded in the algorithm that the coder uses—not in the coder's mind. there's a reason that people used paper and then computers: people are volatile yet want consistent reasoning and the correct results that follow. taking this to its ultimate conclusion, we see that people's perogative is to provide facts in the form of data and queries, and for computers to answer. sounds like prolog, huh?
 
 .aside: "why not just use prolog, then," again?
-
-prolog _per se_ (cf datalog &al deduction systems) has some inelegant execution primitives (particularly cut.) the only problem with using a prolog-like system directly is that, like lisp, its generality is what makes it non-ergonomic; it is not optimized for any kind of common computations! it thus simply needs a good collection of computation models all defined commonly in terms of abstract relations (prolog's datatype; cf sql's datatype: non-abstract relations). j is wonderful because it exploits its structure (arrays & syntax), introducing (mostly) symmetric, implicit considerations of them, namely how verb application works wrt rank, and modifier trains and non-tacit verb application e.g. that `f x g y` is `f(g(x,y))` but that `f g y` is `f(g(y))`.
 
 try to use the most capable primitives first, which i bet are typically less finely specifiable, but only when they fail should we try less powerful (and assumedly more finely specifiable) ones.
 
@@ -2853,7 +2847,6 @@ TODO: organize primitives [complete classification] into a db then export that t
 | i.y   | [0..y)              | mask                          | (<:@:(+/\)@:$&1)
 | \|. y | reverse list        | ?                             | smth with i. & {
 | ;.0 y | reverse axes' items | ?                             | smth with i. & {
-| 
 |============================================================================
 
 class descriptions:
@@ -3313,7 +3306,7 @@ NOTE: `^:_1` works for some considerable class of tacit expressions! it will der
 [source,j]
 ----
 NB. scan version of 3 (9&,) 1
-   3 ((9&,)@])^:(<@[) 1
+   3 ([: 9 , m f ])^:(<@[) 1
 1 0 0
 9 1 0
 9 9 1
@@ -3426,15 +3419,15 @@ insert has a fucky-wucky asymmetry. it's depicted plainly in the following examp
 ------------------------------------------
 
 iter | x        | y
-     | ┌──┐     |┌──────┐
-0    | │my│     |│friend│
-     | └──┘     |└──────┘
-     | ┌─────┐  |┌──┬─┐
-1    | │there│  |│my│f│
-     | └─────┘  |└──┴─┘
-     | ┌─────┐  |┌─────┬─┬─┐
-2    | │hello│  |│there│m│f│
-     | └─────┘  |└─────┴─┴─┘
+     | ┌──┐     | ┌──────┐
+0    | │my│     | │friend│
+     | └──┘     | └──────┘
+     | ┌─────┐  | ┌──┬─┐
+1    | │there│  | │my│f│
+     | └─────┘  | └──┴─┘
+     | ┌─────┐  | ┌─────┬─┬─┐
+2    | │hello│  | │there│m│f│
+     | └─────┘  | └─────┴─┴─┘
 
 * insert inserts a fn between each pair of elements starting from the right.
 * x is the left element, and y is the right.
@@ -3451,15 +3444,15 @@ iter | x        | y
 ----
 
 iter | x        | y
-     | ┌──┐     |┌──────┐
-0    | │my│     |│friend│
-     | └──┘     |└──────┘
-     | ┌─────┐  |┌──┬─┐
-1    | │there│  |│MY│f│ NB. iter 0 passed to iter 1.
-     | └─────┘  |└──┴─┘
-     | ┌─────┐  |┌─────┬─┬─┐
-2    | │hello│  |│THERE│M│f│
-     | └─────┘  |└─────┴─┴─┘
+     | ┌──┐     | ┌──────┐
+0    | │my│     | │friend│
+     | └──┘     | └──────┘
+     | ┌─────┐  | ┌──┬─┐
+1    | │there│  | │MY│f│ NB. iter 0 passed to iter 1.
+     | └─────┘  | └──┴─┘
+     | ┌─────┐  | ┌─────┬─┬─┐
+2    | │hello│  | │THERE│M│f│
+     | └─────┘  | └─────┴─┴─┘
 
 the ugly asymmetry is that `f` is not upper case but all others are; the last element is treated differently. this is why general lambdas are not appropriate for folds unless the last element is treated specially i.e. is an initial value, the `z` that we'd see in haskell `foldr f z xs` which is expressed in j as `f/xs,z`, akin to `foldr1 f (xs++z)`.
 
