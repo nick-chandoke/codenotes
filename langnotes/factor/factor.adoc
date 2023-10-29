@@ -1066,6 +1066,12 @@ i took a couple of hours to realize that it was because the `HS{ }` was one obje
   ** `format-box` formats like j boxed arrays
   ** `format-table` formats like j unboxed arrays
 
+.contextual programming
+
+the point of `map` or `reduce` is to enter into a context in which some variables are set. in factor this is done as an "element" variable being atop the stack. in haskell it's done as the element variable being either 1. the tacit parameter to a fn, or being named by a λ literal. in sql "map" is called "select" and within the selection clause's context, the "from" clause's table's set of attribute names are bound [available]. this is what makes programming good: that we may designate subprograms as being of particular contexts, and within those subprograms we relate things, implicitly relative to a context. a good programming model enables us to freely intersect and union contexts (contexts being sets of attributes (again, sets being isomorphic with predicates)).
+
+''''
+
 when all your data are stored in arrays, manual recursion/looping is rare. a great deal of loops in scalar style is done without looping by encoding the loop variables as arrays e.g. i.6 instead of looping with a counter variable. because virtual sequences are easy to define in factor, we can freely, efficiently define most loops as virtual sequences then use `2each`, `2map`, &c.
 
 .factor/j bilateral translation table
@@ -1380,12 +1386,29 @@ i can try to retain order in an arguably more natural way way: by unioning (appe
 
 [source,factor]
 ----
-[ # i. ]
-[ [ { "-c" "-s" } ∈ ] ∃': ↟ [ 1 + ] ∀ ++ /: [ \ ] ⎌ ]
+[ # i. ]                  ! related to "separate from the rest"...
+[ [ { "-c" "-s" } ∈ ] ∃': ! "indices where item matches -[cs]"
+  ! the next three lines read as "and their successors"
+  ↟                       ! "their"
+  [ 1 + ] ∀               ! "successors"
+  ++                      ! "and"
+  ⍏                       ! "retaining original order"
+  [ \ ] ⎌ ]               ! "separate from the rest"
 [ [ @: ] & ] tri bi@
 ----
 
-this is generally exactly correct because indices themselves represent the order, so sorting the indices is always just as fine as producing the indices in order. now then, `[ # i. ]` is an argument to `\`, so TODO: why are the two so far apart in code?
+i've mapped each part of the english phrase to the corresponding factor words directly. note that "separate from the rest" uses the `# i.` vector left quite earlier on the stack. this actually corresponds directly to the english! "the rest" only has meaning (because its meaning is relative) after specifying "indices ... and their successors!" the factor code which implements the idea of "separate from the rest" is "all minus (indices & successors)" which actually merely _calculates_ the rest. indeed, this demonstrates that "separate from the rest" is redundant! the fact of them being the _rest_ already _distinguishes_ them from the rest. being that "rest of the rest" is an identity, we see that "rest" means "complement" which is a set operation. "rest" is thus a fn of a set and a total. in my code, `[ # i. ]` and `\` are distant. to more closely follow the english, i should have curried `# i.` to `\`!
+
+[source,factor]
+----
+[ [ { "-c" "-s" } ∈ ] ∃': ↟ [ 1 + ] ∀ ++ ⍏ ]
+[ # i. ⇄ [ \: ] ⎌ ]
+[ [ @: ] & ] tri bi@
+----
+
+so i noticed that actually i can just swap the order to—big surprise—_actually match the english's order_: "rest" following "indices ..." then there's no need to curry!
+
+NOTE: because indices themselves represent the order, sorting the indices is always just as fine as producing the indices in order.
 
 more literally following the english description:
 
@@ -1404,9 +1427,9 @@ V{ } clone                                            ! one of the two accumulat
 { "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" } ! input
 [ [ ↟ ∅ ]
   [ unclip-slice ↟ { "-c" "-s" } ∈
-                 [ , unclip-slice , ]
-                 [ [ suffix! ] & ⋎ ]
-                 if
+                   [ , unclip-slice , ]
+                   [ [ suffix! ] & ⋎ ]
+                   if
   ] until
 ] { } make 2↶
 ----
@@ -1460,6 +1483,10 @@ prints:
 { "-c" "sess" "-c" "SE" "-s" "SA" }
 ----
 
+this relational style (coupling attribute vectors into a table, here a list of duples) isn't good outside of sql, because we must use accessors like `1st`. the relational style worked "nicely" here b/c i used `partition` in order to derive two groups from one predicate. however, generally (for more complex or detailed relations) it's best to use `/.` and keep attribute vectors separate, related by whatever maps relate them—the maps corresponding to joins, e.g. `{ { 1 65 } { 2 4 } { 2 3 } { 6 20 } }` which relates two tables' (as seen by each by each item in the list having length 2) indices.
+
+TODO: join is a sql thing. how would prolog do it? sql uses data literals. prolog uses composable, logical generator fns.
+
 window fns don't work:
 
 [source,factor]
@@ -1482,12 +1509,14 @@ prints
 }
 ----
 
+so of course we can't use that 2nd sequence of duples.
+
 .useful considerations of rank
 
 [source,factor]
 ----
 : 1:1 ( x y q -- z ) 2map ; inline
-: n:n ( x y q -- z ) cartesian-map ; inline
+: n:n ( x y q -- z ) cartesian-map ; inline ! defined as [ with map ] 2curry map
 : 1:n ( x y q -- z ) curry map ; inline
 
 { 1 2 3 4 } "cats" [ { } 2sequence ] 1:1 .
