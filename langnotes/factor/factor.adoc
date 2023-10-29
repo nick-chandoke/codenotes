@@ -33,7 +33,7 @@ the good news is that we can impose models, such as the array model, which does 
 * how to do haskell style applicative programming in factor? there's power & terseness there, enabled by global ad-hoc definitions (especially how things compose/relate) and function composition (namely unordered composition.) adts & type classes are at the heart of such programming! factor oop is equivalent. think of how `either` has left as associated state and is a [bi]functor.
 * concurrency
 * cf link:https://forth-standard.org/[forth] viz wrt efficiency
-* check-out vocabs: `models`
+* check-out vocabs: `models`, `ui`
 
 === usability
 
@@ -1091,7 +1091,7 @@ when all your data are stored in arrays, manual recursion/looping is rare. a gre
 | `without`                                                | `x-.y`
 | `intersect`                                              | `x([-.-.)y`
 | `members`                                                | `~.`
-| `loop`, `while`, `times`                                 | `^:`
+| `loop`, `while`, `times`, `replicate`                    | `^:`
 | `if`, `if*`, `?`                                         | `@.`
 | `reduce`                                                 | `u/y`
 | `cartesian-map`                                          | `x u/y`
@@ -1117,7 +1117,7 @@ when all your data are stored in arrays, manual recursion/looping is rare. a gre
 | `y v x swap u`                                           | `x(u v)y`
 | `f h bi g`                                               | `(f g h)y`
 | `f h 2bi g`                                              | `x(f g h)y`
-| `CONSTANT:`, `SYMBOL:`, `set`, `:` & `:`                 | `=:`
+| `CONSTANT:`, `SYMBOL:`, `set`, `:` & `;`                 | `=:`
 | fried quotations (discouraged)                           | `=.`
 | `<groups>`, `<clumps>`, `delete-slice`                   | `x u\.y`
 | `concat`                                                 | `,/`
@@ -1131,15 +1131,17 @@ when all your data are stored in arrays, manual recursion/looping is rare. a gre
 | ???                                                      | `~:y`
 | ???                                                      | `x#:y` (mixed bases)
 | `drop y`                                                 | `y"_`
+| `produce`                                                | `F[.:]` (unfold)
 |======================================================================================
 
 TODO: generalize fork & hook to n-ary.
 
+* `loop` loops forever until the loop body returns false
 * `q map-index` is a terser version of `[ length <iota> ] keep q 2map`
 * `accumulate*-as` example: `"hello" "" [ suffix ] { } accumulate*-as`. or we can even faithfully recreate `/`'s behavior of not computing the nth row from its predecessor: `dup length [1..b] [ head ] with map`.
 * usually we'll use `index` or `find-index`, not `index-or-length`.
 * the following are in j but are not useful in j or factor: `x|:y`. i'm curious how `/:y` and `~:y` can be useful both generally and specifically in j, and for those j-specific uses, what can we use in factor instead?
-* the following are in factor but not in j and are nice: `join`, `interleave`, `index`. `flip-text` is an example of the `[ [ M at ] transmute ] map` pattern, which is a relational primitive. the `random` vocabulary is extensive. `follow` is fold that supports short-circuiting.
+* the following are in factor but not in j and are nice: `join`, `interleave`, `index`. `flip-text` is an example of the `[ [ M at ] transmute ] map` pattern, which is a relational primitive. the `random` vocabulary is extensive. `follow` is fold that supports short-circuiting. `produce` is the 
 * i'm curious how often rank is used. in factor (and indeed, scheme, haskell, etc), rank _1 is implicit. for rank 0 just `flatten` (if needed) then `cartesian-map`. pointwise is `2map`. to do like `+/` on a matrix which effectively sums columns in parallel, . there are even virtual sequences for cartesian products, `x ;"0 y`.
 
 .`x u\ y` when x<0 (*mistakenly written*; `group` already does this!)
@@ -1301,29 +1303,213 @@ the j solution is perfect, then, at least insofar as its logic: it identifies by
 
 [source,factor]
 ----
- dup [ swap { "-c" "-s" } member? and ] map-index
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" }
+dup [ swap { "-c" "-s" } member? and ] map-index
 dup f prefix [ or ] 2map /.
 ----
 
 which leaves the following hash table on the stack:
 
 ----
-H{ { t V{ "mysess" "-s" "catapult" "-c" "berry" } }
-   { f V{ "-f" "-n" } } }
+H{
+    { t V{ "-c" "sess" "-c" "SE" "-s" "SA" } }
+    { f V{ "-f" "-n" "+45:6" } }
+}
 ----
 
 i prefer to define my own symbolic primitives e.g. `ALIAS: ⇄ swap` to make code terse & clean. by these, the solution is:
 
 ----
-↟ [ ⇄ { "-c" "-s" } ∋ A ] Mi ↟ f prefix [ V ] 2M /.
+↟ [ ⇄ { "-c" "-s" } ∈ A ] ∀i ↟ f prefix [ V ] 2∀ /.
 ----
 
 my factor solution uses `f prefix` analagously to `_1|.!.0`. i'm afforded that b/c `2map` iterates a number of times equal to the length of the shorter list, not caring if two lists have different lengths.
+
+this solution is most elegant because it unions the selection vector to its offset and retains pointwise association of group id with elements.
+
+the actual ideal solution is a literal translation of "separate indices where item matches -[cs], and their successors, from the rest, retaining original order." the following factor represents this:
+
+[source,factor]
+----
+[ [ # i. ] ⎌              ! push i.@#
+  [ { "-c" "-s" } ∈ ] ∃': ! selection vector
+  [ ↟ 1 + { } 2s ] ∀      ! vector of duples { selection successor }
+  ♭                       ! flatten into selection vector "selvec"
+  [ \ ] ⎌ ]               ! (i.@#)-.selvec while retaining selvec (atop) the stack
+[ [ @: ] & ]              ! "quotation B"
+bi                        ! these two quotations are applied to the input
+bi@                       ! quotation "B" which `bi` leaves atop the stack is applied
+                          ! to the two selection vectors that quotation "B" left on the stack
+----
+
+sadly this does not read as well as the english. why not?
+
+. there's a lot of nested, ordered state retention
+. the phrase "indices and their successors" is expressed oddly: "each index with its successor put into a sequence then flatten that whole array"
+. there's currying and delayed execution (data are far from the word that consumes them) which, when finally executed, is done with `bi bi@`. this is done so that i can apply `@:` to both selection sequences without having the input on the stack. namely, i'd have to have it twice on the stack, and in the right place, in order to call `@:` twice on it. specifically, i'd need `selvec1 inputseq selvec2 inputseq [ nths ] bi@`, which would be horrible to express on the stack. currying is practically necessary (and elegant anyway) for keeping the stack managable.
+. instead of partitioning, i apply each of the selection vectors to the original input. that's two selection operations instead of one partition operation. it's because i chose to code it this way that i must retain the input for two operations, which is easiest when i curry it. the relation between the input sequence and selection vectors is 1:n, namely 1:2. `1:n` is defined as `curry map` so currying is appropriate, though it'd look nicer if we'd express the relation as `1:n` which would return one sequence of 2 sequences: the selected items and the rest—instead of pushing these two to the stack as outputs.
+
+how the english description breaks-down:
+
+----
+partition [ indices such that item matches -[cs] union their successors ]
+retaining original order
+----
+
+why would the english be easier than factor? i think that it shouldn't be. so i push myself to make the factor code better. just like factor, english builds on prior mentioned things. i can surely be tacit here because the english expression does not use names. the only parameter is tacit:
+
+----
+partition [ indices such that [each of the input's] item matches -[cs] union their successors ]
+retaining [the input's] original order.
+----
+
+i should have my factor code mirror this _exactly_. becasue factor code is totally tacit, i may begin constructing my program at any part of the english phrase. first i notice that `[ # i. ] ⎌` inside the first `bi` quotation can be factored-out:
+
+[source,factor]
+----
+[ # i. ]
+[ [ { "-c" "-s" } ∈ ] ∃': [ ↟ 1 + { } 2s ] ∀ ♭ [ \ ] ⎌ ]
+[ [ @: ] & ]
+tri
+bi@
+----
+
+flatter, better, obviously shows that input is considered in three ways. there's not really any unnecessary nesting anymore.
+
+i can try to retain order in an arguably more natural way way: by unioning (appending) the index vector with its successor vector then sorting them:
+
+[source,factor]
+----
+[ # i. ]
+[ [ { "-c" "-s" } ∈ ] ∃': ↟ [ 1 + ] ∀ ++ /: [ \ ] ⎌ ]
+[ [ @: ] & ] tri bi@
+----
+
+this is generally exactly correct because indices themselves represent the order, so sorting the indices is always just as fine as producing the indices in order. now then, `[ # i. ]` is an argument to `\`, so TODO: why are the two so far apart in code?
+
+more literally following the english description:
+
+[source,factor]
+----
+↟ [ { "-c" "-s" } ∈ ] ∃': [ ∈ ] & partition
+----
+
+the only problem is that `partition` takes a predicate of elements instead of indices. that being said, partition, which takes a quotation that returns booleans, generalizes to a quotation that returns integers, or most generally: returns distinct things. and we may decouple applying a quotation from partitioning on its outputs. `/.` does this. this particular case of "class and else" is nice because we can use one class to derive two classes. i may think about ways to use variants of, or prepare inputs for, `partition` or `/.` but i don't want to bother. that's because...
+
+the easiest way is what the scheme solution does: loop, putting an item into one list or an item with its successor into another list. that's the most straightforward description and naturally retains order, and is one traversal. the inconvenience with coding this is that we cannot use list iterators because we must consider multiple elements at a time. this means that we must loop. honestly there should be a combinator like map, reduce, etc, that takes the remainder of the list as an argument rather than just the next one item. given that i've not defined such a combinator and that i don't want to spend any more time on this yet, here's the solution basically equal to the scheme one, but a bit nicer b/c it uses `make` instead of needing to keep both vectors on the stack; and because it destructively/effectively appends to both vectors.
+
+[source,factor]
+----
+V{ } clone                                            ! one of the two accumulators
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" } ! input
+[ [ ↟ ∅ ]
+  [ unclip-slice ↟ { "-c" "-s" } ∈
+                 [ , unclip-slice , ]
+                 [ [ suffix! ] & ⋎ ]
+                 if
+  ] until
+] { } make 2↶
+----
+
+recall that this is exactly what we did in kakoune. as its elegance suggests, it's the best solution because the iteration relates each element to all of the following ones, allowing us to move it and its successor to a separate "else" vector. the traversal being in order of increasing index (i.e. in original order) is good b/c we want that order both in that we retain it in both of our output partitions, but also in that the order relates the identified elements with their successors and that we'll be indexing both of them anyway!
+
+there's a powerful combinator that this code generalizes to. however, the question is how to identify such a generalization that is not overconstrained.
+
+and for fun, the sql version:
+
+[source,sql]
+----
+create table r(i integer primary key autoincrement, e string);
+insert into r(e) values('-f'),('-c'),('sess'),('-n'),('-c'),('SE'),('-s'),('SA'),('+45:6');
+with x(a) as (select i from r where e='-c' or e='-s') -- need a local bind b/c we union x with itself
+select group_concat(e) from r group by i in (select a from x union all select a+1 from x) order by i;
+┌─────────────────────┐
+│   group_concat(e)   │
+├─────────────────────┤
+│ -f,-n,+45:6         │
+│ -c,sess,-c,SE,-s,SA │
+└─────────────────────┘
+----
+
+the equivalent factor:
+
+[source,factor]
+----
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" }
+[ # i. ] ⎌ zip                         ! table r is on the stack
+↟ [ 2nd { "-c" "-s" } ∈ ] ∀f [ 1st ] ∀ ! now r x is on the stack
+↟ [ 1 + ] ∀ ++ ⍏                       ! now r xU(x+1) is on the stack
+[ ∈ ] & [ 1st ] prepose partition      ! yay! our partitions!
+[ [ 2nd ] ∀ ] bi@                      ! remove associated indices
+----
+
+and similar factor:
+
+[source,factor]
+----
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" }
+[ ↟ # i. zip ]
+[ [ { "-c" "-s" } ∈ ] ∃': ↟ [ 1 + ] ∀ ++ ⍏ [ ∈ ] & [ 2nd ] prepose ]
+bi partition [ [ 1st ] ∀ ] bi@
+----
+
+prints:
+
+----
+{ "-f" "-n" "+45:6" }
+{ "-c" "sess" "-c" "SE" "-s" "SA" }
+----
+
+window fns don't work:
+
+[source,factor]
+----
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" }
+2 <clumps> [ 1st { "-c" "-s" } ∈ ] partition
+[ [ >array ] ∀ . ] bi@
+----
+
+prints
+
+----
+{ { "-c" "sess" } { "-c" "SE" } { "-s" "SA" } }
+{
+    { "-f" "-c" }
+    { "sess" "-n" }
+    { "-n" "-c" }
+    { "SE" "-s" }
+    { "SA" "+45:6" }
+}
+----
+
+.useful considerations of rank
+
+[source,factor]
+----
+: 1:1 ( x y q -- z ) 2map ; inline
+: n:n ( x y q -- z ) cartesian-map ; inline
+: 1:n ( x y q -- z ) curry map ; inline
+
+{ 1 2 3 4 } "cats" [ { } 2sequence ] 1:1 .
+{ { 1 99 } { 2 97 } { 3 116 } { 4 115 } }
+
+{ 1 2 3 4 } "cats" [ { } 2sequence ] 1:n .
+{ { 1 "cats" } { 2 "cats" } { 3 "cats" } { 4 "cats" } }
+
+{ 1 2 3 4 } "cats" [ { } 2sequence ] n:n .
+{
+    { { 1 99 } { 1 97 } { 1 116 } { 1 115 } }
+    { { 2 99 } { 2 97 } { 2 116 } { 2 115 } }
+    { { 3 99 } { 3 97 } { 3 116 } { 3 115 } }
+    { { 4 99 } { 4 97 } { 4 116 } { 4 115 } }
+}
+----
 
 === using the stack well
 
 * despite aptly being called "factor", coupling is important, too! however data are always used together, couple them into a single item on the stack, as early as you can.
   ** curry when you can. this reduces the number on items on the stack and appropriately couples a fn with its arg. build-up programs incrementally as early as you can. an example is `1 xs [ / ] with map` or the equivalent `xs [ 1 swap / ] map`. the naive way is to think of `/` as a binary operation which takes two args, and assume that those two args should be provided as arguments on the stack. however, here one arg is an atom and the other a sequence, so we can't simply apply it nor can we use `2map`. a novice might put `1` on the stack then retain it beyond its consumption by `/`: `1 xs [ over [ / ] dip swap ] map`. that's unnecessary hell. or they may do a less elegant thing: creating a sequence of a constant: `xs dup length 1 <repetition> swap [ / ] 2map`. these just make stack langs look bad.
+    *** i expect that this is why words like `nth` take the index then the sequence, or why `set-at` takes the hash map off the top of the stack, or why `member?` takes the sequence off the top of the stack.
     *** exploit that programs are sequences e.g. `[ "v1" "v2" ] [ "k1" "k2" ] [ H{ } set-at ] [ 2each ] keep first .` set-at is effectful, consuming our hash table. `keep` leaves the program `[ H{ } set-at ]` atop the stack; the hash table is thus still on the stack, contained in the sequence; `first .` prints it.
 * any time that data have an attribute in common, where that attribute is relevant to some fn that the data are passed to, put the data in a sequence then iterate over it.
 * if you're having trouble orienting composition/currying of fns throughout a stack process, then just define a helper fn or combinator. stack langs work best when each word has a short definition.
