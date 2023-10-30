@@ -45,6 +45,8 @@ fortunately factor can use sql for great computations, and comes with easy-to-us
 
 factor programs can be difficult to overview; being able to overview them depends on naming words well. this is stylistic and not difficult, but also can't be done systematically and there's no natural solution to this; the ways to do this well are quite arbitrary.
 
+being left-to-right is nice in that we can put comment initiators (`!`) anywhere in our code in order to halt the computation early.
+
 ''''
 
 why does this error:
@@ -320,7 +322,8 @@ these are contrasted with non-special builtins; these builtins are not useful in
 * runs as a gui rather than cli program
 * is a client that connects to a repl server
 * tracks the stack for you, which makes easy both working with state and debugging
-* to enable dark mode (no idea how this was found): run `USE: tools.scaffold scaffold-factor-boot-rc` then add `USE: ui.theme.switching dark-mode` to `~/.factor-boot-rc`, then run `run-bootstrap-init save`, then restart the listener. on nixos i got a _read-only filesystem_ error, so this didn't work totally.
+* to enable dark mode (no idea how this was found): run `USE: tools.scaffold scaffold-factor-boot-rc` then add `USE: ui.theme.switching dark-mode` to `~/.factor-boot-rc`, then run `run-bootstrap-init save`, then restart the listener. on nixos i got a _read-only filesystem_ error. like j, manually installing factor is easy and creates a local directory and all settings & additional packages/modules are stored there.
+  ** to set the theme in the listener while it's running, do `light-mode` or `dark-mode`. the only trouble is that the window must be closed then reopened or instructed to repaint or something. `listener-window` worked by creating a new window, without the state of the first one. thus this solution is only when you want to change the theme at the start of your session!
 
 === stack evaluation model
 
@@ -1023,7 +1026,8 @@ terminal: blank or ∈ ["'|{}=()[].!&*+?:~<>]
 * when testing code that mutates structures, use `clone`, so that each test starts from the correct initial structure! e.g. do `H ( -- h ) H{ { 0 HS{ } } { 2 HS{ } } } ;` to define initial hashmap, then in all of your tests, do `H clone words ...`. `clone` makes a shallow copy.
   ** depending on your code, you may want `clone` for production execution anyway!
 
-consider the following code:
+consider the following code which *incorrectly* tries to implement j's key (`/.`) (it accumulates into a hash set instead of a vector):
+
 [source,factor]
 ----
 : groupby ( vals keys -- groups ) ! like /. in j or `group by` in sql
@@ -1043,9 +1047,15 @@ H{
 }
 ----
 
-i took a couple of hours to realize that it was because the `HS{ }` was one object, used as all values for the hash map! using `HS{ } clone` fixed the problem, giving the correct output: `H{ { 0 HS{ 0 100 } } { 2 HS{ 56 2 7 } } { 4 HS{ 1 35 4 } } }`.
+i took a couple of hours to realize that it was because the `HS{ }` was one object, used as all values for the hash map! using `HS{ } clone` fixed the problem, giving the correct output:
 
-=== relational-array factor
+----
+H{ { 0 HS{ 0 100 } }
+   { 2 HS{ 56 2 7 } }
+   { 4 HS{ 1 35 4 } } }
+----
+
+=== relational or array factor
 
 * shaped arrays
 * virtual sequences:
@@ -1066,13 +1076,155 @@ i took a couple of hours to realize that it was because the `HS{ }` was one obje
   ** `format-box` formats like j boxed arrays
   ** `format-table` formats like j unboxed arrays
 
-.contextual programming
+==== design
+
+when all your data are stored in arrays, manual recursion/looping is rare. a great deal of loops in scalar style is done without looping by encoding the loop variables as arrays e.g. i.6 instead of looping with a counter variable. because virtual sequences are easy to define in factor, we can freely, efficiently define most loops as virtual sequences then use `2each`, `2map`, &c.
+
+===== contextual programming
 
 the point of `map` or `reduce` is to enter into a context in which some variables are set. in factor this is done as an "element" variable being atop the stack. in haskell it's done as the element variable being either 1. the tacit parameter to a fn, or being named by a λ literal. in sql "map" is called "select" and within the selection clause's context, the "from" clause's table's set of attribute names are bound [available]. this is what makes programming good: that we may designate subprograms as being of particular contexts, and within those subprograms we relate things, implicitly relative to a context. a good programming model enables us to freely intersect and union contexts (contexts being sets of attributes (again, sets being isomorphic with predicates)).
 
-''''
+===== relations rather than arrays
 
-when all your data are stored in arrays, manual recursion/looping is rare. a great deal of loops in scalar style is done without looping by encoding the loop variables as arrays e.g. i.6 instead of looping with a counter variable. because virtual sequences are easy to define in factor, we can freely, efficiently define most loops as virtual sequences then use `2each`, `2map`, &c.
+arrays make the following regular, unpredicated maps easy: 1:1 (pointwise relation), 1:n, m:n (cartesian product). 1:n is m:n where `m=1`:
+
+[source,factor]
+----
+{ { 0 } { 1 2 3 } } [ ] product-map
+  0   { 1 2 3 } [ { } 2sequence ] with map
+= ! t
+----
+
+`cartesian-product`, like j, returns a cube; each row corresponds to :
+
+----
+   0 5 (,"_ _1"_1 _) 1 2 3
+0 1
+0 2
+0 3
+
+5 1
+5 2
+5 3
+
+! version more amenable to custom prettyprint: cartesian-product [ [ unparse ] map "\n" join ] map "\n\n" join "%s\n" printf
+! of course, a more proper solution is to implement the `prettyprinting` protocol
+{ 0 5 } { 1 2 3 } cartesian-product [ [ . ] each "\n" printf ] each
+{ 0 1 }
+{ 0 2 }
+{ 0 3 }
+
+{ 5 1 }
+{ 5 2 }
+{ 5 3 }
+
+{ 0 5 } { 1 2 3 } cartesian-product [ . ] each
+{ { 0 1 } { 0 2 } { 0 3 } }
+{ { 5 1 } { 5 2 } { 5 3 } }
+----
+
+we can store each attribute as a vector, which keeps attributes separate yet implicitly related. this is preferable over storing an array of arrays or record types (tuples) because that'd require accessing elements by index or name e.g. to sort a table of schema `r(a,b,c)` we'd need to `[ third ] map sort` or `[ c>> ] map sort`. this becomes problematic for transient tables, whose column sets are subsets of unions of joined tables; then we must either use a system that works on identifiers as values (such as hashmaps!) or reference attributes by numerical index. (also there's some overhead of mapping over a sequence before sorting it). filtering requires using masks since actually filtering a list would change its length and thus lose its implicit relation to other pointwise-related attribute vectors; deriving a filtering mask allows that same mask to be applied to all required attribute vectors. there's obvious overhead (burdening the programmer) of maintaining masks, collation vectors, and classification vectors. well, really classification vectors generalize masks: a filter mask is a classvec with two classes, _assumedly_ one of whose members will be unused. this is clearly seen in the `partition` function (as is seen in scheme or factor): like `filter`, it takes a quotation and returns a filtered list, but also returns the other elements in a sequence. sql handles preserving relational invariants across order- or length-varying operations, namely `filter`, `group by`, and `order by`. precisely, the troublesome consequence of such operations is that they do not preserve the map from indices to values:
+
+[source,factor]
+----
+: print-arrs ( arr arr' -- ) [ [ swap "(%d %c)" printf ] each-index nl ] bi@ ; inline
+
+! filtering breaks the uid->val relation
+"prince harry" dup [ "re" member? ] reject print-arrs
+(0 p)(1 r)(2 i)(3 n)(4 c)(5 e)(6  )(7 h)(8 a)(9 r)(10 r)(11 y)
+(0 p)(1 i)(2 n)(3 c)(4  )(5 h)(6 a)(7 y)
+
+! sorting does, too
+"shawn mendes" dup sort print-arrs
+(0 s)(1 h)(2 a)(3 w)(4 n)(5  )(6 m)(7 e)(8 n)(9 d)(10 e)(11 s)
+(0  )(1 a)(2 d)(3 e)(4 e)(5 h)(6 m)(7 n)(8 n)(9 s)(10 s)(11 w)
+
+! and obviously classifying (grouping) does, too, since it's equivalent to mapping (mutually exclusive) filters over a set
+! and shares the common issue of changing lengths. including an example nonetheless for completeness.
+"eight-teen MORE out in the yard??" " " split [ upper? ] partition . .
+{ "eight-teen" "out" "in" "the" "yard??" }
+{ "MORE" }
+----
+
+what we really want is to have separate attributes with some relations (not necessarily pointwise) among their indices (elements as referenced by unique identifiers). to preserve these relations, we can stop using sequence indices implicitly and instead explicitly associate a uid with elements. we may as well use hash tables (specifically ``number-hashtable``s, btw) for this since they're fast, have fast lookup regardless of ordering.
+
+hashtables:
+<hashtable> ( n -- h )
+>hashtable ( assoc -- h )
+hashcode ( x -- c ) ! `=` objects have equal hashcodes. sets of hashcodes are therefore selection masks.
+value-at* ( v h -- k/f ? ) ! the boolean flag distinguishes between a missing key and a key of f
+      at* ( k h -- v/f ? )
+at
+set-at ( v k h -- )
+delete-at ( k h -- )
+keys ( h -- ks )
+values ( h -- vs )
+unzip ( h -- ks vs )
+assoc-size ( h -- # )
+cache ( k h q: ( ... k -- ... v ) -- ... v ) ! v@k or v@k<-q
+
+* do not use mutable keys. mutable values are fine.
+
+what about `biassoc`?
+
+.relational system design from first principles
+
+* assocs are binary; they're 
+* generall relations are graphs. of one attribute, we may relate elements to others; and we may relate any elements of any attribute to any elements of any other attributes. these relations are *predicates*, since predicates generalize equality. assocs are sets of keys & values related 1:1.
+* in sql a single-attribute table is hardly useful. it cannot be joined! such joins are no more useful than filtering then unioning.
+* a _relation_ is simply a set of attributes which are all modified simultaneously; filtering, sorting, intersecting, unioning, appending ("union all"), subtraction ("except"), and anything else. and the resultant attributes are all available in the result expression list. grouping does not affect 
+
+parts of a sql query in order of evaluation:
+
+. join (relate attributes). remember that there are many varieties: [natural] [outer:<left|right|full>]|inner. natural affects output column space and mandates no `on` nor `using`. inner is default and includes only rows that meet the predicate. outer has nulls where the predicate fails.
+  .. `on` is most general. `using (a,b,...)` is `on t1.a=t2.a and t1.b=t2.b AND ...` but omits (t2.a,t2.b,...) from the attribute union (append). `natural` is `using` whose argument attribute set is the intersection of tables' attribute sets.
+  .. left & right (outer) join feature NULL for t1's or t2's attributes respectively where the join predicate fails. the count of left or right join is the count of the left or right table respectively. the full join is the left join union right join minus the inner join.
+. select indices (elements)
+. `where` (filter rows/records/points)
+. `group by`. the expressions used in a group by clause are the same as those available to the result expression list.
+  .. selection expression is verb argument to `/.`
+  .. `having` (filter result of `u/.`) `having` is a fn, of a group's transient table, that returns a boolean, such as `count(*)>n` or "x is a member"
+    ... if a non-aggregate predicate is given to `having`, which is always silly afaict, then it's evaluated for an arbitrary row of the group. yet, if multiple non-aggregate expressions are supplied, then they're all applied to the SAME arbitrary row! this is sql always maintaining relations!
+. `order by`. if `group by` was used, then it's sensible only to order by a selected expression or series thereof; else one may sort by <selected expressions> union <table's attributes>.
+  .. each `order by` clause may be followed by <asc|desc> [nulls <first|last>]
+. `limit` & `offset` (subsequence selection aka _slicing_)
+. `distinct` (nub, called ~. in j and `members` in factor) is applied.
+
+`join` is obviously the part that needs the most optimization! this is natural in that it's the 1st part of the query, which means that it's where the most data are. thereafter each step of the query does not increase the amount of concerned data. an obvious optimization is to not produce the full cartesian product literally; collect only rows matching the join predicate. this being said, the join predicate can be intersected with the `where` predicate; they may as well be together virtual. (b/c the join clause may use `using` or `natural` to change the column space, which `where` cannot do. therefore `join` has its own clause. also outer joins have behavior that `where` cannot describe. only unnatural inner join's predicate is redundant with `where`. the implementation should merge their predicates together.) ultimately each row is computed independently so we may as well `_estimate <vector>  q reduce` with a quotation that does the result expression list & filter simultaneously. if there's a group by present then we associate each produced output with a group id. `from` has one table argument. `join` creates a virtual sequence.
+
+that's the 1st loop. we then apply any `having` predicate to each group, then apply aggregate fns, _then_ order? definitely limit & offset is last.
+
+i should be able to use dynamic variables and macros to easily mimic sql in factor. dynamic scope like `make` should do it, either. because namespaces are just assocs, any value can be the key. usually symbols are used. this being said, i'ven't been able to identify how to _use_ any non-symbol keys in namespaces.
+
+what should the select statement return? i suppose something called a "table"; the j-style (whether using locales or inverted tables) is a hash map with attribute name keys and vector values. in factor these would be so but values would be pointers. consider `with-variables` which shadows symbols' values within a quotation. one must still use `get` to get the symbols' values. `with-scope` is similar: it doesn't initialize symbols' values, but it makes setting them last only within the quotation. `change` is very useful. i'm doubtful that namespaces will be more helpful than just using a hashtable, especially since i can't seem to use non-symbol keys; all strings are available implicitly, vs symbols which must be declared.
+
+TODO: compare `namespaces` and `vocabularies`.
+
+NOTE: `CONSTANT: C V{ } 14 C push C .` shows that C has been updated. it's a constant pointer, but not constant value! this is a convenient way to make global attribute vectors!
+
+NOTE: `symbol` is a subclass of `word`.
+
+still i wonder about b+-trees being used by sqlite.
+
+a thought: maps map atoms to atoms. aggregates map sequences to atoms. (like sort, filter) map sequences to sequences. of course, this is probably of little consideration if we use only singletons, never atoms.
+
+.join example
+[source,factor]
+----
+SYMBOLS: names ages sexes ;
+V{ "tom" "bill" "harry" } names set
+V{ m f m } sexes set
+V{ 10 12 30 } ages set
+{ "tom" "bill" "harry" }
+H{ { "name" names } { "age" ages } }  ! relation 1
+H{ { "name" names } { "sex" sexes } } ! relation 2
+2dup [ keys ] bi@ diffs
+! TODO: finish
+----
+
+relations are sets of pointwise-related sequences or uid-related hashtables. should i allow relations to each have names like above? or should i see relations as sets of symbols?
+
+''''
 
 .factor/j bilateral translation table
 [options="header"]
@@ -1107,7 +1259,7 @@ when all your data are stored in arrays, manual recursion/looping is rare. a gre
 | `swap`, `dup`                                            | `~`
 | `[ and ] filter`, `[ [ ] curry replicate ] 2map harvest` | `x#y`
 | `length`                                                 | `#y`
-| `>base`                                                  | `x#:y` (unmixed bases)
+| `>base`                                                  | `x#[.:]y` (unmixed bases)
 | `sort`, `inv-sort`, `sort-strings`                       | `/:~`, `\:~`
 | the `random` vocabulary                                  | `?`, `?.`
 | juxtaposition, `compose`, `prepose`                      | `@`
@@ -1128,27 +1280,57 @@ when all your data are stored in arrays, manual recursion/looping is rare. a gre
 | `<groups>`, `<clumps>`, `delete-slice`                   | `x u\.y`
 | `concat`                                                 | `,/`
 | `sort-by`                                                | `x/:y`
-| <implemented below>                                      | `x u/. y`
-| <unimplemented>                                          | `x\|.y`
-| <unimplemented>                                          | `x\|.!.f y`
-| <unimplemented>                                          | `"`
-| <unimplemented>                                          | `&.`
-| <unsupported>                                            | `/:y`
-| ???                                                      | `~:y`
-| ???                                                      | `x#:y` (mixed bases)
+| the `inverse` vocabulary                                 | `&.`
 | `drop y`                                                 | `y"_`
 | `produce`                                                | `F[.:]` (unfold)
+| <implemented below>                                      | `~:y`
+| <implemented below>                                      | `x#[.:]y` (mixed bases)
+| <implemented below>                                      | `x u/. y`
+| the `circular` vocabulary                                | `x\|.y`
+| <see bulleted notes>                                     | `x\|.!.f y`
+| <see bulleted notes>                                     | `"`
+| <unsupported>                                            | `/:y`
 |======================================================================================
 
 TODO: generalize fork & hook to n-ary.
 
+* there are many possible solutions to shifting an array. it depends on what you want. for example, i can just append or prepend without even caring about the sequence growing size, if i'm going to `2map` with some shorter sequence anyway. a virtual sequence for shift would be trivial to define.
+* rank isn't much help in practice. the few commonly used maps—1:1, 1:n, n:n—are defined below.
 * `loop` loops forever until the loop body returns false
+* `>base` isn't literally like j's `#.` & `#:`. `20 2 >base` produces the _string_ "10100". we can then run `string>digits` to produce `B{ 1 0 1 0 0}`. `B{ }` is a byte vector.
 * `q map-index` is a terser version of `[ length <iota> ] keep q 2map`
 * `accumulate*-as` example: `"hello" "" [ suffix ] { } accumulate*-as`. or we can even faithfully recreate `/`'s behavior of not computing the nth row from its predecessor: `dup length [1..b] [ head ] with map`.
 * usually we'll use `index` or `find-index`, not `index-or-length`.
 * the following are in j but are not useful in j or factor: `x|:y`. i'm curious how `/:y` and `~:y` can be useful both generally and specifically in j, and for those j-specific uses, what can we use in factor instead?
 * the following are in factor but not in j and are nice: `join`, `interleave`, `index`. `flip-text` is an example of the `[ [ M at ] transmute ] map` pattern, which is a relational primitive. the `random` vocabulary is extensive. `follow` is fold that supports short-circuiting. `produce` is the 
 * i'm curious how often rank is used. in factor (and indeed, scheme, haskell, etc), rank _1 is implicit. for rank 0 just `flatten` (if needed) then `cartesian-map`. pointwise is `2map`. to do like `+/` on a matrix which effectively sums columns in parallel, . there are even virtual sequences for cartesian products, `x ;"0 y`.
+
+."under" example
+[source,factor]
+----
+! i haven't considered variadic stack effects
+: &. ( x map: ( x -- y ) op: ( a -- b ) -- bx ) over [ compose ] dip [undo] [ call ] dip call ; inline
+20 [ 4 + ] [ 3 * ] &. . ! equivalent to j (3&*)&.(4&+)20
+----
+
+.`#[.:]`
+
+[source,factor]
+----
+: #: ( y x -- x#:y )
+  <reversed> 1 head* 1 prefix
+  dup length <vector> [ [ dup ?last 1 or ] dip * over push ] reduce <reversed>
+  [ /mod swap ] map nip ; inline
+
+! seems an odd but correct implementation
+: #. ( y x -- x#.y )
+  [ <reversed> ] bi@
+  1 head* 1 prefix
+  dup length <vector> [ [ dup ?last 1 or ] dip * over push ] reduce
+  vdot ; inline
+----
+
+then `{ 1 30 6 } { 24 60 60 } #.` returns `5406`, and `5406 { 24 60 60 } #:` returns `{ 1 30 6 }`. in factor, the control argument is nearer the top of the stack, so the argument order is inverted compared to j.
 
 .`x u\ y` when x<0 (*mistakenly written*; `group` already does this!)
 [source,factor]
@@ -1169,8 +1351,21 @@ NEXT: outfix (x u\. y) should be trivial to implement in terms of infix
 ----
 : /. ( vals keys -- groups )
   H{ } over [ swap [ V{ } clone ] 2dip [ set-at ] keep ] each -rot swap
-  [ swapd [ over adjoin ] curry [ change-at ] pick [ curry call ] dip ] 2each ; inline
+  [ swapd [ over swap suffix! drop ] curry [ change-at ] pick [ curry call ] dip ] 2each ; inline
 ----
+
+.nub sieve
+[source,factor]
+----
+: ~: ( seq -- mask )
+  ! `p q 2bi swap`, not `q p 2bi`, b/c update set AFTER testing `in?`
+  HS{ } clone swap [ swap [ in? not ] [ [ adjoin ] keep ] 2bi swap ]
+  ?{ } map-as nip ; inline
+----
+
+"catamaran" ~: gives `?{ t t t f t f t f t }`, an efficiently-packed bit array.
+
+NOTE: this is a good example of `map` with tacit state!
 
 .i. & multidimensional i.
 [source,factor]
@@ -1259,7 +1454,7 @@ sa{ { 0 2 3 4 } { -6 6547 1 } } ! error: no-abnormally-shaped-arrays
 sa{ 0 2 3 4 } sa{ -6 6547 1 } pad-shapes ! well, actually pad-shapes seems to do nothing somehow.
 ----
 
-==== examples of deriving relational/array-stack programs
+==== examples of deriving relational or array-stack programs
 
 .parse command line
 
@@ -1563,3 +1758,15 @@ dup . ! print hash table
 ----
 
 this code generalizes easily to any number of key/value pairs. this elegant encoding keeps few elements on the stack, even if it's "strange" that we retain the hash table within the quotation passed to `2each`. after all, we're always setting values of hash table, so why not couple it with `set-at`? it's so simple that one may fail to realize that it's a variety of metaprogramming that macros cannot enable. for this, one truly must use call/eval and be able to extract subprograms from a (quoted) program. it's even easier in factor because the hash map is not a program that we need to evaluate; it's a datum itself!
+
+.in case this example is still desired
+----
+(<:&(++/\@(-~-.))@:={."0])       NB. original
+<:@(] + +/\@(-. - ]) )@:= {."0 ] NB. better expressed
+
+! factor translation
+[ = dup [ [ -. ] keep - [ + ] accumulate ] bi + _ 1 - ]
+[ ]
+2bi
+{."0 ! take"0
+----
