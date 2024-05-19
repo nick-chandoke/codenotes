@@ -1,0 +1,205 @@
+= comparing programming languages
+
+.some langs
+[options="header"]
+|==================================================================================================
+| lang    | runtime | efficiency | freedom | syntax | simplicity | special shit
+| java    | VM      | good       | no      | v.bad  | no         | oop typing
+| clojure | I       | bad        | ok      | bad    | ???        | ???
+| c       | N       | good       | low     | medium | high       | no
+| haskell | VM      | bad        | low     | ok     | good       | typing, referential transparency
+| rktscm  | A       | bad        | ok      | bad    | good       | no
+| lua     | I       | bad        | low     | bad    | high       | no
+| j       | I       | good       | low     | low    | good       | array model: shapes, and boxes
+| k       | I       | good       | ???     | low    | yes?       | no...?
+| factor  | A       | sus        | v.high  | no     | max        | no
+|==================================================================================================
+
+runtimes: VM (compiled), I for interpreted, N for compiled-native, A for ambivalent to compilation or interpretation, JIT for just in time compilation.
+
+notice that, despite racket scheme being a simple model and syntax, i gave it only a "good" simplicity score because it's so flexible that there's no de facto way of coding. also, conceputually similar codes are often incompatible because of type differences e.g. streams & sequences. this problem does not exist in picolisp.
+
+* scheme is better haskell: it's differences are: unified list & tuple; untyped; better metaprogramming. scheme is a smaller spec, more flexible. its lack of a type system demonstrates that the type system, while helpful, should be optional, because it's often unnecessary and so combersome, or even limiting!
+* lua is like c but with good unicode support,...and indexing that starts at 1. that ends-up _killing_ any hackiness. lua is both interpreted and small, which are nice. worse syntax than c. built-in support for dicts is good, as is the fact that its vectors are just dicts with implicit indices.
+
+== concatenativity's supremacy
+
+TODO: what's the implication / relationship between concatenativity and pure tacicity?
+
+after you go cat, you don't go back. the most important thing is concatenativity, which is afforded by being tacit. variable names are just another thing that isn't actual program logic; they are meaningless, used only to relate things, as a programming primitive. instead, do like factor: define a set of tacit primitve relations (these are the shuffle words in factor), then compose them. this way each word has definite meaning, and the composition of simple meaningful things makes complex meaningful things, but no matter what arbitrary subest of a program you select, you're guaranteed that it'll be meaningful! this works for any composition system, and any variety of primitve relation; they may be multidimensional, about tables, graphs, stacks, queues, or anything. of course, predicates or graphs are generally best, but it may be fun to experiment with other relation systems. with multidimensional program codings & editors, we could have some very good program code.
+
+* function inputs aren't named, so refactoring is easy, and there are no scope concerns. without variable names, there is no scope, no shadowing concerns.
+* you don't need to figure-out a whole program at once. you can start with what you know, then *incrementially* compose programs, and doing so is not cumbersome, since there's no renaming to do nor syntax to fiddle with
+  ** any applicative code that you look at, you must, for every variable encountered, wonder how, if at all, it's used in any of the upcoming code. this is less true if you use the `let` syntax of haskell, scheme, rust, &c, but even then, within those clearly-scoped blocks, you have no idea how the variables relate to each other! you don't know when to stop caring about a variable and to consider that part of the function understood before moving on to a different part of the function! contrast this with `dup`, which tells you immediately and obviously, "we're leaving that on the stack for later and starting a new computation right now, so you can forget about that value until we're done considering the upcoming computation." see below for example.
+* debugging is simple because programs simply evaluate from left to right, and the only state that you must track is the data stack, and sometimes the retain stack, or dynamic variables. either way, it's very neat, clean, simple.
+* because words are so simply defined (as sequences of other words), the language is likely to have metaprogramming features, since implementing them is easy. this is what enables, in factor: macros, the ability to modify quoted programs as lists, introspection, redefinition.
+* for stacklangs, reading multiple inputs and returning multiple outputs are easy
+* both refactorability and the ability to compose & split (henceforth "splice") programs are important! that we can, in catlangs, splice code freely with certainty that *the parts being spliced remain independent* is too good to ever not have. being used to it, the idea that changing some code would cause other code to break is ridiculous! i.e. in catlangs, splicing doesn't entail resolving emergent namespace conflicts. no arbitrary subprogram should affect any other arbitrary subprogram!
+  ** for example, consider the nested j/k λ's namespace problem. it doesn't exist in factor, for any arbitrary number of compositions, since composition is just concatenation, and no part of a factor program affects others. in non-tacit langs, the very fact of a program growing is troublesome! that's a glaring design flaw!
+* implicit currying: `y f` is equivalent to `[ f ] curry call`.
+
+=== real-world examples of reading applicative code
+
+since i don't have any applicative code of my own, i went and got some from some projects.
+
+.bluez/src/adapter.c
+[source,c]
+------------------------------------------------------------------
+static void set_exp_debug_complete(uint8_t status, uint16_t len,
+					const void *param, void *user_data)
+{
+	if (status != 0)
+		error("Set Experimental Debug failed with status 0x%02x (%s)",
+						status, mgmt_errstr(status));
+	else
+		DBG("Experimental Debug successfully set");
+}
+------------------------------------------------------------------
+
+so how are you going to read this? you have 4 inputs. turns-out that only `status` is actually referenced in the function body. you wouldn't know that until you read through the _entire function body_! so what would you try to do in the general case? would you accumulate variables as they're introduced, always looking for when they're used, then try to relate it all? or would you ignore them and read through the code, looking-up each unknown symbol as you encounter them? that's a much more practical method, but then you'll be tracing through all of the prior code to build-up the symbol's current value, possibly tracing through state, or shadowing [scope], or in the simplest case, you'll have to search back to see where it was introduced!
+
+here's the factor translation:
+
+[source,factor]
+--------------
+: set_exp_debug_complete ( status len param user_data -- )
+  3drop dup
+  [ dup mgmt_errstr "Set Experimental Debug failed with status 0x%02x (%s)" sprintf error ]
+  [ "Experimental Debug successfully set" DBG ] if-zero ; static
+--------------
+
+. immediately, at `3drop` you know that you don't care about those variables. thus you're considering `status` (since it's the only thing on the stack!) or you're about to put something new on the stack
+. `dup` means that we're doing something with it while preserving it on the stack. `dup` before a conditional is common.
+. the rest is self-explanatory. `static` isn't a word in factor, but in factor, any adornments for the compiler follow word definitions.
+
+.rusty forecast's `weather.rs`
+[source,rust]
+--------------------------------------------------------------------------------
+fn fetch_weather_data() -> Result<WeatherResponse, Box<dyn std::error::Error>> {
+
+    let city_name = read_city_name()?;
+    let unit_value = read_unit()?;
+    let unit_type = if unit_value == "C" {
+        "metric"
+    } else {
+        "imperial"
+    };
+
+    let url = format!(
+        "http://api.openweathermap.org/data/2.5/weather?q={}&appid={}&units={}",
+        city_name, API_KEY, unit_type
+    );
+
+    let response: serde_json::Value = reqwest::blocking::get(&url)?.json()?;
+    if response["cod"] != 200 {
+        return Err(format!("Error: {}", response["message"]).into());
+    }
+    serde_json::from_value(response).map_err(Into::into)
+}
+--------------------------------------------------------------------------------
+
+firstly, what the hell is the author thinking with all this whitespace? very little being said here despite the amount of space it takes. sooo i see that we're letting many things be. we have a city name, unit value, unit type, a url, ...ok, so at this point i'm already thinking, "so what are we actually _doing_? i see that we _have_ these things, but i can't appreciate them because nothing's been said about them yet." keep in mind that for each variable encountered, i must look to see which of the prior-encountered variables its definiton includes. it turns-out that `url` is the first whose definition entails prior-bound variables. as it also _turns-out_, `city_name` and `_unit_type` are used _only_ in defining `url`, and `unit_value` is used _only_ in defining `unit_type` `unit_value` is near `unit_type` in source, but `city_name_ is very distant from its use in `url`. it'd have been nicer if it were actually used _near `url`_. all the `let`'s are pure, except for `response`, which is attained through i/o. it'd be nice if the syntax made obvious which things were pure or not!
+
+granted, this code could be styled better. this is the author's fault, not rust's. yet the author chose to code this way; somehow somethings ultimately suggested this style, and rust enabled it pretty easily. this style is not uncommon across applicative languages! i wonder why people choose to bind to variables rather than inlining their definiting expressions, and putting comments next to them to denote what concept their code represents.
+
+anyway, the factor translation, written in the way that a factor user would write it:
+
+[source,factor]
+--------------------
+: fetch_weather_data ( -- x )
+  read_city_name
+  API_KEY
+  read_unit "C" = "metric" "imperial" ?
+  "http://api.openweathermap.org/data/2.5/weather?q={}&appid={}&units={}"
+  format! reqwest::blocking::get json
+  dup "cod" at 200 =
+  [ "message" at "Error: {}" swap format! into Err ]
+  [ serde_json::from_value Into::into map_err ] ! i assume `obj.method(params...)` syntax to be like lua or python: syntactic sugar for method(obj,params...)
+  if ! we don't use "return" in factor, so i use 2-way `if`. i could have thrown an error, though, effectively returning the error.
+--------------------
+
+see, in factor one practically _must_ introduce things into the stack immediately before their use, yet makes code more readable; factor practically _forces_ its coder to write readable code! one is _very_ strongly behooved to keep items on the stack for the shortest time possible, and keep the stack short, which means that both the reader & author don't need to consider many variables simultaneously; reading factor code is a piecewise and fluid process. once something is put on the stack (i.e. once one reads the code, since factor is homoiconic), the reader expects it to be used very soon; or if it's not, then they expect that it plus some following few things will be used altogether. these are reasonable expectations and make reading factor code wonderfully predictable.
+
+how i read this factor code:
+
+[source,factor]
+----------------------------------------------------
+: fetch_weather_data ( -- x )
+  read_city_name                                     ! thing. to understand the code as i'm reading it, i must know that read_city_name has effect ( -- x ).
+  API_KEY                                            ! thing (constant).
+  read_unit "C" = "metric" "imperial" ?              ! thing as other thing (unit as metric or imperial based on equality with "C").
+  "http://api.openweathermap.org/data/2.5/weather?q={}&appid={}&units={}" ! thing (constant).
+  format! reqwest::blocking::get json                ! format! is effectful; by its nature, i must look at its format string to know
+                                                     ! which things are taken off the stack. i wouldn't be surprised to find that format!
+                                                     ! consumes the whole stack thus far, though. and indeed, it is so.
+                                                     ! ok, then we request from that obviously-url string then get json from it.
+  dup "cod" at 200 =                                 ! dup soon followed by predicate, so this dup is probably for an upcoming `if`; thus each branch has
+                                                     ! effect ( x -- ..b ). in fact, because `if` is the last word of this definition, i know ..b = x.
+  [ serde_json::from_value Into::into map_err ]      ! idk what this means beyond, "get some value of the json, then 'map_err' it in an 'into' way."
+                                                     ! i do know that i see `Into::into map_err` as one item, though; it's `map_err` parameterized by
+                                                     ! a literal, like how i see `10 log` as "base 10 log". it may as well be one unary, curried function.
+  [ "message" at "Error: {}" swap format! into Err ] ! i assume `obj.method(params...)` syntax to be like lua or python: syntactic sugar for method(obj,params...)
+  if                                                 ! we don't use "return" in factor, so i use 2-way `if`. i could have thrown an error, though, effectively returning the error.
+----------------------------------------------------
+
+i also see the leading literal format string as a parameter of `format!` separately from ``format!``'s arguments on the stack.
+
+''''
+
+totally tacit is a blessing! use/make combinators & quotation rather than shuffling. and yes, arg ord is an important part of tacit program design, just like it is in haskell! although, factor's `swap` is much easier to reason about than haskell's `flip`! this fact generalizes.
+
+lessons:
+
+* demand of your language:
+  ** mini
+    *** efficient
+    *** simple implementation
+    *** concatenative; binding to variables and scoping is just stupid:
+      **** makes metaprogramming a bitch (e.g. macro hygeine)
+      **** bloats your code with binding & scoping syntax (`let ... in ...`)
+      **** forces you to specify variable names all over the place
+      **** prevents function composition from being implicit, so you must either use a composition operator (haskell `h.g.f` or j `h@g@f`) or stick an argument into the first function (haskell `h.g.f$y` or j `h g f y`), which is asymmetric
+      **** makes refactoring _awful_
+    *** simple language/computation model
+    *** minimal (number of rules) & terse (number of encoded symbols) syntax. should be natural if the language model is simple.
+    *** symmetric syntax
+      **** no operator precedence
+  ** flexible
+    ** interpreted. compilation optional.
+    ** dynamic
+      *** makes metaprogramming equal programming. factor is perfect example: all quotations are lists of words, which always have obvious definition because there's no scoping / local variables, so subprograms are created, modified, and applied all over the place.
+      *** playing with your living program is a joy and natural way to play with and explore things, and programs are no exception. you should be able to change your program as it's running. this makes debugging easy. it can even be useful in the program's normal course, such as modifying a server while it's running.
+  ** good builtin unicode support
+  ** virtual sequences or virtual operations e.g. factor's sequences: `<zipped>`, `<reversed>`, `<iota>`, &c.
+    *** sequences should implicitly virtually be dicts
+  ** easily transmutable data structures & flows. this doesn't necessarily mean "untyped" or few structures, though those are correlated conditions; for example, factor's type system, despite being nominal, is beautifully flexible, and there's no unnecessary code that converts among types. "converting to the `<reversed>` type" is a necessary conversion because it's equivalent to performing the `reverse` operation and is the same amount of syntax to do so (each is one word.)
+  ** (efficiently) mutable data structures. haskell and scheme are terrible for this; their linked lists cannot be modified easily. ideally one can specify a map of indices to functions, and apply that to an indxed structure to update it. given how easy that is, we shouldn't settle for less!
+* indexing from 1 is proof that satan is alive & well today
+* it's a language's perogative to _enable_ the programmer to relate & manipulate information, and the programmer's perogative to use the language sensibly, correctly, responsibly. so don't settle for a language that imposes constraints that aren't implied by the language's design itself; similarly, never use an overspecified language!
+  ** if you want correctness, choose convention, not rules. it helps code be mnemonic anyway. the goal is to prevent mistakes, not make them impossible. we want accident prevention, not making "incorrectness" impossible. "correct" may, in any occasion, change. there are exceptions to every rule. rather than designing "robust systems with escape hatches", design systems where costly mistakes are hard to accidentally do, and uncostly mistakes are easy to spot in code or as the program runs.
+  ** don't allow yourself to be constrained to referential transparency unless it earns you appreciable parallelism at no-to-little extra cost.
+  ** (mandatory) (nominal) type systems are 100% pure, uncut ass. just say no. you can implement your own type systems or other constraints/checks easily, so diy or get a separate package/module for it.
+  ** even factor's stack checker, which is usually good, prevents us from using `each` to modify the stack, which is a pretty basic & common need; to effectively do this, we must be verbose or hack around it.
+
+after using factor (stack lang), applicative programming feels like stringing countless wires from functions' output nodes to other functions' input nodes. if that isn't spaghetti programming then i don't know what is. by contrast, factor feels like the incremental modification that it is. no wires in factor—only code blocks that can be freely rearranged.
+
+factor is just a better version of scheme. it's the same thing but actually done well: effortless object transmutation, virtual sequences, &al miscellany, and the simultaneous elimination of parentheses and tacit function composition.
+
+we know the phrase "no stinkin' loops." sure. true, even in haskell and scheme we find ourselves writing manual loops for functionality or efficiency. in factor this is very rare since factor has virtual sequences and efficient, mutable vectors, hashtables, etc. ofc in factor we use `map` &c. using haskell or scheme, if you're avoiding mutation, then you're greatly encumbered and may have to use manual loops just to decently-elegantly code state updates. rather than "loops" stinking, it's really syntax about them that sucks, so we see that it's actually syntax in general that sucks—nothing to do with loops themselves. obviously forths & apls are low-syntax, regardless of how "terse-in-chars" they are. even new langs that are to replace c in all or many cases, such as go, v, zig, rust, have even more syntax than c. has something so basic not been learned already? forth, lisp, and apl are the oldest langs, have been used in such amazing places as outer space and financial institutions, yet...even in the 2010's—40 years later—people are repeating algol's mistake.
+
+.other considerations
+
+* safety, such as correctness or memory safety
+* parallelism
+* concurrency
+
+.other langs
+
+alternatives to c: go, zig; commonly rust or v
+(better) alternatives to haskell: ocaml, erlang, pony
+
+.the lang that we need
+
+cat w/walker, smol codebase, efficient, terse, overloaded, good prim structs & ops, no import, interpreted w/optional compilation.
+
+to consider "catlog" i must consider cat versions of prolog's prim(s). consider prims for dataflows vs..."implied relations"? i must become more familiar with how prolog & haskell differ! i know one excellent thing about prolog, though: each variable represents a set!
