@@ -1,0 +1,281 @@
+= k (my preferred apl)
+
+some example code is copied from <https://xpqz.github.io/kbook/index.html>.
+
+== metanotes
+
+this doc discusses k as a proglang, an apl, k itself, and specific implementations of k, in that order.
+
+=== apls
+
+* applicative, not concatenative :( expect to use parens. at least it's semi-concatenative; parens aren't needed for _all_ subexpressions—only some, like haskell's `f . g $ x` notation. in fact, k's type-based multi-dispatch and syntax make it quite like a lean, interpreted haskell that disallows adding new types and whose builtin types are simple.
+  ** fortunately, afforded by limited arity, arguments are not named.
+  ** use parens where in factor you'd use brackets; this clearly/visually denotes subprograms. hopefully k enables multiline formatting like factor.
+  ** effectively, pointfree/tacit notation is used when argument are passed to a (composed) function.
+  ** no support for multiple outputs, except as effectively done by returning them as (boxed) array elements, but this requires unpacking. this would be fine if we could pattern-match them out like in ml, haskell, erlang, prolog.
+* i'm unaware of any debugging tools! 81
+* overloaded 1/2-adic operators
+* no (good) support for 1st-class functions, let alone programs. like factor, such things are done by quoting programs (as strings or boxed nouns) then effectively calling `eval` on them; however, unlike factor, apls are not homoiconic, and one must manipulate syntax, not program objects (e.g. factor word sequences or lisp sexps).
+* non-concatenative. simple, terse, but hard-to-read syntax
+* operations are symmetric over sequences of char or num. the sequences are: for apl, n-dim flat; for j, that or boxed; for k, linked lists, so effectively everything is boxed, except there's no unboxing; all arrays are ragged, so there are no fill rules. idk if k has rank like j does.
+  ** note that flat or homogenous arrays are quite constrained; generally data is non-uniform in its dimensionality and type. a language should never have a ceiling on generalization! not only does it limit power, but expressivity, too. for example, if we take integration and differentiation to be dualistic, separate operations, and force them as primitives, then we cannot afford unifying them as fractional derivatives/integrals. i'd much rather have D(1) & D(-1) than ∂(1) & ∫(1), and i want to be able to implement that myself if the language hasn't already done it for me.
+* usually interpreted
+
+=== k
+
+* canonically, tiny language implementation, built for speed & brevity, and rebuilt from scratch often
+* especially overloaded; even an operator with a given arity may have many entirely different definitions depending on its arguments' types.
+* nomenclature is same as j
+
+==== k vs j
+
+k is categorically better than j:
+
+* vectors instead of arrays
+  ** no boxing
+  ** no rank system; simply use adverbs to iterate
+  ** 1st-class functions can be in vectors plainly. no particular system like gerunds. you can stright-up do `(*{4+x},3 4)@64`
+* dicts
+* fewer, overloaded verbs is better than more verbs many of which have a colon, which is harder to read
+* verbs can actually be defined with more than 2 args
+* more-sensible verbs both by notation and functionality e.g:
+  ** `f\` instead of `f^:a:`, which is a more consistent mnemonic and syntactically plainer
+  ** `#` instead of `{` & `}`
+* there's no function composition in k...not sure if that's better or worse. j's fncomp was good but flawed; i'm unsure whether such things should be boldy discarded, or retained despite that they only offer convenience rather than a robust programming code.
+* k is easily learned in a weekend
+
+verbs in j but not k; i wonder how to implement these in k:
+
+* key
+* shift
+* is `=` equivalent for j & k?
+* k has no support for complex numbers!
+* is E. in k? i can't find it! idk how i'd implement it.
+
+=== implementations
+
+i'm going to consider this only after i use ngn/k. i'll use it as my _de facto_ k before i choose another, just because it's said to be good, and it's accessible, easy, small. it's perfectly sufficient for using and learning k. i can choose practical versions later, after becoming familiar enough with k to immediately appreciate nuances among implementations.
+
+[options="header"]
+|=======================================================================================================
+| name                                                 | impl lang | k ver | notes
+| link:https://github.com/ktye/i[i]                    | go        | ?     | -
+| link:https://anaseto.codeberg.page/goal-docs/[goal]  | go        | -     |
+| link:https://codeberg.org/ngn/k[ngn/k]               | c         | 6     | unmaintained since jan 2024
+| link:https://github.com/kevinlawler/kona/wiki[kona]  | c         | 3     | 1st open k, so good wiki
+| link:https://t3x.org/klong/klong-ref.txt.html[klong] | c         | -     |
+| link:https://github.com/zholos/kuc/[kuc]             | c         | 5     |
+| link:https://github.com/JohnEarnest/ok/[oK]          | js        | 5,6   |
+|=======================================================================================================
+
+k3 & k6 much differ. this document details k6 & ngn/k yet.
+
+=== why/when to use k
+
+measured by criteria in `~/codenotes/langs.adoc`, k scores high. it isn't ideal, but it's close. about the only real issue with it is that it's semi-concatenative; fortunately in practice this is tolerable, especially with k being so terse.
+
+* scripting: terse, no imports needed, interpreted.
+* dataflow notation, or if you've been using character-stream based interfaces enough to be tired of typing loads of shit, without typos, often redundantly many times
+
+the whitney design argument about seeing all code in one place is good. however, to accomplish this by making code syntax terse assumes that we're displaying text in the common manner in a text editor. because text is a much poorer code than graphical ones, and should generally be so deprecated anyway, the terse syntax argument is moot.
+
+=== my opinion of k, now using it after i've become most used to factor
+
+* k's ridiculous overloading is awesome. it's not an issue as long as the operator's context is clear, which is true when using literals or conventions that preface variables with a single character denoting their types.
+* parsing is easy (but takes some practice) as long as i can read rtl, notice verb-adverb pairs, and know that left args are delimited; i don't want to ever deal with operator associativity levels. those suck. reading from the right is odd, too, since it makes newlines special syntax.
+  ** consider this arbitrary k code: `:m:(("forward";"down";"up")~/:\:d[;0])*\:d[;1]` i tried copying then evaluating `d[;0])*\:d[;1]` to see what its value was, to try to visualize what's happening, only to find that it's malformed: there's a mismatched right parenthesis! fair enough, but not nearly as readable as factor. it's the same parsing as we see in factor: parse from one side, then parse a delimited subprogram, then consider them together. the same code, in concatenative style: `d [;1] d [;0] ( "forward" "down" "up" ) ~/:\: *\: m: :`. the whitespace makes confident parsing by eye much faster & easier! the dis/association is immediately obvious. refactoring is a load easier, too; if seeing the parens is already error prone, imagine what hell refactoring is; if you mismatch a parenthesis, then you're screwed! and because of k's extreme overloading, your mistake program may give a _totally_ different result from what you'd expected, so identifying what the refactoring mistake was would be very difficult & painful. the concatenative syntax shows that the code can be factored in the beginning, too: `d [;1] d [;0]` becomes `d [;1] [;0] bi`. we can then remove the input, `d`, and have a subprogram disassociated from any arguments. it also shows that parts of the program are related by `d` commonly and are computed next-together; the delimiting/separating parens of the original k expression suggest separation of `d[;0]` & `d[;1]`, and it's not obvious to think that they're computed next-together.
+
+TODO: why doesn't this happen in good factor code? when i was new to factor, i had horrible code because i was doing manual loops, but also that i would build-up the stack in complicated ways, leaving a complex stack to be consumed by various subprocesses such that my code didn't permit easy refactoring, which is analagous to this unreadable k. i think it's because i used stack words instead of combinators and quotations. *one thing's certain: programs are easier to consider as incremental state changes than as gargantuan monoliths of nested subexpressions.* compared to factor, maybe the k code is weird b/c the parenthesized part is an expression rather than a program, and that the parenthesized expression is an argument to a verb rather than an adverb?
+
+anyway, other booboo about the k code:
+
+* i don't know in which order each subprogram is evaluated; if there are side effects then this is an issue!
+* though we usually read from right to left, this code is more easily read from left to right, since the left arg to `*\:` is more complex.
+* parsing-out `~`, `/:`, and `\:`, among an arbitrary line of such code, is ugly. i don't care if the computer can do it; i'm a human, and such coding is unnatural and thus error-prone, stressful, and inefficient for me.
+
+==== k vs factor
+
+verdict: if k were purely tacit / concatenative, and readable, then i'd love it. because it's not both, it's intolerable. it's set in stone that it isn't purely tacit. if it were purely tacit, then the one-statement-per-line rule wouldn't make any sense, so it'd be nixed, and the dyadic syntax couldn't exist anymore, so that wouldn't be an issue, and thus k would be readable. k is not worth using until it's made totally tacit.
+
+* k has subexpressions. factor has only subprograms, b/c it's purely tacit.
+* needing to "lookahead" to the left of a verb to determine whether it's unary or binary is horrible. look at this definition of quicksort: `f:{$[2>#?x;x;,/o'x@&'~:\x<*1?x]}`. how long does it take you to tell me what the hell is going on here? does this code feel natural? where do you start? you can't start from the right, since the whole thing is a conditional statement, which evaluates from the left. of course it's at `,/` that things actually start getting k-ish. since i'm starting from the left, i see that `,/` is unary. i can easily read the pair as one verb. fine. then i see `o`
+* where k beats factor (in practice; factor has strictly greater capability):
+  ** terse: avoids shit that isn't strictly encoding the program logic itself. needing to type multiple characters is a needless pain just like needing to compile, or scaffold a project, or any other assumed, imposed constraint that could theoretically be removed or modified without affecting the program itself. we are humans coding; our needs are important, and our coding methods must reflect that! the code itself is generated by our methods, and is so related to them; it's appropriate for us, as one aspect of our method, to choose codes that suit our ability to code them and reason about them!
+  ** overloaded: each verb is a concept with multiple varieties as it's applied to specific contexts (nouns). this is a natural separation and combination of verbs and nouns, which makes reasoning about program design easy. it also avoids trying to name conceputally similar or homomorphic operations e.g. in factor the separate words `remove` for sequences and `delete` for sets, despite them being the same damn thing! but nope, due to types, they aren't interchangeable!
+  ** powerful mechanisms for relating structures' elements
+  ** lookup is assumed when a noun is used as where a verb is expected
+  ** dictionary/vector symmetry
+* where factor beats k:
+  ** walker (debugger)
+  ** concatenative. in a nutshell: incremental data pipeline construction, spilicable & (re)factorable programs
+* both have excellent documentation. factor's is interactive at the cost of being specialized, whereas link:https://codeberg.org/ngn/k/src/branch/master/repl.k[k's] is accessible since it's just text. it's small & succinct.
+* to be able to collect intermediate values from any loop is cool. the backslash verbs do this.
+* very optimized, small implementations are very cool: they afford codes that would otherwise be too inefficient. still, though, mostly virtual operations afford that.
+
+===== which words i use in factor vs which verbs are available in k
+
+* arithmetic, obviously
+* nth (usually first, second, third)
+* append/prefix/suffix/push
+* set-at, at; sometimes delete-at*
+* assoc-merge
+* accessors & setters
+* map, filter
+* 2map
+* narray
+* find, subseq?
+* sometimes reverse or sort
+* ...
+
+...it's funny: now that i'm looking for k verbs in my factor code, i see very little logic; i see combinators, accessors, shuffle words, i see that programs are very little logic; they're mostly just plan instructions sequenced correctly.
+
+== k notes
+
+=== semantics
+
+* apparently evaluates from the left, as `(b;(c;d)):(2 3;4 5);c` suggests; `c` is to the right of `;` yet at that time `c` has the value 4.
+* vector—not array—language.
+  ** dicts are just pairs of vectors. they are ordered.
+* an n-dim vector maps n coordinates to its unique elt
+* scalars are exactly 0-dim vectors. an empty vector can be used to index into a scalar.
+* like j, verbs may be _atomic_: they apply to all atoms of a vector (TODO: what about dicts?)
+* scalars are broadcast
+
+TODO: what are "tables" and "prototypes?" the link:https://wiki.cor.fyi/wiki/Ngn/k[k wiki] says that ngn/k supports tables w/o prettyprint, and partial support for prototypes. kona hasn't tables but has prototypes.
+
+hopefully rank must be explicit in k. rank should always be explicit as a general coding convention. k's `each` probably does that.
+
+.beautiful dictionary/vector symmetry
+
+each'ing (a monadic verb) over a vector applies to a vector's elements, not its indices. likewise, eaching over a dict applies to its values, leaving its keys in tact e.g. `{5+x}'`a`b`c!1 2 3` returns ``a`b`c!6 7 8`.
+
+[source,k]
+&`rita`bob`sue`adam`frank!0 0 1 0 1      / keys which have a value of 1: `sue`frank
+(`bob`adam`sue`rita!23 54 12 82)?12      / find key by value: `sue. if vals were ordered, then we'd be able to use X'
+&5=`bob`adam`sue`rita!5 1 5 3            / all keys having a value 5: `bob`sue
+|\`rita`bob`sue`adam`frank!12 7 87 32 11 / returns `rita`bob`sue`adam`frank!12 12 87 87 87
+
+=== types
+
+types are here listed with a common shorthand:
+
+[options="header"]
+|=================================================
+| sym               | name               | defval
+| c                 | char               |
+| i                 | int                | 0
+| n                 | number (int|float) | 0[.0]
+| s                 | symbol             |
+| a                 | atom               |
+| d                 | dict               |
+| f                 | monadic func       |
+| F                 | dyadic func        |
+| any of x, y, or z | any                | <n/a>
+|=================================================
+
+excepting `F`, a lowercase letter means a scalar, and a capital one a vector; e.g. `C` means a string and X or means "a vector of anything."
+
+these symbols are used by cast ($/2) and type (@/1).
+
+=== syntax
+
+* right-associative
+* conditional branching: `$[p1;f1;p2;f2;...;else]`
+* literals:
+  ** symbol: +++`sym+++
+  ** vector: `(a;b;...)`
+  ** dict: `[k:v;...]` (not in ngn/k, apparently?) or construct using `!2`
+  ** function: `{...}`. unlike j, unary functions' arg is called `x`. example: `{z%y+x}[30;20;10]` returns 0.2. idk about taking 4+ args.
+  ** null: `0N`
+  ** negative literals are as in most langs: hyphen immediately followed by a number literal
+* slash begins line comment
+* `o` is like apl ∇ e.g. `{$[x<2;x;+/o'x-1 2]}9` returns 34
+* `[stmt1;...]` is progn [lisp]. idk when this would be needed in k.
+* `(v;...):y` pattern matches/binds e.g. `(b;(c;d)):(2 3;4 5)` binds `b` to `1 2`, `c` to 4, and `d` to 5.
+* indexing / fn call:
+  ** f[x;y;z;...]
+  ** f@y
+  ** index into x: juxtaposed nouns (`x y`), x@y or x[y]
+  ** `m[i]`. deep is `x[i;j;...]` (multi-parameter function punning). `x[i][j]...` naturally works, too, but due to asymmetry with assignment (see below), i recommend against it.
+    *** omitting an index on a side of a semicolon means "all" e.g. `(4 5#!20)[;1]` returns the 2nd column, `1 6 11 16`
+    *** selecting multiple indices at depth: `(4 5#!20)[(0 1;1 2)]`. the parenthesis make this one vector index rather than multiple nested indices.
+  ** indexing into a dict is the same as indexing into a vector, but with the dict's keys instead of an integer index
+* setting a value at a given index: `m[i;j;...]: v`. `m[i][j]...:v` is illegal.
+
+you can put into a dict `d` by the following syntax: `d[`k1`k2`...]:v1 v2...`.
+
+TODO: understand indexing exactly. `(4 5#!20)[0 1][1 2]` differs from `(4 5#!20)[0 1;1 2]` and isn't indxing at depth (so says xpqz). he may certainly be correct, as idk what semicolon means.
+
+=== verbs
+
+in this table, i mean `x` as the left arg and `y` as the right.
+
+[options="header"]
+|============================================================================
+| symbol | monad                                                   | dyad
+| :      | right                                                   | bind local
+| ,      | make singleton of +1-dim                                | concat
+| #      | count                                                   | shape (implies take (from end if x<0) if |x|<#y, or repeat if x>#y); or select dict (y) entries by (symbol or char) keys (x); or if x is a fn then apply to each of y's elts and its respective outputs to set that elt's resultant count
+| +      | transpose                                               | add
+| -      | neg                                                     | sub
+| *      | 1st [val, if dict]                                      | mul
+| %      | sqrt                                                    | div
+| !      | i. (0D) or permutations (1D); or a dict's keys          | dict of keys!vals, or div if num<0, or mod if num>0; *div & mod are denom!num*
+| &      | bools -> idxs or "1st non-0's"                          | min (implicitly boolean product)
+| \|     | reverse                                                 | max (implicitly boolean coproduct)
+| < & >  | grade [keys] up or down; or open/close file/socket/fd   | lt/gt
+| =      | "group" (decomp vec into set & idxs) or identity matrix | atomic equality
+| ~      | not                                                     | match (same shape & values)
+| ^      | `null?`                                                 | set y's nulls to x, or multiset difference (factor's `without`)
+| \_     | floor or `>lower`                                       | x:ℤ, y:1D: drop (from end if x<0); x:1D, y:ℤ: delete from x at idx y; x:1D, y:1D: split y at x (x is idxs, not logical vec); x:fn, y:1D: filter-out
+| $      | `[ >string ] map`                                       | x:ℤ, y:str: pad on right (or left if x<0); type cast (see below)
+| ?      | nub                                                     | argeq (find ret idx); n rand vals of set given by y. x<0=>pick w/o replacement, in which case |x|>=#Y => length error, where Y is the set described by y.
+| \\ & / | -                                                       | x:str, y:str: split & join; x:ints, y:ints: encode & decode as in j. behavior (about shaping) varies among k's.
+| .      | eval k syntax string, or get a dict's vals              | call x with argvec y
+| @      | type                                                    | call unary x with arg y
+| ::     | identity                                                | bind global
+|============================================================================
+
+* what the hell does `;` do? looks like it separates statements, and that, of semicolon-delimited statements, they're evaluated let-to-right
+* is there really to gte/lte? to be fair, those aren't really helpful; for integers, just +1 or -1, and floats aren't precise anyway, so equality is an infinitesimal difference anyway! instead of `gte 0` you can do `>1e-9`.
+* there's a right (:) but not a left?
+* there's a floor but no ceiling! this is ok: ceiling is so defined in factor: `: ceiling ( x -- y ) neg floor neg ;` indeed, even floor isn't a primitive in factor.
+* reshape with `0N` means "unbounded" e.g. `0N 3#!10`
+* example i/o: `myFD:<`"/path/to/file.txt"` then `>myFD` to close it.
+
+others:
+
+-----------------------------------------------------------------=
+.S get       a:1;.`a -> 1   b.c:2;.`b`c -> 2 / like j's reflex, ~m
+@[x;y;f]   amend  @["ABC";1;_:] -> "AbC"   @[2 3;1;{-x}] -> 2 -3
+@[x;y;F;z] amend  @["abc";1;:;"x"] -> "axc"   @[2 3;0;+;4] -> 6 3
+.[x;y;f]   drill  .[("AB";"CD");1 0;_:] -> ("AB";"cD")
+.[x;y;F;z] drill  .[("ab";"cd");1 0;:;"x"] -> ("ab";"xd")
+.[f;y;f]   try    .[+;1 2;"E:",] -> 3   .[+;1,`2;"E:",] -> "E:typ"
+?[x;y;z]   splice ?["abcd";1 3;"xyz"] -> "axyzd"
+-----------------------------------------------------------------=
+
+=== adverbs
+
+the following are verbs given in terms of adverbs and an argument of a given type.
+
+[options="header"]
+|============================================================================================================================
+| symbol w/types | function
+| f'             | map/each
+| [x]F[/\]       | left fold or scan. output's dim is input's - 1. x is optional init val. scans are as efficient as folds.
+| [x]F':         | factor `dup first empty prefix [ F ] 2 clump-map` where `empty` here gives empty type values. that prefix is added only if x isn't given.
+| F[\/]:         | `F"_1 _` or `F"_ _1`. `F/:\:` is used for...some complicated shit that apparently has a purpose. see the above example.
+| [i|p] f[/\]    | do `f` `i` times or do `f y` while `p y`. if `i`/`p` isn't given, then `f` is applied until it returns either the initial or convergent value. using a backslash collects intermediate values like a scan.
+| i':x           | length `i` window (clump) of vector `x`
+| i f':          | "stencil": window with `f` applied to each window. the fact that this exists implies that i':x isn't virtual as it is in factor (`<clumps>`), which is sad. stencil exists only to be more efficient.
+| X'             | interval index (j's `I./2`), which generalizes binary search
+|============================================================================================================================
+
+NOTE: you cannot have a space between argument and `/`, since in that case `/...` will be treated as a comment
+
+=== tools
+
+==== repl
+
+* `\+` is supposed (by xpqz) to list verbs, but does not; it prints `'nyi`.
