@@ -1,4 +1,7 @@
-= k (my preferred apl)
+= k
+nic chandoke's notes
+
+:toc:
 
 some example code is copied from <https://xpqz.github.io/kbook/index.html>.
 
@@ -18,7 +21,7 @@ this doc discusses k as a proglang, an apl, k itself, and specific implementatio
 * no (good) support for 1st-class functions, let alone programs. like factor, such things are done by quoting programs (as strings or boxed nouns) then effectively calling `eval` on them; however, unlike factor, apls are not homoiconic, and one must manipulate syntax, not program objects (e.g. factor word sequences or lisp sexps).
 * non-concatenative. simple, terse, but hard-to-read syntax
 * operations are symmetric over sequences of char or num. the sequences are: for apl, n-dim flat; for j, that or boxed; for k, linked lists, so effectively everything is boxed, except there's no unboxing; all arrays are ragged, so there are no fill rules. idk if k has rank like j does.
-  ** note that flat or homogenous arrays are quite constrained; generally data is non-uniform in its dimensionality and type. a language should never have a ceiling on generalization! not only does it limit power, but expressivity, too. for example, if we take integration and differentiation to be dualistic, separate operations, and force them as primitives, then we cannot afford unifying them as fractional derivatives/integrals. i'd much rather have D(1) & D(-1) than ∂(1) & ∫(1), and i want to be able to implement that myself if the language hasn't already done it for me.
+  ** note that flat or homogenous arrays are quite constrained; generally data is non-uniform in its dimensionality and type. a language should never have a ceiling on generalization! not only does it limit power, but expressivity, too. for example, if we take integration and differentiation to be dualistic, separate operations, and force them as primitives, then we cannot afford unifying them as fractional derivatives/integrals. i'd much rather have D(1) & D(-1) than ∂(1) & ∫(1) (and D(-2) instead of ∬), and i want to be able to implement that myself if the language hasn't already done it for me.
 * usually interpreted
 
 === k
@@ -35,7 +38,7 @@ k is categorically better than j:
   ** no boxing
   ** no rank system; simply use adverbs to iterate
   ** 1st-class functions can be in vectors plainly. no particular system like gerunds. you can stright-up do `(*{4+x},3 4)@64`
-* dicts
+* dicts (i'm unsure if these are inferior to vectors of arbitrary-type/shape elements. at least dict-fn-vec equivalence is good.)
 * fewer, overloaded verbs is better than more verbs many of which have a colon, which is harder to read
 * verbs can actually be defined with more than 2 args
 * more-sensible verbs both by notation and functionality e.g:
@@ -43,14 +46,36 @@ k is categorically better than j:
   ** `#` instead of `{` & `}`
 * there's no function composition in k...not sure if that's better or worse. j's fncomp was good but flawed; i'm unsure whether such things should be boldy discarded, or retained despite that they only offer convenience rather than a robust programming code.
 * k is easily learned in a weekend
+* because j verbs aren't 1st-class, j has a special tacit dsl. b/c k verbs are 1st-class, there's no need for a dsl; we can just define combinators such as `fork2:{[f;g;h;x;y] g[f[x;y];h[x;y]]}`. that being said, (ngn/)k _does_ have a dsl, described below.
+
+.differences from j
+
+* user-defined k verbs can have only one valence. this asymmetry against builtin k verbs is odd but not necessarily bad. then again, user-defined k verbs can have up to 8 args.
+* in k's grammar, all the following are nouns: parenthesized exprs, lambdas, identifiers.
+
+k's trains differ from j's:
+
+.k trains
+[options="header"]
+|===========================================================
+| name                      | juxtaposition seq | definition
+| "projection" (left-curry) | N V               | `(xf)y` <=> `xfy`
+| composition               | N/V ... V         | `(fg...h)[x;y]` <=> `fg...(xhy)`. `(fg)xy` cannot be applied in-place e.g. +++(5+)(*)[6;7]+++ is valid (47) but +++7(5+)(*)6+++ is a type error. example from link:https://ngn.codeberg.page/txt/tacitjk.pdf[ngn's pdf]: +++(1-_%*)[x;y] <=> 1-_%*[x;y] <=> 1-_%x*y+++
+|===========================================================
+
+k' trains' utility is mainly refactorability, but also brevity.
+
+* hook as a k train: `f/1 g\`. `1 g\` produces a 2-vector `(x;g x)`; then fold `f` over (insert between) those 2 args.
+* fork as a k train: `g/(f;h)@\:`. it applies each of `f` & `h` to the argvec, returning a 2-vector, then folds `g` over (inserts between) those results.
+* `({10+x};(20+))@\:15` returns `25 35`
 
 verbs in j but not k; i wonder how to implement these in k:
 
-* key
-* shift
+* key (group by)
+* rotate & shift
 * is `=` equivalent for j & k?
-* k has no support for complex numbers!
-* is E. in k? i can't find it! idk how i'd implement it.
+* k has no support for complex numbers!?
+* is `E.` in k? i can't find it! idk how i'd implement it.
 
 === implementations
 
@@ -68,37 +93,56 @@ i'm going to consider this only after i use ngn/k. i'll use it as my _de facto_ 
 | link:https://github.com/JohnEarnest/ok/[oK]          | js        | 5,6   |
 |=======================================================================================================
 
-k3 & k6 much differ. this document details k6 & ngn/k yet.
+k3 & k6 much differ. this document details k6 & ngn/k yet. a section comparing k3 & k6 will be added. it's been implied that k3 & k4 are practically interchangeable, as are k5 & k6.
 
 === why/when to use k
 
-measured by criteria in `~/codenotes/langs.adoc`, k scores high. it isn't ideal, but it's close. about the only real issue with it is that it's semi-concatenative; fortunately in practice this is tolerable, especially with k being so terse.
+measured by criteria in `~/codenotes/langs.adoc`, k scores high. it isn't ideal, but it's close. about the only real issue with it is that it's semi-concatenative; fortunately in practice this is probably tolerable if you style your code well, especially with k being so terse. to be determined.
 
 * scripting: terse, no imports needed, interpreted.
 * dataflow notation, or if you've been using character-stream based interfaces enough to be tired of typing loads of shit, without typos, often redundantly many times
+  ** it's really cool to be able to memorize programs or use low interfaces such as a smart phone, small keyboard, or just pen & paper to develop code. pen & paper isn't too much worse than the interactive repl, since the repl doesn't have a debugger anyway.
 
 the whitney design argument about seeing all code in one place is good. however, to accomplish this by making code syntax terse assumes that we're displaying text in the common manner in a text editor. because text is a much poorer code than graphical ones, and should generally be so deprecated anyway, the terse syntax argument is moot.
+
+*an important reason to use k* is to become familiar with its primitives: sets, seqs, maps. k is all the good primitives and structures. regardless of whether you use k, everyone should master designing k programs so that they can use those designs in _all_ programming, hopefully in a tacit, readable, metaprogrammable, virtual-operation language. it's also small enough (20 prims, and short code) that you can reason about it in your mind. you can even memorize codes by using person-object-action mnemonics.
 
 === my opinion of k, now using it after i've become most used to factor
 
 * k's ridiculous overloading is awesome. it's not an issue as long as the operator's context is clear, which is true when using literals or conventions that preface variables with a single character denoting their types.
 * parsing is easy (but takes some practice) as long as i can read rtl, notice verb-adverb pairs, and know that left args are delimited; i don't want to ever deal with operator associativity levels. those suck. reading from the right is odd, too, since it makes newlines special syntax.
-  ** consider this arbitrary k code: `:m:(("forward";"down";"up")~/:\:d[;0])*\:d[;1]` i tried copying then evaluating `d[;0])*\:d[;1]` to see what its value was, to try to visualize what's happening, only to find that it's malformed: there's a mismatched right parenthesis! fair enough, but not nearly as readable as factor. it's the same parsing as we see in factor: parse from one side, then parse a delimited subprogram, then consider them together. the same code, in concatenative style: `d [;1] d [;0] ( "forward" "down" "up" ) ~/:\: *\: m: :`. the whitespace makes confident parsing by eye much faster & easier! the dis/association is immediately obvious. refactoring is a load easier, too; if seeing the parens is already error prone, imagine what hell refactoring is; if you mismatch a parenthesis, then you're screwed! and because of k's extreme overloading, your mistake program may give a _totally_ different result from what you'd expected, so identifying what the refactoring mistake was would be very difficult & painful. the concatenative syntax shows that the code can be factored in the beginning, too: `d [;1] d [;0]` becomes `d [;1] [;0] bi`. we can then remove the input, `d`, and have a subprogram disassociated from any arguments. it also shows that parts of the program are related by `d` commonly and are computed next-together; the delimiting/separating parens of the original k expression suggest separation of `d[;0]` & `d[;1]`, and it's not obvious to think that they're computed next-together.
+  ** consider this arbitrary k code: +++:m:(("forward";"down";"up")~/:\:d[;0])*\:d[;1]+++ i tried copying then evaluating +++d[;0])*\:d[;1]+++ to see what its value was, to try to visualize what's happening, only to find that it's malformed: there's a mismatched right parenthesis! fair enough, but not nearly as readable as factor. it's the same parsing as we see in factor: parse from one side, then parse a delimited subprogram, then consider them together. the same code, in concatenative style: `d [;1] d [;0] ( "forward" "down" "up" ) ~/:\: *\: m: :`. the whitespace makes confident parsing by eye much faster & easier! the dis/association is immediately obvious. refactoring is a load easier, too; if seeing the parens is already error prone, imagine what hell refactoring is; if you mismatch a parenthesis, then you're screwed! and because of k's extreme overloading, your mistake program may give a _totally_ different result from what you'd expected, so identifying what the refactoring mistake was would be very difficult & painful. the concatenative syntax shows that the code can be factored in the beginning, too: `d [;1] d [;0]` becomes `d [;1] [;0] bi`. we can then remove the input, `d`, and have a subprogram disassociated from any arguments. it also shows that parts of the program are related by `d` commonly and are computed next-together; the delimiting/separating parens of the original k expression suggest separation of `d[;0]` & `d[;1]`, and it's not obvious to think that they're computed next-together.
 
-TODO: why doesn't this happen in good factor code? when i was new to factor, i had horrible code because i was doing manual loops, but also that i would build-up the stack in complicated ways, leaving a complex stack to be consumed by various subprocesses such that my code didn't permit easy refactoring, which is analagous to this unreadable k. i think it's because i used stack words instead of combinators and quotations. *one thing's certain: programs are easier to consider as incremental state changes than as gargantuan monoliths of nested subexpressions.* compared to factor, maybe the k code is weird b/c the parenthesized part is an expression rather than a program, and that the parenthesized expression is an argument to a verb rather than an adverb?
+TODO: why doesn't this happen in good factor code? when i was new to factor, my code was horrible because i was doing manual loops, but also that i would build-up the stack in complicated ways, leaving a complex stack to be consumed by various subprocesses such that my code didn't permit easy refactoring, which is analagous to this unreadable k. i think it's because i used stack words instead of combinators and quotations. *one thing's certain: programs are easier to consider as incremental state changes than as gargantuan monoliths of nested subexpressions.* compared to factor, maybe the k code is weird b/c the parenthesized part is an expression rather than a program, and that the parenthesized expression is an argument to a verb rather than an adverb?
 
 anyway, other booboo about the k code:
 
-* i don't know in which order each subprogram is evaluated; if there are side effects then this is an issue!
+* perhaps, tracking order in which ast is evaluated is difficult, which would be an issue for non-pure code.
 * though we usually read from right to left, this code is more easily read from left to right, since the left arg to `*\:` is more complex.
 * parsing-out `~`, `/:`, and `\:`, among an arbitrary line of such code, is ugly. i don't care if the computer can do it; i'm a human, and such coding is unnatural and thus error-prone, stressful, and inefficient for me.
 
 ==== k vs factor
 
-verdict: if k were purely tacit / concatenative, and readable, then i'd love it. because it's not both, it's intolerable. it's set in stone that it isn't purely tacit. if it were purely tacit, then the one-statement-per-line rule wouldn't make any sense, so it'd be nixed, and the dyadic syntax couldn't exist anymore, so that wouldn't be an issue, and thus k would be readable. k is not worth using until it's made totally tacit.
+if k were purely tacit / concatenative, and readable, then it'd be perfect. k is tolerable, especially with syntax highlighting and judicious spacing. k is semi-concatinative: it supports trains and mostly reads in one direction. it accepts parameters inline, but rarely more than two, and when it uses two, it often does not require parentheses, which makes refactoring easier. if k were purely tacit, then statements would be able to span multiple lines, and the dyadic syntax wouldn't exist anymore. it has nested expressions, but nesting does not commonly go very deep. when it does, it's good style to refactor it into a subexpression or helper function. the nesting/monolith problem can be, as it can be in factor, solved by instead defining many small words. in both these langs defining words is low-overhead: in factor it's `: name effect def ;` and in k it's `name:{def}` (if 3 or fewer parameters) or `name:{}`. in both cases, definition is just a literal program but wrapped in delimiters then associated with a name. even in scheme, where this _can_ be done, it rarely is: usually we say `(define (name . params) def)` instead of `(define name (λ (params) def))`. scheme sucks because: 1. these are two significantly different syntaxes; 2. even the shorter syntax is non-ergonomically verbose.
+
+''''
+
+.aside: function arity
+
+how _exactly_ to decide which parameters fns take? the following are considerations & observations that seek to answer.
+
+. is it better for fn to take params, or have them one param but pattern match it into subsets?
+. are variadic fns worth anything? even factor can use macros to inline fns and assert their stack effect statically. it'd be nice to not have to specify a number to e.g. `nmap`, but w/e.
+  .. are variadic fns useful only for coding ergonomics i.e. are they always fns known at runtime?
+. sql's model of queries essentially being pattern-matching fns of relations is good. a sql table can be made by reading json, so tables can be added dynamically, which is good.
+. higher-order fns are bad: the ability to define them encourages one to parameterize _arbitrary_ parts of the computation; though these parameters are common, eventually, inevitably, a user will want to parameterize a different part of the computation, or for the parameter to be of a slightly different nature. because data can be modified (easily) and functions cannot (easily be modified), it's better to have functions be so small that they're sensibly defined only of a small variety of inputs. this avoids the arbitrary-degree-of-parameterization problem.
+  .. b/c fns should take a small variety of input information, the number of inputs should naturally be few.
+. fns should return many outputs, to preserve its computation. the user may decide to discard those outputs, rather than the function deciding to discard them by simply not returning them. returning multiple outputs is much easier if we pattern match elegantly. for stacks, it'd be inelegant to use `ndrop`, `nip`,  &c frequently. in applicative langs, it'd be ugly for many multi-parameter positional bindings to feature many holes. eliding outputs is best done in sql: rather than using binding clauses, the outputs are named by the function. one may rename them (and indeed must occasionally do that to disambiguate). anyway, the lack of binding clause and ability to tacitly refer to variables is excellent.
+
+''''
 
 * k has subexpressions. factor has only subprograms, b/c it's purely tacit.
-* needing to "lookahead" to the left of a verb to determine whether it's unary or binary is horrible. look at this definition of quicksort: `f:{$[2>#?x;x;,/o'x@&'~:\x<*1?x]}`. how long does it take you to tell me what the hell is going on here? does this code feel natural? where do you start? you can't start from the right, since the whole thing is a conditional statement, which evaluates from the left. of course it's at `,/` that things actually start getting k-ish. since i'm starting from the left, i see that `,/` is unary. i can easily read the pair as one verb. fine. then i see `o`
+* needing to "lookahead" to the left of a verb to determine whether it's unary or binary is horrible. look at this definition: `quicksort:{$[2>#?x;x;,/o'x@&'~:\x<*1?x]}`. how long does it take you to tell me what the hell is going on here? does this code feel natural? you should start parsing from the left because that's how `$[...]` evaluates; but then each of its argument programs you should read from the right, since that's whence they evaluate. the first predicate and corresponding return value are short enough that parsing happens instantaneously; you read it like a simple mathematical expression. of course it's in the "else" clause that things actually start getting k-ish. remember that to read source code, we must tokenize. starting from the right, i see `x`, then `?`, so i would like to think `?x` but i must lookahead to the next token to see that it's a noun, `1`, so now i've parsed code into an actual semantic value, `1?x`; then +++*+++'s meaning is unknown until i read the following token, which is `<`, so now i know that `*` is monadic, meaning "first"; then i still don't know what `<` is until i read the next token, which is `x`, so `<` is dyadic "less than", then `\` is a unary or binary adverb partically depending on whether any verb to the left of its 1st argument is a verb or not. in this case, it is given as the verb `~`, so i know that the "while" form of `/` is used. don't mistake it for the adverb `\:`, btw. i have _no clue_ how `~:\` works, but it apparently pairs a logical value with its inverse. (i know that i don't have a clue how it works because i get non-termination when i replace either `~` or `:` by monadic or dyadic lambdas.) anyway, what's next? `x@&'`? `&'` is "each &" which is monadic b/c the next token to the left is `@` which is not a noun. contextual grammars make _tokenization_ so difficult, before i even get to imagining the actual logic that the tokens denote! (btw, if you're curious about how quicksort works, see the explanation in <<_examples>> below.) though this is true generally, i think that k has a good chance of being readable simply because it's so small, so one can become familiar with the few verbs, idioms, and potential ambiguities, despite them being _generally_ of confusing design.
 * where k beats factor (in practice; factor has strictly greater capability):
   ** terse: avoids shit that isn't strictly encoding the program logic itself. needing to type multiple characters is a needless pain just like needing to compile, or scaffold a project, or any other assumed, imposed constraint that could theoretically be removed or modified without affecting the program itself. we are humans coding; our needs are important, and our coding methods must reflect that! the code itself is generated by our methods, and is so related to them; it's appropriate for us, as one aspect of our method, to choose codes that suit our ability to code them and reason about them!
   ** overloaded: each verb is a concept with multiple varieties as it's applied to specific contexts (nouns). this is a natural separation and combination of verbs and nouns, which makes reasoning about program design easy. it also avoids trying to name conceputally similar or homomorphic operations e.g. in factor the separate words `remove` for sequences and `delete` for sets, despite them being the same damn thing! but nope, due to types, they aren't interchangeable!
@@ -140,8 +184,20 @@ verdict: if k were purely tacit / concatenative, and readable, then i'd love it.
 * scalars are exactly 0-dim vectors. an empty vector can be used to index into a scalar.
 * like j, verbs may be _atomic_: they apply to all atoms of a vector (TODO: what about dicts?)
 * scalars are broadcast
+* functions and indexing are one operation. this is appropriate when we consider functions as maps from dom to cod i.e. (10+)@12 can be equivalently interpreted as "the map that adds 10, indexed at 12" (an interpretation which i strongly encourage) or "pass 12 to the function that returns 10 plus its input." this enables `{10+x} 5` to work; `{10+x}` is not a verb; it's a noun! thus `{10+x} 5` satisfies the subgrammar, "noun noun". juxtaposed nouns are evaluated as "index left noun by using right noun as index". because of function-dict equivalence, to access a function as a map is to invoke it on its argument.
 
-TODO: what are "tables" and "prototypes?" the link:https://wiki.cor.fyi/wiki/Ngn/k[k wiki] says that ngn/k supports tables w/o prettyprint, and partial support for prototypes. kona hasn't tables but has prototypes.
+TODO:
+* what are "tables" and "prototypes?" the link:https://wiki.cor.fyi/wiki/Ngn/k[k wiki] says that ngn/k supports tables w/o prettyprint, and partial support for prototypes. kona hasn't tables but has prototypes.
+* why does `(-)@4` return `-[4;]` i.e. "apply `-` to whatever the quoted series of programs `[4;]` returns"? note that `[4;]` is the program `4` followed by the empty program, which returns nothing.
+
+==== really cool k semantics to incorporate in other langs
+
+* funcall/index duality. `@` is "index x at y" or "call x with argvec y"
+* functions are implicitly quoted simply by parenthecizing them e.g. `(-),1` returns 2-element vector `(-;3)`; this is because k's grammar is contextual, and a verb by itself (without args) is considered as a noun; thus, because in the parenthecized `-` is a noun and thus `,` joins two nouns into a vector.
+  ** to invoke the essentially-quoted verb, use `@`
+* homoiconic syntax & output i.e. if you copy any displayed output then it's a valid data literal in that syntax
+* contextual grammar and thus contextual evaluation of deferred/quoted expressions
+* a single variable can refer to a set e.g. in `{4+x}`, `x` can refer to a vector. ideally it would, like in prolog, refer to a (constrained) set. as an honorable mention, sql variables also refer to sets.
 
 hopefully rank must be explicit in k. rank should always be explicit as a general coding convention. k's `each` probably does that.
 
@@ -161,16 +217,16 @@ types are here listed with a common shorthand:
 
 [options="header"]
 |=================================================
-| sym               | name               | defval
-| c                 | char               |
-| i                 | int                | 0
-| n                 | number (int|float) | 0[.0]
-| s                 | symbol             |
-| a                 | atom               |
-| d                 | dict               |
-| f                 | monadic func       |
-| F                 | dyadic func        |
-| any of x, y, or z | any                | <n/a>
+| sym               | name                | defval
+| c                 | char                |
+| i                 | int                 | 0
+| n                 | number (int\|float) | 0[.0]
+| s                 | symbol              |
+| a                 | atom                |
+| d                 | dict                |
+| f                 | monadic func        |
+| F                 | dyadic func         |
+| any of x, y, or z | any                 | <n/a>
 |=================================================
 
 excepting `F`, a lowercase letter means a scalar, and a capital one a vector; e.g. `C` means a string and X or means "a vector of anything."
@@ -180,17 +236,28 @@ these symbols are used by cast ($/2) and type (@/1).
 === syntax
 
 * right-associative
-* conditional branching: `$[p1;f1;p2;f2;...;else]`
+* conditional branching: `$[p1;f1;p2;f2;...;else]`; this `$` must have 3+ parameters; otherwise the verb `$` is used. finally, something that mimics arc lisp's `if` or picolisp's `let`, not requiring needless parentheses or syntax `else`!
+  ** `0`, `0x00`, and `()` are falsy; all others are truthy
+* newlines behave identically to semicolons
 * literals:
+  ** `[stmt1;...]` is progn [lisp] i.e. all statements except the last are evaluated only for side effects, and the last statement's value is returned from the whole bracked expression list. this is the same as the comma operator in c.
   ** symbol: +++`sym+++
   ** vector: `(a;b;...)`
-  ** dict: `[k:v;...]` (not in ngn/k, apparently?) or construct using `!2`
-  ** function: `{...}`. unlike j, unary functions' arg is called `x`. example: `{z%y+x}[30;20;10]` returns 0.2. idk about taking 4+ args.
+  ** generally list literals are sequences of homogenous-type data literals.
+    *** the following must be parenthesized and its elements must be delimited by semicolons:
+      **** hetrogeneous lists' of literals
+      **** lists of non-literal nouns
+      **** lists of lambdas (this prevents applying the lambdas to each other)
+    *** exception: logical vector literal: [0|1]*b e.g. `10010b`
+  ** dict: `[k:v;...]` but therein, symbol keys are not prefixed by grave accent
+  ** function:
+    *** `{[arg1;...] definition}`
+    *** `{...}`. unary fns arg is called `x`. then add `y` and `z` to namespace as arity increases to 2 or 3. example: `{z%y+x}[30;20;10]` returns 0.2.
+    *** fns may use semicolons; then they're the progn but parameterized by xyz
   ** null: `0N`
   ** negative literals are as in most langs: hyphen immediately followed by a number literal
 * slash begins line comment
-* `o` is like apl ∇ e.g. `{$[x<2;x;+/o'x-1 2]}9` returns 34
-* `[stmt1;...]` is progn [lisp]. idk when this would be needed in k.
+* `o` is like apl ∇ e.g. `{$[x<2;x;+/o'x-1 2]}9` returns 34. technically `o` is a special noun, not a special syntax. thus it can be used infix-dyadically or with the usual function application/indexing operators/syntaxes. of course, then, `o` is used commonly for recursion. however, maybe it can be used to return the current fn to another fn, for e.g. fn callback sequences; i'm yet unsure. idk if `o` captures the current continuation (or if k even uses continuations as they're in scheme or factor) or what.
 * `(v;...):y` pattern matches/binds e.g. `(b;(c;d)):(2 3;4 5)` binds `b` to `1 2`, `c` to 4, and `d` to 5.
 * indexing / fn call:
   ** f[x;y;z;...]
@@ -211,30 +278,30 @@ TODO: understand indexing exactly. `(4 5#!20)[0 1][1 2]` differs from `(4 5#!20)
 in this table, i mean `x` as the left arg and `y` as the right.
 
 [options="header"]
-|============================================================================
-| symbol | monad                                                   | dyad
-| :      | right                                                   | bind local
-| ,      | make singleton of +1-dim                                | concat
-| #      | count                                                   | shape (implies take (from end if x<0) if |x|<#y, or repeat if x>#y); or select dict (y) entries by (symbol or char) keys (x); or if x is a fn then apply to each of y's elts and its respective outputs to set that elt's resultant count
-| +      | transpose                                               | add
-| -      | neg                                                     | sub
-| *      | 1st [val, if dict]                                      | mul
-| %      | sqrt                                                    | div
-| !      | i. (0D) or permutations (1D); or a dict's keys          | dict of keys!vals, or div if num<0, or mod if num>0; *div & mod are denom!num*
-| &      | bools -> idxs or "1st non-0's"                          | min (implicitly boolean product)
-| \|     | reverse                                                 | max (implicitly boolean coproduct)
-| < & >  | grade [keys] up or down; or open/close file/socket/fd   | lt/gt
-| =      | "group" (decomp vec into set & idxs) or identity matrix | atomic equality
-| ~      | not                                                     | match (same shape & values)
-| ^      | `null?`                                                 | set y's nulls to x, or multiset difference (factor's `without`)
-| \_     | floor or `>lower`                                       | x:ℤ, y:1D: drop (from end if x<0); x:1D, y:ℤ: delete from x at idx y; x:1D, y:1D: split y at x (x is idxs, not logical vec); x:fn, y:1D: filter-out
-| $      | `[ >string ] map`                                       | x:ℤ, y:str: pad on right (or left if x<0); type cast (see below)
-| ?      | nub                                                     | argeq (find ret idx); n rand vals of set given by y. x<0=>pick w/o replacement, in which case |x|>=#Y => length error, where Y is the set described by y.
-| \\ & / | -                                                       | x:str, y:str: split & join; x:ints, y:ints: encode & decode as in j. behavior (about shaping) varies among k's.
-| .      | eval k syntax string, or get a dict's vals              | call x with argvec y
-| @      | type                                                    | call unary x with arg y
-| ::     | identity                                                | bind global
-|============================================================================
+|=============================================================================================================================================================================================================================
+| symbol    | monad                                                   | dyad
+| `:`       | right                                                   | bind local
+| `,`       | make singleton of +1-dim                                | concat
+| `#`       | count                                                   | shape (implies take (from end if `x<0`) if `\|x\|<#y`, or repeat if `x>#y`); or select dict (y) entries by (symbol or char) keys (x); or if x is a fn then apply to each of y's elts and its respective outputs to set that elt's resultant count
+| `+`       | transpose                                               | add
+| `-`       | neg                                                     | sub
+| `*`       | 1st [val, if dict]                                      | mul
+| `%`       | sqrt                                                    | div
+| `!`       | i. (0D) or permutations (1D); or a dict's keys          | dict of keys!vals, or div if num<0, or mod if num>0; *div & mod are `denom!num`*
+| `&`       | bools -> idxs or "1st non-0's"                          | min (implicitly boolean product)
+| `\|`      | reverse                                                 | max (implicitly boolean coproduct)
+| `<` & `>` | grade [keys] up or down; or open/close file/socket/fd   | less or greater than
+| `=`       | "group" (decomp vec into set & idxs) or identity matrix | atomic equality
+| `~`       | not                                                     | match (same shape & values)
+| `^`       | `null?`                                                 | set y's nulls to x, or multiset difference (factor's `without`)
+| `_`       | floor or `>lower`                                       | x:ℤ, y:1D: drop (from end if x<0); x:1D, y:ℤ: delete from x at idx y; x:1D, y:1D: split y at x (x is idxs, not logical vec); x:fn, y:1D: filter-out
+| `$`       | `[ >string ] map`                                       | x:ℤ, y:str: pad on right (or left if x<0); type cast (see below)
+| `?`       | nub                                                     | argeq (find ret idx); n rand vals of set given by y. x<0=>pick w/o replacement, in which case `\|x\|>=#Y` => length error, where Y is the set described by y.
+| `\` & `/` | -                                                       | x:str, y:str: split & join; x:ints, y:ints: encode & decode as in j. behavior (about shaping) varies among k's.
+| `.`       | eval k syntax string, or get a dict's vals              | call x with argvec y
+| `@`       | type                                                    | call unary x with arg y
+| `::`      | identity                                                | bind global
+|=============================================================================================================================================================================================================================
 
 * what the hell does `;` do? looks like it separates statements, and that, of semicolon-delimited statements, they're evaluated let-to-right
 * is there really to gte/lte? to be fair, those aren't really helpful; for integers, just +1 or -1, and floats aren't precise anyway, so equality is an infinitesimal difference anyway! instead of `gte 0` you can do `>1e-9`.
@@ -245,7 +312,7 @@ in this table, i mean `x` as the left arg and `y` as the right.
 
 others:
 
------------------------------------------------------------------=
+------------------------------------------------------------------
 .S get       a:1;.`a -> 1   b.c:2;.`b`c -> 2 / like j's reflex, ~m
 @[x;y;f]   amend  @["ABC";1;_:] -> "AbC"   @[2 3;1;{-x}] -> 2 -3
 @[x;y;F;z] amend  @["abc";1;:;"x"] -> "axc"   @[2 3;0;+;4] -> 6 3
@@ -253,29 +320,308 @@ others:
 .[x;y;F;z] drill  .[("ab";"cd");1 0;:;"x"] -> ("ab";"xd")
 .[f;y;f]   try    .[+;1 2;"E:",] -> 3   .[+;1,`2;"E:",] -> "E:typ"
 ?[x;y;z]   splice ?["abcd";1 3;"xyz"] -> "axyzd"
------------------------------------------------------------------=
+------------------------------------------------------------------
 
 === adverbs
 
-the following are verbs given in terms of adverbs and an argument of a given type.
+the following are verbs given in terms of adverbs and an argument of a given type. i use brackets to mean optional, angle brackets to mean required, and `\|` to mean "or".
 
 [options="header"]
 |============================================================================================================================
-| symbol w/types | function
-| f'             | map/each
-| [x]F[/\]       | left fold or scan. output's dim is input's - 1. x is optional init val. scans are as efficient as folds.
-| [x]F':         | factor `dup first empty prefix [ F ] 2 clump-map` where `empty` here gives empty type values. that prefix is added only if x isn't given.
-| F[\/]:         | `F"_1 _` or `F"_ _1`. `F/:\:` is used for...some complicated shit that apparently has a purpose. see the above example.
-| [i|p] f[/\]    | do `f` `i` times or do `f y` while `p y`. if `i`/`p` isn't given, then `f` is applied until it returns either the initial or convergent value. using a backslash collects intermediate values like a scan.
-| i':x           | length `i` window (clump) of vector `x`
-| i f':          | "stencil": window with `f` applied to each window. the fact that this exists implies that i':x isn't virtual as it is in factor (`<clumps>`), which is sad. stencil exists only to be more efficient.
-| X'             | interval index (j's `I./2`), which generalizes binary search
+| symbol w/types  | function
+| f'              | map/each
+| [x]F</\>        | (left) fold or scan. output's dim is input's - 1. x is optional init val. scans are as efficient as folds.
+| F<\/>:          | left- or right-curry `F`, then map over right or left i.e. in J, `F"_1 _` or `F"_ _1`. see examples below.
+| [x]F':          | factor `dup first empty prefix [ F ] 2 clump-map` where `empty` here gives empty type values. that prefix is added only if x isn't given.
+| [i\|p] f</\>    | do `f` `i` times or do `f y` while `p y`. if `i`/`p` isn't given, then `f` is applied until it returns either the initial or convergent value. using a backslash collects intermediate values like a scan.
+| i':x            | length `i` window (clump) of vector `x`
+| i f':           | "stencil": window with `f` applied to each window. the fact that this exists implies that i':x isn't virtual as it is in factor (`<clumps>`), which is sad. stencil exists only to be more efficient.
+| X'              | interval index (j's `I./2`), which generalizes binary search
 |============================================================================================================================
 
+disambiguating between `[x]F</\>` vs `[i\|p]f</\>`. the ambiguity is whether +++*+++ is monadic or dyadic; this determines whether to apply the lambda/predicate afterward, or whether to use it as a "while" clause. as far as i've noticed, this is the only ambiguous grammar.
+
+theoretically, token sequence `A B /` (or `\`) must be parsed thusly if `B` is an ambivalent verb (`B` being a noun would imply the verb form of `/` or `\` (split/join or encode/decode):
+
+. if `A` is a verb then (probably) the "while" form is assumed. idk if it's theoretically possible to have a lambda be a fold's initial value.
+  .. in ngn/k, +++{0=2!x}*/1 2 3+++ gives a type error whereas +++{0=2!x}(*/1 2 3)+++ returns `1` because 6 is even.
+. else if `A` is a non-integral noun then it must be a fold's initial value
+. else if `A` is an integer then it could be a fold's initial value or a number of times to apply a unary fn
+  .. apparently ngn/k assumes the fold case: +++4 +/,1 2+++ returns `5 6`. the only way that occurs to me to force unary `+` is to wrap it in a lambda: `4 {+x}/,1 2` returns `,1 2` (the input transposed 4 times.)
+
+.each right/left examples
+-------------------------
+10 20 30,\:1 2 3 / map (,1 2 3) over 10 20 30
+(10 1 2 3
+ 20 1 2 3
+ 30 1 2 3)
+
+10 20 30,/:1 2 3 / map (10 20 30,) over 1 2 3
+(10 20 30 1
+ 10 20 30 2
+ 10 20 30 3)
+
+/ composed each's:
+
+10 20 30,\:/:1 2 3
+((10 1;20 1;30 1)
+ (10 2;20 2;30 2)
+ (10 3;20 3;30 3))
+
+10 20 30,/:\:1 2 3
+((10 1;10 2;10 3)
+ (20 1;20 2;20 3)
+ (30 1;30 2;30 3))
+-------------------------
+
 NOTE: you cannot have a space between argument and `/`, since in that case `/...` will be treated as a comment
+
+TODO: how does the parser distinguish between `if/` and `xF/` where `x`=`i`? maybe it tries the dyadic version first, else tries monadic?
+
+=== ngn quick-reference
+
+backslash commands, when evaluated in the repl, are supposed to print their corresponding reference docs e.g. `\+` prints verbs. for me, however, they all print `'nyi`, so i can't get the reference in the repl, so i've put all the reference here, copied from `repl.k` from the ngn/k repo:
+
+---------------------------------------------------------------------------------------
+\   help               \\         exit
+\a  license(AGPLv3)    \l file.k  load
+\0  types              \d foo.bar set namespace; restore with  \d .
+\+  verbs              \t:n expr  time(elapsed milliseconds after n runs)
+\:  I/O verbs          \v         variables
+\'  adverbs            \f         functions
+\`  symbols            \cd path   change directory
+\h  summary            \other     command(through /bin/sh)
+--------------------------------------------------------------------------------
+\0
+Types:
+list atom
+ `A        generic list   ()   ,"ab"   (0;`1;"2";{3};%)
+ `I   `i   int            0N -9223372036854775807 01b
+ `F   `f   float          -0w -0.0 0.0 0w 1.2e308 0n
+ `C   `c   char           "a"   0x6263   "d\0\"\n\r\t"
+ `S   `s   symbol         `   `a   `"file.txt"   `b`cd`"ef"
+ `M   `m   table&dict     +`a`b!(0 1;"23")   (0#`)!()
+      `o   lambda         {1+x*y#z}  {[a;b]+/*/2#,a,b}
+      `p   projection     1+   {z}[0;1]   @[;i;;]
+      `q   composition    *|:   {1+x*y}@
+      `r   derived verb   +/   2\   {y,x}':
+      `u   monadic verb   +:   0::
+      `v   dyadic  verb   +   0:
+      `w   adverb         '   /:
+      `x   external func
+--------------------------------------------------------------------------------
+\:
+I/O verbs
+  0:x read  lines
+x 0:y write lines
+  1:x read  bytes
+x 1:y write bytes
+   <s open          fd:<`"file.txt"
+   >i close         >fd
+
+x can be a file descriptor (int) or symbol or string such as
+ "file.txt"
+ "/path/to/file"
+ "host:port"
+ ":port"         /host defaults to 127.0.0.1
+--------------------------------------------------------------------------------
+\+
+Verbs:    : + - * % ! & | < > = ~ , ^ # _ $ ? @ . 0: 1:
+notation: [c]har [i]nt [n]umber(int|float|char) [s]ymbol [a]tom [d]ict
+          [f]unc(monad) [F]unc(dyad) [xyz]any
+special:  var:y     set    a:1;a -> 1
+          var::y    global a:1;{a::2}[];a -> 2
+          (v;..):y  unpack (b;(c;d)):(2 3;4 5);c -> 4
+          :x        return {:x+1;2}[3] -> 4
+          :[x;y;..] cond   :[0;`a;"\0";`b;`;`c;();`d;`e] -> `e
+          o[..]     recur  {:[x<2;x;+/o'x-1 2]}9 -> 34
+          [..]      progn  [0;1;2;3] -> 3
+
+::  self      f:(::);f 12 -> 12
+ :  right     f:(:);f[1;2] -> 2   "abc":'"d" -> "ddd"
+ +x flip      +("ab";"cd") -> ("ac";"bd")
+N+N add       1 2+3 -> 4 5
+ -N negate    - 1 2 -> -1 -2
+N-N subtract  1-2 3 -> -1 -2
+ *x first     *`a`b -> `a   *(0 1;"cd") -> 0 1
+N*N multiply  1 2*3 4 -> 3 8
+ %N sqrt      %25 -> 5.0   %-1 -> 0n
+N%N divide    2 3%4 -> 0.5 0.75
+ !i enum      !3 -> 0 1 2   !-3 -> -3 -2 -1
+ !I odometer  !2 3 -> (0 0 0 1 1 1;0 1 2 0 1 2)
+ !d keys      !`a`b!0 1 -> `a`b
+ !S ns keys   a.b.c:1;a.b.d:2;!`a`b -> `c`d
+x!y dict      `a`b!1 2 -> `a`b!1 2
+i!I div       -10!1234 567 -> 123 56
+i!I mod       10!1234 567 -> 4 7
+ &I where     &3 -> 0 0 0   &1 0 1 4 2 -> 0 2 3 3 3 3 4 4
+ &x deepwhere &(0 1 0;1 0 0;1 1 1) -> (0 1 2 2 2;1 0 0 1 2)
+N&N min/and   2&-1 3 -> -1 2   0 0 1 1&0 1 0 1 -> 0 0 0 1
+ |x reverse   |"abc" -> "cba"   |12 -> 12
+N|N max/or    2|-1 3 -> 2 3   0 0 1 1|0 1 0 1 -> 0 1 1 1
+ <X ascend    <"abacus" -> 0 2 1 3 5 4
+ >X descend   >"abacus" -> 4 5 3 1 0 2
+ <s open      fd:<`"/path/to/file.txt"
+ >i close     >fd
+N<N less      0 2<1 -> 1 0
+N>N more      0 1>0 2 -> 0 0
+ =X group     ="abracadabra" -> "abrcd"!(0 3 5 7 10;1 8;2 9;,4;,6)
+ =i unitmat   =3 -> (1 0 0;0 1 0;0 0 1)
+N=N equal     0 1 2=0 1 3 -> 1 1 0
+ ~x not       ~(0 2;``a;"a \0";::;{}) -> (1 0;1 0;0 0 1;1;0)
+x~y match     2 3~2 3 -> 1   "4"~4 -> 0   0~0.0 -> 0
+ ,x enlist    ,0 -> ,0   ,0 1 -> ,0 1   ,`a!1 -> +(,`a)!,,1
+x,y concat    0,1 2 -> 0 1 2  "a",1 -> ("a";1)
+d,d merge     (`a`b!0 1),`b`c!2 3 -> `a`b`c!0 2 3
+ ^x null      ^(" a";0 1 0N;``a;0.0 0n) -> (1 0;0 0 1;1 0;0 1)
+a^y fill      1^0 0N 2 3 0N -> 0 1 2 3 1   "b"^" " -> "b"
+X^y without   "abracadabra"^"bc" -> "araadara"
+ #x length    #"abc" -> 3   #4 -> 1   #`a`b`c!0 1 0 -> 3
+i#y take      5#"abc" -> "abcab"   -5#`a`b`c -> `b`c`a`b`c
+X#d take keys `c`d`f#`a`b`c`d!1 2 3 4 -> `c`d`f!3 4 0N
+I#y reshape   2 3#` -> (```;```)
+f#y replicate (3>#:')#(0;2 1 3;5 4) -> (0;5 4)   {2}#"ab" -> "aabb"
+ _n floor     _12.34 -12.34 -> 12 -13
+ _c lowercase _"Ab" -> "ab"
+i_Y drop      2_"abcde" -> "cde"   -2_`a`b`c -> ,`a
+X_d drop keys `a`c_`a`b`c!0 1 2 -> (,`b)!,1
+I_Y cut       2 4 4_"abcde" -> ("cd";"";,"e")
+f_Y weed out  (3>#:')_(0;2 1 3;5 4) -> ,2 1 3
+X_i delete    "abcde"_2 -> "abde"
+ $x string    $(12;"ab";`cd;+) -> ("12";(,"a";,"b");"cd";,"+")
+i$C pad       5$"abc" -> "abc  "   -3$"a" -> "  a"
+s$y cast      `c$97 -> "a"   `i$-1.2 -> -1   `$"a" -> `a
+s$y int       `I$"-12" -> -12
+ ?X distinct  ?"abacus" -> "abcus"
+ ?i uniform   ?2 -> 0.6438163747387873 0.8852656305774402 /random
+X?y find      "abcde"?"bfe" -> 1 0N 4
+i?x roll      3?1000 -> 11 398 293   1?0 -> ,-8164324247243690787
+i?x deal      -3?1000 -> 11 398 293 /guaranteed distinct
+ @x type      @1 -> `i   @"ab" -> `C   @() -> `A   @(@) -> `v
+x@y apply(1)  {x+1}@2 -> 3   "abc"@1 -> "b"   (`a`b!0 1)@`b -> 1
+ .S get       a:1;.`a -> 1   b.c:2;.`b`c -> 2
+ .C eval      ."1+2" -> 3
+ .d values    .`a`b!0 1 -> 0 1
+x.y apply(n)  {x*y+1}. 2 3 -> 8   (`a`b`c;`d`e`f). 1 0 -> `d
+
+@[x;y;f]   amend  @["ABC";1;_:] -> "AbC"   @[2 3;1;{-x}] -> 2 -3
+@[x;y;F;z] amend  @["abc";1;:;"x"] -> "axc"   @[2 3;0;+;4] -> 6 3
+.[x;y;f]   drill  .[("AB";"CD");1 0;_:] -> ("AB";"cD")
+.[x;y;F;z] drill  .[("ab";"cd");1 0;:;"x"] -> ("ab";"xd")
+.[f;y;f]   try    .[+;1 2;"E:",] -> 3   .[+;1,`;"E:",] -> "E:'type\n"
+?[x;y;z]   splice ?["abcd";1 3;"xyz"] -> "axyzd"
+--------------------------------------------------------------------------------
+\`
+Special symbols:
+   `j?C parse json   `j?"{\"a\":1,\"b\":[true,\"c\"]}" -> `a`b!(1.0;(1;,"c"))
+   `k@x pretty-print `k("ab";2 3) -> "(\"ab\";2 3)"
+   `p@C parse k
+ `hex@C hexadecimal  `hex"ab" -> "6162"
+ `pri@i primes       `pri 20  ->  2 3 5 7 11 13 17 19
+   `x@x fork-exec    `x(("/bin/wc";"-l");"a\nbc\nd\n") -> "3\n"
+   `t[] current time (microseconds)
+`argv[] list of cmd line args (also in global variable x)
+ `env[] dict of env variables
+`prng[] `prng@I get/set pseudo-random number generator internal state
+                     s:`prng[];r:9?0;`prng s;r~9?0 -> 1
+        `prng@0 use current time to set state
+ `err@C throw error
+ `sin@N trigonometry `sin 12.34 -> -0.22444212919135995
+ `exp@N exponential  `exp 1 -> 2.7182818284590455
+  `ln@N logarithm    `ln 2 -> 0.6931471805599453
+`exit@i exit
+--------------------------------------------------------------------------------
+\'
+Adverbs:   ' / \ ': /: \:
+   f' each1     #'("abc";3 4 5 6) -> 3 4
+ x F' each2     2 3#'"ab" -> ("aa";"bbb")
+   X' binsearch 1 3 5 7 9'8 9 0 -> 3 4 -1
+   F/ fold      +/1 2 3 -> 6
+   F\ scan      +\1 2 3 -> 1 3 6
+ x F/ seeded /  10+/1 2 3 -> 16
+ x F\ seeded \  10+\1 2 3 -> 11 13 16
+ i f/ n-do      5(2*)/1 -> 32
+ i f\ n-dos     5(2*)\1 -> 1 2 4 8 16 32
+ f f/ while     (1<){:[2!x;1+3*x;-2!x]}/3 -> 1
+ f f\ whiles    (1<){:[2!x;1+3*x;-2!x]}\3 -> 3 10 5 16 8 4 2 1
+   f/ converge  {1+1.0%x}/1 -> 1.618033988749895
+   f\ converges (-2!)\100 -> 100 50 25 12 6 3 1 0
+   C/ join      "ra"/("ab";"cadab";"") -> "abracadabra"
+   C\ split     "ra"\"abracadabra" -> ("ab";"cadab";"")
+   I/ decode    24 60 60/1 2 3 -> 3723   2/1 1 0 1 -> 13
+   I\ encode    24 60 60\3723 -> 1 2 3   2\13 -> 1 1 0 1
+  i': window    3':"abcdef" -> ("abc";"bcd";"cde";"def")
+i f': stencil   3{x,"."}':"abcde" -> ("abc.";"bcd.";"cde.")
+  F': eachprior -':12 13 11 17 14 -> 12 1 -2 6 -3
+x F': seeded ': 10-':12 13 11 17 14 -> 2 1 -2 6 -3
+x F/: eachright 1 2*/:3 4 -> (3 6;4 8)
+x F\: eachleft  1 2*\:3 4 -> (3 4;6 8)
+--------------------------------------------------------------------------------
+\h
+: SET      RETURN    :[c;t;f]     COND
++ add      flip
+- subtract negate    '  each|slide|bin
+* multiply first     /  fold|join |dec|comment
+% divide   sqrt      \  scan|split|enc|trace
+! mod|dict enum|key  ': eachprior
+& min|and  where     /: eachright
+| max|or   reverse   \: eachleft
+< less     ascend
+> more     descend   /
+= equal    group     multiline comment
+~ match    not       \
+, concat   enlist
+^ without  null      0: lines i/o
+# reshape  length    1: bytes i/o
+_ drop|cut floor
+$ cast     string
+? find|rnd uniq      ?[a;i;b]     splice
+@ apply(1) type      @[x;i;[f;]y] amend
+. apply(n) eval      .[x;i;[f;]y] drill
+grammar:  E:E;e|e e:nve|te| t:n|v v:tA|V n:t[E]|(E)|{E}|N
+limits: 8 args, 16 locals, 256 bytecode, 2048 stack
+\
+.\\h
+---------------------------------------------------------
+: SET      RETURN    :[c;t;f]     COND
++ add      flip
+- subtract negate    '  each|slide|bin
+* multiply first     /  fold|join |dec|comment
+% divide   sqrt      \  scan|split|enc|trace
+! mod|dict enum|key  ': eachprior
+& min|and  where     /: eachright
+| max|or   reverse   \: eachleft
+< less     ascend
+> more     descend   /
+= equal    group     multiline comment
+~ match    not       \
+, concat   enlist
+^ without  null      0: lines i/o
+# reshape  length    1: bytes i/o
+_ drop|cut floor
+$ cast     string
+? find|rnd uniq      ?[a;i;b]     splice
+@ apply(1) type      @[x;i;[f;]y] amend
+. apply(n) eval      .[x;i;[f;]y] drill
+grammar:  E:E;e|e e:nve|te| t:n|v v:tA|V n:t[E]|(E)|{E}|N
+limits: 8 args, 16 locals, 256 bytecode, 2048 stack
+---------------------------------------------------------------------------------------
 
 === tools
 
 ==== repl
 
 * `\+` is supposed (by xpqz) to list verbs, but does not; it prints `'nyi`.
+
+=== examples
+
++++quicksort:{$[2>#?x;x;,/o'x@&'~:\x<*1?x]}+++
+
+. `x<*1?x` picks a random element from sequence `x` then compares it to each of ``x``'s elements e.g. `*1?"hello"` may pick `"l"` in which case `x<*1?x` evaluates to `1 1 0 0 0`. if `"e"` is picked then we get `0 0 0 0 0`.
+. `~:\` _somehow_ couples each logical element with its inverse e.g. `~:\0` becomes `0 1`, `~:\1` becomes `1 0`, and `~:\0 1 0` becomes `(0 1 0; 1 0 1)`
+. `&'` converts logical vectors to integers where `1` is set ("where")
+. `x@` indexes into the input sequence
+
+e.g. if we pick `"l"` then `~:\1 1 0 0 0` evaluates to `(1 1 0 0 0 ; 0 0 1 1 1)`, then applying `&'` to that gives `(0 1; 2 3 4)`, then applying `"hello"@` to that gives `("he";"llo")`.
+
+i only wish that i knew what/how `~:\` does. i have no method of stepping through to actually see which values are passed to which verbssssssssss! what horrid debauchery has befallen us! X(
