@@ -2,18 +2,18 @@
 
 .some langs
 [options="header"]
-|==================================================================================================
-| lang    | runtime | efficiency | freedom | syntax | simplicity | special shit
-| java    | VM      | good       | no      | v.bad  | no         | oop typing
-| clojure | I       | bad        | ok      | bad    | ???        | ???
-| c       | N       | good       | low     | medium | high       | no
-| haskell | VM      | bad        | low     | ok     | good       | typing, referential transparency
-| rktscm  | A       | bad        | ok      | bad    | good       | no
-| lua     | I       | bad        | low     | bad    | high       | no
-| j       | I       | good       | low     | low    | good       | array model: shapes, and boxes
-| k       | I       | good       | ???     | low    | yes?       | no...?
-| factor  | A       | sus        | v.high  | no     | max        | no
-|==================================================================================================
+|===========================================================================================================
+| lang    | runtime | runtime efficiency | freedom | syntax | simplicity | special shit
+| java    | VM      | good               | no      | v.bad  | no         | oop typing
+| clojure | I       | bad                | ok      | bad    | ???        | ???
+| c       | N       | good               | low     | medium | high       | no
+| haskell | VM      | bad                | low     | ok     | good       | typing, referential transparency
+| rktscm  | A       | bad                | ok      | bad    | good       | no
+| lua     | I       | bad                | low     | bad    | high       | no
+| j       | I       | good               | low     | low    | good       | array model: shapes, and boxes
+| k       | I       | good               | ???     | low    | yes?       | no...?
+| factor  | A       | sus                | v.high  | no     | max        | no
+|===========================================================================================================
 
 runtimes: VM (compiled), I for interpreted, N for compiled-native, A for ambivalent to compilation or interpretation, JIT for just in time compilation.
 
@@ -144,7 +144,7 @@ how i read this factor code:
 
 i also see the leading literal format string as a parameter of `format!` separately from ``format!``'s arguments on the stack.
 
-''''
+=== conclusion
 
 totally tacit is a blessing! use/make combinators & quotation rather than shuffling. and yes, arg ord is an important part of tacit program design, just like it is in haskell! although, factor's `swap` is much easier to reason about than haskell's `flip`! this fact generalizes.
 
@@ -167,7 +167,7 @@ lessons:
   ** flexible
     ** interpreted. compilation optional.
     ** dynamic
-      *** makes metaprogramming equal programming. factor is perfect example: all quotations are lists of words, which always have obvious definition because there's no scoping / local variables, so subprograms are created, modified, and applied all over the place.
+      *** makes metaprogramming equal programming. factor is perfect example: all quotations are lists of words, which always have obvious definition because there's no scoping / local variables, so subprograms are created, modified, and applied all over the place. *lambdas and programs are equivalent in factor.* this makes `cond` nothing more than a list of literals that we traverse using `find`, then evaluate using `call`.
       *** playing with your living program is a joy and natural way to play with and explore things, and programs are no exception. you should be able to change your program as it's running. this makes debugging easy. it can even be useful in the program's normal course, such as modifying a server while it's running.
   ** good builtin unicode support
   ** virtual sequences or virtual operations e.g. factor's sequences: `<zipped>`, `<reversed>`, `<iota>`, &c.
@@ -180,6 +180,7 @@ lessons:
   ** don't allow yourself to be constrained to referential transparency unless it earns you appreciable parallelism at no-to-little extra cost.
   ** (mandatory) (nominal) type systems are 100% pure, uncut ass. just say no. you can implement your own type systems or other constraints/checks easily, so diy or get a separate package/module for it.
   ** even factor's stack checker, which is usually good, prevents us from using `each` to modify the stack, which is a pretty basic & common need; to effectively do this, we must be verbose or hack around it.
+  ** scopes are implicit indexing forced upon the programmer by the language model. scope is a stack of maps from symbols to values/addresses. rather than the user choosing which map to select from, they're forced into using some given map.
 
 after using factor (stack lang), applicative programming feels like stringing countless wires from functions' output nodes to other functions' input nodes. if that isn't spaghetti programming then i don't know what is. by contrast, factor feels like the incremental modification that it is. no wires in factor—only code blocks that can be freely rearranged.
 
@@ -193,13 +194,110 @@ we know the phrase "no stinkin' loops." sure. true, even in haskell and scheme w
 * parallelism
 * concurrency
 
-.other langs
+== other langs
 
 alternatives to c: go, zig; commonly rust or v
 (better) alternatives to haskell: ocaml, erlang, pony
 
-.the lang that we need
+== ideal lang (design & implementation)
 
-cat w/walker, smol codebase, efficient, terse, overloaded, good prim structs & ops, no import, interpreted w/optional compilation.
+tl;dr: "'don't try to design the code; that's...impossible. instead, try to realize the truth.' 'what truth?' 'there _is_ no design. then you'll see that good code merely describes your thought directly.'". you must _model_ the situation elegantly, but that's to be done in your own mind, regardless of whether you code it. hopefully that model is already available as executable code, but if not, then code it.
 
-to consider "catlog" i must consider cat versions of prolog's prim(s). consider prims for dataflows vs..."implied relations"? i must become more familiar with how prolog & haskell differ! i know one excellent thing about prolog, though: each variable represents a set!
+cat (maybe) w/debugger, smol codebase, efficient, terse, overloaded, good prim structs & ops, no import, interpreted w/optional compilation.
+
+TODO:
+* how prolog & haskell differ?
+* sketch what tacit prolog would look like. tacitity is only a notational difference, but does require non-parameterized relational primitives rather than prolog's single relational primitive: predicates' parameter vectors.
+
+concatenativity assumes that programs are ordered, that they execute in sequence. one might suggest that this makes it incompatible with prolog, since prolog programs are sets of facts and queries. however, even aspects of prolog are ordered: 1. predicate arguments; 2. clause parsing & evaluation. the latter applies to any text language. functions generally relate, and the stack is a method of composing functions i.e. composing relations. while the stack is nice, it's really tacitity that helps; tacitity directly reflects that variables are not the primitive program elements, but that relations are, which is appropriate because relations actually have meaning, whereas variables do not. rather, variables' meaning is only in terms of [relative to] other variables.
+
+therefore we can generalize prolog and stack or concatenative models into a single type: `Relation(...) =: PrimRel1 | ... | Relation(...)`, which is symmetric and obviously enables metaprogramming. there are two aspects to this model: specifying and evaluating relations. concatenativity/tacitity makes code visually simpler & prettier, and easier to write & refactor. there may be a system that we use, such as the stack, to describe relations; this code may be literally followed by a compiler to construct a composite relation which will actually be used for computation in the executable (as compilers always do.) for example, a stack may be used by humans to describe a program (relations) and by the compiler to construct a db of relations, but the actual compiled program might not emulate a stack machine at all. it's the compiler's responsibility to convert code that's easy & fast for humans into code that's easy & fast for its target architecture.
+
+. the simplest relation is a collection of things belonging to a common set, which can be represented by phenomena (audio, graphics, etc) sharing a common pattern.
+. sequences have been and are yet the natural relation for computers since data is stored as byte sequences. programs have been stored as text, too, and text is unidirectional. i may create a general graphical representation/syntax of programs that is multidimensional, in which case sequenced items would need to match a common pattern (to represent that they're of a common sequence) but also each element must match a pattern that orders it relative to its pred and/or succ. the simplest sequence is 2-element. data may belong to multiple sets or sequences. the following is an example of elements belonging to a common set (denoted by capitalization) and sequence (denoted by common row or column):
+
+.5 seqs, 2 sets
+---------------
+    h
+    G
+    f
+A B c d E
+    o i
+      j k L m n
+---------------
+
+because we're still using typewriter-based computing, where code is parsed as character sequences, you don't see such syntaxes. we have neither the ui nor display for it yet, but it would be easier to make than a video game, so let's get on it. at least we have prettyprint trees, but that display is formatted character sequences, so it's really characters that present like a tree rather than a tree proper. therefore if we want to code as trees, then we must use text alignment tools like special text editor commands, and we must write special parsers that parse text representing a tree into an actual tree.
+
+. sequences are *virtually* maps from natural number indices to elements.
+. functions are virtual maps; both have dom & cod. e.g. `4 +` virtually represents the infinite-cardinality map. technically, functions are stupid; multifunctions are actually reasonable.
+. but even multifunctions are stupid; they're unidirectional. why have a direction at all? what if we just look at the dual morphism? enter _relations_. they're exactly the same as functions except with or preserving duality. functions limit functionality; use relations.
+
+so we, abstractly, necessarily have sets. practically, we necessarily have sequences. and implicitly, we necessarily have maps. all of these can be virtual. so aside from arithmetic, what primitives do we need?
+
+TODO: i need to decide distinct terms for predicate/relation (prolog), relation (sql), predicate (fn, typically to bool).
+
+.primitives
+[options="header"]
+| op | set     | relation [sql]^*^ | seq
+| +  | put k   | put k & v         | push v or put (set) v@i
+| ++ | union   | `assoc-merge`     | append
+| ∈  | find    | "                 | "
+| ⊂  | subset? | "                 | subseq?
+| -  | filter  | "                 | "
+| #  | count   | "                 | "
+
+
+^*^ sql relations sensibly generalize maps from a vector of (k,v) to a vector of arbitrary-length vectors. better yet, forget the constraint that all element vectors have equal length, or even that the elements be vectors at all! just map over vectors of whatever the hell! this is about where iversonian languages and sql fail; neither supports a good syntax for specifying predicates[prolog]/relations of arbitrary subsets of structures. part of the reason that sql does not is efficiency; sql exploits indexes [sql] greatly.
+
+* i used `find` instead of `in?` because specifying the membership predicate at call site is sensible, whereas defining equality for a type is needlessly inflexible.
+  ** *always be skeptical of a function that doesn't take a predicate.* this is not a problem in j where we, instead of _designing functions to take predicate arguments_, compute masks then apply them wherever they may be used (possibly in multiple places or after being modified).
+* sets & seqs can be both defined in terms of maps; a map's keys are a set, and a map's values are a sequence if we order by keys.
+* if we use an array model, then `push` & `append` are equivalent, as are , and deletion & set difference, and same with `union` & `adjoin`, but for maps, though, `assoc-merge : Map a b -> Map a c -> (b -> c -> d) -> Map a d` is a very useful operation. it generalizes `zipWith`/`2map`.
+  ** be skeptical of any function of collections. all functions which specifically take collections as args should use those collections in total, not only considering one element at a time! use a damn loop, then! for example, `subseq?` is a good function since it actually considers its inputs' elements' (ordinal) relations to each other.
+    *** if a function that could be used for a set is used on a sequence, then that function probably shouldn't exist unless it's a primitive. for example, `map` applies equally to a set as to a sequence, since it does not concern any relations that the collection's elements may have with each other (in a seq, they're related to each other by index), so `map` should not be defined, except that it's a special case because it's a primitive.
+* many redundant functions exist because they're more efficient, such as `map-filter`. this is the language defect of making operations literal instead of virtual. for a programmer to care about, or write, or use/reference/familiarize themselves with such fluff is to have the programmer not only distract and burden themselves, but to actually make them think that it's worthwhile, too, for the efficiency gain. it's one of the cardinal sins of coding.
+  ** a related cardinal sin is convenience functions, which distract from the programmer's holy connection to true primitives. an example is factor's `: gather ( ... ) map concat members ; inline`. if it's done to make code briefer, then it's at the cost of bloating the function namespace! the cost nullifies the benefit. besides, the actual solution is to make the syntax briefer. the same thing in k is `?,/`.
+* all tests e.g. `subseq?` are better as parsers e.g. `subseq` which returns a subsequence matching a parser or a failure value.
+* nub exists for seqs, but it's probably not the operation that you want; you probably want to convert the seq to a set.
+* seqs are generally multisets, but never multimaps, but we can store a structure as a value in a sequence, so who cares?
+* predicates [higher-order fns] suck. masks are better. masks tend to suck in apls because apls aren't concatenative, so the common "generate mask by applying predicate to vector, then modify the resultant mask, then filter vector by modded predicate" pattern is clumsy or ugly. in a stack lang this literally would be e.g. `OBJ dup [ PRED ] map 1 6 [ set-nth ] keep filter-by-mask`. normally in factor you'd just say `OBJ [ PRED ] filter` but you can't say that with "but keep the 6th elt." generally this is the problem with functional programming: it makes symmetry neat, but asymmetry clumsy.
+  ** TODO: id some examples of masks bettering predicates?
+
+notice that i put "sequence" instead of "stack", "list", "deque" etc. sequences are generally virtual. i can have a sequence defined as "[1..6] rotated by 2 but where the last element is 12" which, being virtual, would be defined as a function in most langs: `: my-funny-seq ( i -- e ) 1 6 [a..b] 2 <rotated> over over length = [ 2drop 12 ] [ nth ] if ;`. in the ideal lang it would be defined: +++1 6 [a..b] 2 <rotated> [ `last 12 ] add-idx+++. this is direct; it generates a virtual sequence from the constructor `[a..b]` then modifies its indexing fn by adding rotation, then we add the asymmetric rule that the value at index +++`last+++ (a symbol literal) is 12. virtual sequences are an example of how k's function/indexing duality is appropriate, though the irony is that k doesn't use virtual sequences, so the duality's benefit is only terser notation. but anyway, functions are virtual maps from the set of valid inputs to their corresponding outputs, so indexing into them _is mathematically equivalent to_ calling them! to see a language that actually acknowledges not _duality_, but _equivalence_, and thus *has virtual relations as its only data structure* would be literally perfect, and would definitely benefit from that one structure being optimized, as is the case in prolog, sql, and apls. prolog might technically satisfy this condition, but its ergonomics don't make it obvious. virtual seqs/rels unify all structures, but a notable subset of them is generators [python], loops, and (non-strictly evaluated) lists, and makes fusion automatic e.g. `"," join print` truly composes join & print, rather than "composing them", meaning to simply _sequence_ their execution.
+
+what composites do we commonly want, or what composites would easily enable us to code arbitrary relations?
+
+.useful composites
+TODO
+
+* how to design code system s.t. computations that should be described as folds (e.g. `</`) work for virtual sequences e.g. in factor `M: iota maximum n>> 1 - ;`. i suppose i'd do the usual thing of defining the generic case then asymmetric cases. so like there's the generic fold adverb, which takes any dyad; but add an overriding asymmetry rule that if the verb arg is `<` then check if the composite verb's operand is an iota-type virtual thing, and if it is, then apply the special rule. the beauty of the symmetric-case-by-default-but-asymmetric-cases-override style is that it can be used with total abandon and is natural.
+
+== how to design programs (to be made into a poster! :D)
+
+first, the fundamentals of code:
+
+. the rawest programming is neural networks. this variety is not logical.
+. the rawest _abstract_ (symbolic) logical programming is specifying relations, as we see in prolog: just specify predicates. each predicate corresponds to a set. predicate sets can answer queries.
+. the rawest _reductive_ (data-based) logical programming is manipulating byte sequences.
+. the next-rawest abstract programming is functions, which are just unidirectional relations, and thus, unlike relations, have deterministic execution order (except parallel operations). functions are thus apt for describing a common variety of program called _dataflows_. functions, given inputs, can be evaluated for effect. you might ask, "what's the use of just transmuting and moving around data?" indeed there is no use in it! what we actually ultimately do here is to create a sequence of associations between data subsets and hardware—what are called _effects_, such as sending data to a socket, or video device, or output stream. all the functions do is confound or distinguish subsets. confoundment may or may not be reversable; e.g. `+` is not, but `(,)` is. to keep memory use low, some subsets are marked for deallocation. because functional programming concerns sets & sequences, functional primitives are set-&-sequence operations (ins/ovr [at indies], get [at indices]). indices are specified by a predicate. a common variety of "get" is "get by predicate and its complement" i.e. "partition". the predicate returns distinct values which distinguish the subsets.
+. all other programming is one of the prior plus some assumed, unnecessary model(s), which may be convenient for reasoning or describing things, but are necessarily limiting.
+
+NOTE: conditional branching is expressed by maps whose cod is programs. if that map's dom is bool, then `cond`; if literal values, then `case`.
+NOTE: number's algebras can be exploited very powerfully & elegantly. see `./coding.adoc`.
+
+each language has a model for representing & evaluating programs. popular ones:
+
+[options="header"]
+|==================================================
+| language    | model
+| assembly    | traverse sequence in order declared
+| applicative | traverse ast depth-first
+| stack       | modify stack until words run-out
+| logic       | unify predicates
+|==================================================
+
+*i should be able to unify associative & logical reasoning by: all are maps i.e. indexed sets i.e. associations and the logical primitive, predicate, is isomorphic with set.*
+.mutation vs purity
+
+deletion (mutative) may be thought of as "without" (pure). thinking purely helps you realize that you're just identifying thoughts rather than performing actions. it also saves you from sequencing things. however, it usually leads to less-efficient code, and is sometimes unnatural. note that it is necessary for parallel programming. if you're sequencing some actions, then code it as such; if you're specifying a constraint, then code it as such; if you're specifying a composite relation, then code it as such! choose a good system that enables all these three: mutative, predicate, pure. if you don't have such a system, then at least code the actual code in a comment near the implementation.
+
