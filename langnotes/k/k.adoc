@@ -1,6 +1,5 @@
 = k
 nic chandoke's notes
-
 :toc:
 
 some example code is copied from <https://xpqz.github.io/kbook/index.html>.
@@ -142,7 +141,7 @@ how _exactly_ to decide which parameters fns take? the following are considerati
 ''''
 
 * k has subexpressions. factor has only subprograms, b/c it's purely tacit.
-* needing to "lookahead" to the left of a verb to determine whether it's unary or binary is horrible. look at this definition: `quicksort:{$[2>#?x;x;,/o'x@&'~:\x<*1?x]}`. how long does it take you to tell me what the hell is going on here? does this code feel natural? you should start parsing from the left because that's how `$[...]` evaluates; but then each of its argument programs you should read from the right, since that's whence they evaluate. the first predicate and corresponding return value are short enough that parsing happens instantaneously; you read it like a simple mathematical expression. of course it's in the "else" clause that things actually start getting k-ish. remember that to read source code, we must tokenize. starting from the right, i see `x`, then `?`, so i would like to think `?x` but i must lookahead to the next token to see that it's a noun, `1`, so now i've parsed code into an actual semantic value, `1?x`; then +++*+++'s meaning is unknown until i read the following token, which is `<`, so now i know that `*` is monadic, meaning "first"; then i still don't know what `<` is until i read the next token, which is `x`, so `<` is dyadic "less than", then `\` is a unary or binary adverb partically depending on whether any verb to the left of its 1st argument is a verb or not. in this case, it is given as the verb `~`, so i know that the "while" form of `/` is used. don't mistake it for the adverb `\:`, btw. i have _no clue_ how `~:\` works, but it apparently pairs a logical value with its inverse. (i know that i don't have a clue how it works because i get non-termination when i replace either `~` or `:` by monadic or dyadic lambdas.) anyway, what's next? `x@&'`? `&'` is "each &" which is monadic b/c the next token to the left is `@` which is not a noun. contextual grammars make _tokenization_ so difficult, before i even get to imagining the actual logic that the tokens denote! (btw, if you're curious about how quicksort works, see the explanation in <<_examples>> below.) though this is true generally, i think that k has a good chance of being readable simply because it's so small, so one can become familiar with the few verbs, idioms, and potential ambiguities, despite them being _generally_ of confusing design.
+* needing to "lookahead" to the left of a verb to determine whether it's unary or binary is horrible. look at this definition: `quicksort:{$[2>#?x;x;,/o'x@&'~:\x<*1?x]}`. how long does it take you to tell me what the hell is going on here? does this code feel natural? you should start parsing from the left because that's how `$[...]` evaluates; but then each of its argument programs you should read from the right, since that's whence they evaluate. the first predicate and corresponding return value are short enough that parsing happens instantaneously; you read it like a simple mathematical expression. of course it's in the "else" clause that things actually start getting k-ish. remember that to read source code, we must tokenize. starting from the right, i see `x`, then `?`, so i would like to think `?x` but i must lookahead to the next token to see that it's a noun, `1`, so now i've parsed code into an actual semantic value, `1?x`; then +++*+++'s meaning is unknown until i read the following token, which is `<`, so now i know that `*` is monadic, meaning "first"; then i still don't know what `<` is until i read the next token, which is `x`, so `<` is dyadic "less than", then `\` is a unary or binary adverb partically depending on whether any verb to the left of its 1st argument is a verb or not. in this case, it is given as the verb `~`, so i know that the "while" form of `/` is used. don't mistake it for the adverb `\:`, btw. anyway, next is `x@&'`? `&'` is "each &" which is monadic b/c the next token to the left is `@` which is not a noun. contextual grammars make _tokenization_ so difficult, before i even get to imagining the actual logic that the tokens denote! (btw, if you're curious about how quicksort works, see the explanation in <<_examples>> below.) though this is true generally, i think that k has a good chance of being readable simply because it's so small, so one can become familiar with the few verbs, idioms, and potential ambiguities, despite them being _generally_ of confusing design.
 * where k beats factor (in practice; factor has strictly greater capability):
   ** terse: avoids shit that isn't strictly encoding the program logic itself. needing to type multiple characters is a needless pain just like needing to compile, or scaffold a project, or any other assumed, imposed constraint that could theoretically be removed or modified without affecting the program itself. we are humans coding; our needs are important, and our coding methods must reflect that! the code itself is generated by our methods, and is so related to them; it's appropriate for us, as one aspect of our method, to choose codes that suit our ability to code them and reason about them!
   ** overloaded: each verb is a concept with multiple varieties as it's applied to specific contexts (nouns). this is a natural separation and combination of verbs and nouns, which makes reasoning about program design easy. it also avoids trying to name conceputally similar or homomorphic operations e.g. in factor the separate words `remove` for sequences and `delete` for sets, despite them being the same damn thing! but nope, due to types, they aren't interchangeable!
@@ -216,8 +215,8 @@ each'ing (a monadic verb) over a vector applies to a vector's elements, not its 
 types are here listed with a common shorthand:
 
 [options="header"]
-|=================================================
-| sym               | name                | defval
+|======================================================
+| sym               | name                | empty value
 | c                 | char                |
 | i                 | int                 | 0
 | n                 | number (int\|float) | 0[.0]
@@ -227,7 +226,7 @@ types are here listed with a common shorthand:
 | f                 | monadic func        |
 | F                 | dyadic func         |
 | any of x, y, or z | any                 | <n/a>
-|=================================================
+|======================================================
 
 excepting `F`, a lowercase letter means a scalar, and a capital one a vector; e.g. `C` means a string and X or means "a vector of anything."
 
@@ -275,12 +274,17 @@ TODO: understand indexing exactly. `(4 5#!20)[0 1][1 2]` differs from `(4 5#!20)
 
 === verbs
 
-in this table, i mean `x` as the left arg and `y` as the right.
+NOTE: suffix `:` forces an ambivalent verb's monadic form.
+
+* verbs may be left- or right-atomic, or apply to the whole argument (in j this is rank infinity or rank _1).
+* in this table, i mean `x` as the left arg and `y` as the right.
+
+the following table's verbosity is between link:https://github.com/JohnEarnest/ok/blob/gh-pages/docs/Manual.md#verb-reference[oK's verb table] and the <<_ngn_quick_reference>>.
 
 [options="header"]
 |=============================================================================================================================================================================================================================
 | symbol    | monad                                                   | dyad
-| `:`       | right                                                   | bind local
+| `:`       | identity                                                | right or bind local
 | `,`       | make singleton of +1-dim                                | concat
 | `#`       | count                                                   | shape (implies take (from end if `x<0`) if `\|x\|<#y`, or repeat if `x>#y`); or select dict (y) entries by (symbol or char) keys (x); or if x is a fn then apply to each of y's elts and its respective outputs to set that elt's resultant count
 | `+`       | transpose                                               | add
@@ -303,9 +307,7 @@ in this table, i mean `x` as the left arg and `y` as the right.
 | `::`      | identity                                                | bind global
 |=============================================================================================================================================================================================================================
 
-* what the hell does `;` do? looks like it separates statements, and that, of semicolon-delimited statements, they're evaluated let-to-right
-* is there really to gte/lte? to be fair, those aren't really helpful; for integers, just +1 or -1, and floats aren't precise anyway, so equality is an infinitesimal difference anyway! instead of `gte 0` you can do `>1e-9`.
-* there's a right (:) but not a left?
+* is there really no ≤/≥? to be fair, those aren't really helpful; for integers, just +1 or -1, and floats aren't precise anyway, so equality is an infinitesimal difference anyway! instead of `gte 0` you can do `>1e-9`.
 * there's a floor but no ceiling! this is ok: ceiling is so defined in factor: `: ceiling ( x -- y ) neg floor neg ;` indeed, even floor isn't a primitive in factor.
 * reshape with `0N` means "unbounded" e.g. `0N 3#!10`
 * example i/o: `myFD:<`"/path/to/file.txt"` then `>myFD` to close it.
@@ -329,17 +331,19 @@ the following are verbs given in terms of adverbs and an argument of a given typ
 [options="header"]
 |============================================================================================================================
 | symbol w/types  | function
-| f'              | map/each
+| <Ff>'           | map/each. `F` pointwise associates `x` with `y`; or if either is atomic then it's broadcast.
 | [x]F</\>        | (left) fold or scan. output's dim is input's - 1. x is optional init val. scans are as efficient as folds.
 | F<\/>:          | left- or right-curry `F`, then map over right or left i.e. in J, `F"_1 _` or `F"_ _1`. see examples below.
-| [x]F':          | factor `dup first empty prefix [ F ] 2 clump-map` where `empty` here gives empty type values. that prefix is added only if x isn't given.
-| [i\|p] f</\>    | do `f` `i` times or do `f y` while `p y`. if `i`/`p` isn't given, then `f` is applied until it returns either the initial or convergent value. using a backslash collects intermediate values like a scan.
+| [x]F':          | factor `dup first empty prefix [ F ] 2 clump-map` where `empty` here gives empty type values. that prefix is added only if `x` isn't given.
+| [i\|p] f</\>    | do `f` `i` times or do `f y` while `p y`. if `i`/`p` isn't given, then `f` is applied until it returns either the initial or convergent value. using a backslash collects intermediate values like a scan. the backslash version's output (nearly) always contains the initial value and the 1st value that failed the predicate e.g. `{(x!)(1+)\1}` returns the sequence `[1..x]` and `(<1)(1+)\1` returns `1 2`. the "nearly" part is that, stranegly, if you use the predicate `{0}` (or `{x:0}`) then you're guaranteed to get a singleton result.
 | i':x            | length `i` window (clump) of vector `x`
 | i f':           | "stencil": window with `f` applied to each window. the fact that this exists implies that i':x isn't virtual as it is in factor (`<clumps>`), which is sad. stencil exists only to be more efficient.
 | X'              | interval index (j's `I./2`), which generalizes binary search
 |============================================================================================================================
 
-disambiguating between `[x]F</\>` vs `[i\|p]f</\>`. the ambiguity is whether +++*+++ is monadic or dyadic; this determines whether to apply the lambda/predicate afterward, or whether to use it as a "while" clause. as far as i've noticed, this is the only ambiguous grammar.
+.implicit disambiguation/parsing of `[x]F</\>` vs `[i\|p]f</\>`
+
+the ambiguity is whether +++*+++ is monadic or dyadic; this determines whether to apply the lambda/predicate afterward, or whether to use it as a "while" clause. as far as i've noticed, this is the only ambiguous grammar.
 
 theoretically, token sequence `A B /` (or `\`) must be parsed thusly if `B` is an ambivalent verb (`B` being a noun would imply the verb form of `/` or `\` (split/join or encode/decode):
 
@@ -347,7 +351,7 @@ theoretically, token sequence `A B /` (or `\`) must be parsed thusly if `B` is a
   .. in ngn/k, +++{0=2!x}*/1 2 3+++ gives a type error whereas +++{0=2!x}(*/1 2 3)+++ returns `1` because 6 is even.
 . else if `A` is a non-integral noun then it must be a fold's initial value
 . else if `A` is an integer then it could be a fold's initial value or a number of times to apply a unary fn
-  .. apparently ngn/k assumes the fold case: +++4 +/,1 2+++ returns `5 6`. the only way that occurs to me to force unary `+` is to wrap it in a lambda: `4 {+x}/,1 2` returns `,1 2` (the input transposed 4 times.)
+  .. apparently ngn/k assumes the fold case: +++4+/,1 2+++ returns `5 6`. `4+:/,1 2` returns `,1 2`—the input transposed 4 times.
 
 .each right/left examples
 -------------------------
@@ -618,7 +622,7 @@ limits: 8 args, 16 locals, 256 bytecode, 2048 stack
 +++quicksort:{$[2>#?x;x;,/o'x@&'~:\x<*1?x]}+++
 
 . `x<*1?x` picks a random element from sequence `x` then compares it to each of ``x``'s elements e.g. `*1?"hello"` may pick `"l"` in which case `x<*1?x` evaluates to `1 1 0 0 0`. if `"e"` is picked then we get `0 0 0 0 0`.
-. `~:\` _somehow_ couples each logical element with its inverse e.g. `~:\0` becomes `0 1`, `~:\1` becomes `1 0`, and `~:\0 1 0` becomes `(0 1 0; 1 0 1)`
+. `~:\` couples each logical element with its inverse e.g. `~:\0` becomes `0 1`, `~:\1` becomes `1 0`, and `~:\0 1 0` becomes `(0 1 0; 1 0 1)`. how this works: 1. the initial value is always included in the output list; 2. the 1st value that fails the test is also always included as the last element of the output list. thus the output of `~:\0` starts with `0` then `~0` is 1 so the loop continues and flips again, thus producing the starting value `0`, so the loop terminates, having accumulated `0 1`. `~:\1` starts with `1`, then `~1` is 0, so the loop stops, having accumulated the starting value and the 1st failed value.
 . `&'` converts logical vectors to integers where `1` is set ("where")
 . `x@` indexes into the input sequence
 
