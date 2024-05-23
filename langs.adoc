@@ -209,7 +209,7 @@ TODO:
 * how prolog & haskell differ?
 * sketch what tacit prolog would look like. tacitity is only a notational difference, but does require non-parameterized relational primitives rather than prolog's single relational primitive: predicates' parameter vectors.
 
-concatenativity assumes that programs are ordered, that they execute in sequence. one might suggest that this makes it incompatible with prolog, since prolog programs are sets of facts and queries. however, even aspects of prolog are ordered: 1. predicate arguments; 2. clause parsing & evaluation. the latter applies to any text language. functions generally relate, and the stack is a method of composing functions i.e. composing relations. while the stack is nice, it's really tacitity that helps; tacitity directly reflects that variables are not the primitive program elements, but that relations are, which is appropriate because relations actually have meaning, whereas variables do not. rather, variables' meaning is only in terms of [relative to] other variables.
+concatenativity assumes that programs are ordered, that they execute in sequence. one might suggest that this makes it incompatible with prolog, since prolog programs are _sets_ of facts & queries. however, aspects of even prolog are ordered: 1. predicate arguments; 2. clause parsing & evaluation. the latter applies to any text language. functions generally relate, and the stack is a method of composing functions i.e. composing relations. while the stack is nice, it's really tacitity that helps; tacitity directly reflects that variables are not the primitive program elements, but that relations are, which is appropriate because relations actually have meaning, whereas variables do not. rather, variables' meaning is only in terms of [relative to] other variables.
 
 therefore we can generalize prolog and stack or concatenative models into a single type: `Relation(...) =: PrimRel1 | ... | Relation(...)`, which is symmetric and obviously enables metaprogramming. there are two aspects to this model: specifying and evaluating relations. concatenativity/tacitity makes code visually simpler & prettier, and easier to write & refactor. there may be a system that we use, such as the stack, to describe relations; this code may be literally followed by a compiler to construct a composite relation which will actually be used for computation in the executable (as compilers always do.) for example, a stack may be used by humans to describe a program (relations) and by the compiler to construct a db of relations, but the actual compiled program might not emulate a stack machine at all. it's the compiler's responsibility to convert code that's easy & fast for humans into code that's easy & fast for its target architecture.
 
@@ -237,15 +237,29 @@ so we, abstractly, necessarily have sets. practically, we necessarily have seque
 TODO: i need to decide distinct terms for predicate/relation (prolog), relation (sql), predicate (fn, typically to bool).
 
 .primitives
-[options="header"]
-| op | set     | relation [sql]^*^ | seq
-| +  | put k   | put k & v         | push v or put (set) v@i
-| ++ | union   | `assoc-merge`     | append
-| ∈  | find    | "                 | "
-| ⊂  | subset? | "                 | subseq?
-| -  | filter  | "                 | "
-| #  | count   | "                 | "
 
+TODO: ensure that i've already discussed the virtual sequence by this point. vseq represents set, relation, seq, fn b/c sets are primitive, seqs are indexed sets, and relations generalize both. predicates are how we specify vseqs. they're how we express the subset identity & relation together, like in sql: `select <expr> from <vseq> where <pred>`, or in haskell's list notation: `[expr<-vseq,pred]`. we can do like a mix of sql & k: have a lambda literal whose namespace includes whatever attributes that the argument vseq exposes: `{expr,pred}[s1;s2]`. certain predicates will effectively do refinement typing but better e.g. the `earliest(idx,vseq)` predicate will check to see if `vseq` is sorted by `idx`; if sorted ascending/descending then take at smallest/largest `idx`; and if not sorted then fold through `vseq` to get the element having the least `idx`. remember that `idx` is just one arbitrary attribute of this relation [sql]. *rather than type checking, we'll have algebraic predicate unification based on the only two primitives: set membership & order.* (sub)programs will specify which arguments of their predicates must come in ordered or leave ordered; this way ordering is done as necessary by the computer, not something needed to be tracked by a programmer. some other properties that the user can specify as sub-predicates: size change (a natural number), order preservation (boolean. `subseq` is an example), set preservation (boolean. `permute` is an example), ordered (asc,desc,f). make everything as implicit as possible, so that the predicates can _imply operations_ as much as possible, so that the programmer only ever specifies what they what their program to be, not what it must be in order for their desire to be fulfilled! thus it'll be prolog but with better syntax, more algebraic, and with vseq primitives rather than merely predicates and linked lists (and linked lists are horrible). rather than force the user into true logical primitives, we'll allow the user to define their own algebras/axioms, specify whether a subprogram obeys any axioms, take their word for it, leverage axiom-implied optimizations or thereby deduce dataflows to get the desired result, and use the sensible vseq primitive rather than treating lists and predicates separately!
+
+NOTE: any structure is plurality-agnostic. operations parameterized over a set or seq works implicitly for an atom by making that atom a singleton set or seq.
+
+a _predicate_ is a constrained virtual relation e.g. `x+5,x>6`. `,` ("and") & `;` ("or") are predicate primitives. predicates specify vseqs.
+
+`+`:: "together": for sets: union; for seqs: append
+`-`:: "apart": for sets or seqs: without values or indices
+`×`:: "each" (1:1 map)
+`÷`:: "distinct": for predicate and set/seq, group into subsets subseqs; given two structures, return the structures without each other
+`⊂`:: subset or subseq/find ("find atom" is equivalent to subseq for its singleton)
+
+* `-` (not) is the same as `filter`, `without`, and probably other common operations. because `filter` is actually just `group`, we see that all these are just division i.e. distinction i.e. difference: the extent or fact of things being distinct.
+* confuse, distinguish, `assoc-merge` is actually just coincidence (intersection) plus confusion: `select f(v1,v2) from t1 join t2 using (k)`.
+* `find(x,y)` is just a relation of x & y. it's a particular version of filter (i.e. intersect (w/predicate)!): first(filter(x,p) order by i)
+
+from my phone notes:
+
++: together, harmony
+-: disharmony, disagreement
+×: each. specific variety of addition. also alist.
+div: distinction, group
 
 ^*^ sql relations sensibly generalize maps from a vector of (k,v) to a vector of arbitrary-length vectors. better yet, forget the constraint that all element vectors have equal length, or even that the elements be vectors at all! just map over vectors of whatever the hell! this is about where iversonian languages and sql fail; neither supports a good syntax for specifying predicates[prolog]/relations of arbitrary subsets of structures. part of the reason that sql does not is efficiency; sql exploits indexes [sql] greatly.
 
@@ -268,7 +282,9 @@ notice that i put "sequence" instead of "stack", "list", "deque" etc. sequences 
 what composites do we commonly want, or what composites would easily enable us to code arbitrary relations?
 
 .useful composites
-TODO
+
+| op  | def
+| `#` | 0(1+)/
 
 * how to design code system s.t. computations that should be described as folds (e.g. `</`) work for virtual sequences e.g. in factor `M: iota maximum n>> 1 - ;`. i suppose i'd do the usual thing of defining the generic case then asymmetric cases. so like there's the generic fold adverb, which takes any dyad; but add an overriding asymmetry rule that if the verb arg is `<` then check if the composite verb's operand is an iota-type virtual thing, and if it is, then apply the special rule. the beauty of the symmetric-case-by-default-but-asymmetric-cases-override style is that it can be used with total abandon and is natural.
 
@@ -276,11 +292,15 @@ TODO
 
 first, the fundamentals of code:
 
-. the rawest programming is neural networks. this variety is not logical.
+. the rawest programming is neural networks refined by a train of trials against an objective function. this variety is not logical.
 . the rawest _abstract_ (symbolic) logical programming is specifying relations, as we see in prolog: just specify predicates. each predicate corresponds to a set. predicate sets can answer queries.
 . the rawest _reductive_ (data-based) logical programming is manipulating byte sequences.
 . the next-rawest abstract programming is functions, which are just unidirectional relations, and thus, unlike relations, have deterministic execution order (except parallel operations). functions are thus apt for describing a common variety of program called _dataflows_. functions, given inputs, can be evaluated for effect. you might ask, "what's the use of just transmuting and moving around data?" indeed there is no use in it! what we actually ultimately do here is to create a sequence of associations between data subsets and hardware—what are called _effects_, such as sending data to a socket, or video device, or output stream. all the functions do is confound or distinguish subsets. confoundment may or may not be reversable; e.g. `+` is not, but `(,)` is. to keep memory use low, some subsets are marked for deallocation. because functional programming concerns sets & sequences, functional primitives are set-&-sequence operations (ins/ovr [at indies], get [at indices]). indices are specified by a predicate. a common variety of "get" is "get by predicate and its complement" i.e. "partition". the predicate returns distinct values which distinguish the subsets.
 . all other programming is one of the prior plus some assumed, unnecessary model(s), which may be convenient for reasoning or describing things, but are necessarily limiting.
+
+all coding is merely identifying/relating arbitrary subsets from the program's total dataverse. and again: relations may be ordered (a/symmetric) or not, but must always be coded in an order. in the string "abc", `a` is related to `b`, and `b` to `c`, and so transitively `a` to `c`. any data structures that represent sets (e.g. tree set, hash set, bloom filter) are just sequences and algebra. structures generally are equivalent to virtual seqs, but are coded to exploit some algebraic properties, to make indexing & modification efficient. *vseqs may be coded to be especially efficient for particular operations. this is necessarily accomplished by exploiting algebraic properties.* in other words, all data are vseqs, yet the only reason that "other data structures" exist is that they are more constrained in what they can do or store, and those constraints reduce the structure's entropy (so to speak; really _variety_), thus enabling specialized, simpler traversals.
+
+b/c seqs have numerical indices, which are totally ordered, slices (substrs) are common. efficient traversals, such as binary search, are easy for this reason, too. generally, though, selection is done by `filter`: applying a predicate to `(k,v)` pairs. again, we'd ideally use `filter` with wonton abandon, but that's inefficient, so we try to exploit what constraints we know for efficient traversal. ideally we'd apply these constraints to each structure object itself; rather than instantiating from a class [template], we'd create a copy of a prototypical structure (such as was done in js 5 before classes were introduced in v6) then imbue it with constraints, which would be coded in such a way that they naturally change the indexing of this vseq. this is natural inheritance [oop] given by objects' predicates' subsets (object `A` is a subclass of `B` _to the extent_ that its predicates are a subset of `B`), rather than expressed explicitly by special class semantics and an `extends` keyword.
 
 NOTE: conditional branching is expressed by maps whose cod is programs. if that map's dom is bool, then `cond`; if literal values, then `case`.
 NOTE: number's algebras can be exploited very powerfully & elegantly. see `./coding.adoc`.
@@ -296,7 +316,8 @@ each language has a model for representing & evaluating programs. popular ones:
 | logic       | unify predicates
 |==================================================
 
-*i should be able to unify associative & logical reasoning by: all are maps i.e. indexed sets i.e. associations and the logical primitive, predicate, is isomorphic with set.*
+i should be able to unify associative & logical reasoning by: all are maps i.e. indexed sets i.e. associations and the logical primitive, predicate, is isomorphic with set. TODO: consider this later.
+
 .mutation vs purity
 
 deletion (mutative) may be thought of as "without" (pure). thinking purely helps you realize that you're just identifying thoughts rather than performing actions. it also saves you from sequencing things. however, it usually leads to less-efficient code, and is sometimes unnatural. note that it is necessary for parallel programming. if you're sequencing some actions, then code it as such; if you're specifying a constraint, then code it as such; if you're specifying a composite relation, then code it as such! choose a good system that enables all these three: mutative, predicate, pure. if you don't have such a system, then at least code the actual code in a comment near the implementation.
