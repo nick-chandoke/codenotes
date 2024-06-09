@@ -1,0 +1,11 @@
+code & you.
+toc:
+
+. what's code? it's meaningful info aka data. common examples: lang, dna, molecules—generally all relations, regardless of whether physical or abstract. only random data is not code.
+. en-/de-/trans-coding: equivalent representations up to some set of acknowledged properties. lossy or lossless. anything that isn't transcoded is effectively not code.
+. computers could be called "simulation machines." technically computation is just state change, so the whole universe is a computation, and since all is interacting matter/energy, there's no certain categorization of the stuff. however, obviously we can work particularly with useful subcomputations/patterns, and we define these concepts and assign them labels for use in language. similarly, when we say "computers" we really mean "programmable computers". being programmable enables us to freely create & change their simulations..
+. how computers work: analog & digital
+  .. primitives: assembly for cpus; circuit components for analog computers. discuss the mathematical primitives that each implements. lead into number seqs, then into the logical code primitives: boolean algebra, fields, rings, sets, modular arithmetic, custom coding schemes such as binary formats, and common codes such as hex, bin, dec, and how we can exploit bitseqs as sets, and generalize this to seqs of natural numbers where each elt may be one of n possibilities i.e. choices. lead into conditionality as maps/relations/groups.
+. relations vs functions. discuss programs as data which implicitly permit many dataflows (prolog) vs explicit dataflows (all others).
+. compression/factoring/ (symmetry) vs incompressibility/asymmetry.
+. the rest is basically what we see in my k notes and coding.adoc
