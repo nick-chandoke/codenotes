@@ -42,7 +42,7 @@ k is categorically better than j:
 * user-defined k verbs can have only one valence. this asymmetry against builtin k verbs is odd but not necessarily bad. then again, user-defined k verbs can have up to 8 args.
 * in k's grammar, all the following are nouns: parenthesized exprs, lambdas, identifiers.
 * no modifier trains, rank system, boxing, framing fill, &c
-* j's `@` & `&` are implicit in k.
+* j's `@` & `&` (bind/curry) are implicit in k.
 
 k's trains differ from j's:
 
@@ -237,7 +237,6 @@ TODO:
 * funcall/index duality. `@` is "index x at y" or "call x with argvec y"
 * functions are implicitly quoted simply by parenthecizing them e.g. `(-),1` returns 2-element vector `(-;3)`; this is because k's grammar is contextual, and a verb by itself (without args) is considered as a noun; thus, because in the parenthecized `-` is a noun and thus `,` joins two nouns into a vector.
   ** to invoke the essentially-quoted verb, use `@`
-* homoiconic syntax & output i.e. if you copy any displayed output then it's a valid data literal in that syntax
 * contextual grammar and thus contextual evaluation of deferred/quoted expressions
 * a single variable can refer to a set e.g. in `{4+x}`, `x` can refer to a vector. ideally it would, like in prolog, refer to a (constrained) set. as an honorable mention, sql variables also refer to sets.
 
@@ -280,7 +279,7 @@ these symbols are used by cast ($/2) and type (@/1).
 * right-associative
 * conditional branching: `:[p1;f1;p2;f2;...;else]`
   ** dollar sign may be used instead of colon
-  ** the empty values are the only falsy values in k: number: `0`; array: `()`; character: `0x00` i.e. "\0"; symbol: +++`+++; function: `::`, dict: `()!()`. all others are truthy
+  ** the empty values are the only falsy values in k: number: `0`; array: `()`; character: `0x00` i.e. "\0"; symbol: +++`+++; function: `::`, dict: `()!()`. all others are truthy. *`0N` is truthy! use `^:` to convert it to a false*
   ** prefixing a clause with `:` will make it return immediately, ignoring the clause's remaining computation
 * newlines behave identically to semicolons. this enables you to directly code pretty-print matrices: one row per line.
 * literals:
@@ -309,7 +308,7 @@ these symbols are used by cast ($/2) and type (@/1).
   ** `a:v` binds identifier `a` to value `v`
   ** `(a b c):v` binds identifiers `a`, `b`, and `c` to 0th, 1st, & 2nd values of `v`
   ** `aV:v` binds identifier `a` to `aVv` where `V` is a dyad
-  ** `(v;...):y` pattern matches/binds e.g. `(b;(c;d)):(2 3;4 5)` binds `b` to `1 2`, `c` to 4, and `d` to 5.
+  ** "unpack": `(v;...):y` pattern matches/binds e.g. `(b;(c;d)):(2 3;4 5)` binds `b` to `1 2`, `c` to 4, and `d` to 5.
 * juxtaposed nouns (`y x`) or `y[x]` evaluate as `y@x`. multi-parameter function punning also works: `x[i;j;...]` is the same as `x.(i;j;...)`
   ** omitting an index on a side of a semicolon means "all" e.g. `("abc";"DEF")[;1]` returns `"bE"`
   ** selecting multiple indices at depth (a mix of amend & drill): `(4 5#!20)[(0 1;1 2)]`. the parenthesis make this one vector index rather than multiple nested indices.
@@ -358,21 +357,28 @@ the following table's verbosity is between link:https://github.com/JohnEarnest/o
 | `'`        | each (adverb)                                           | `L` must be ordered-asc list. returns greatest `i` s.t. `L[i]<=R` or -1 if `R<L[0]`.
 |=============================================================================================================================================================================================================================
 
+mnemonics:
+
+\ & / are just 'transcode"; the side that they're leading toward is the coding direction: `\` is like `<-`: `2\14` transcodes `14` (implicitly in base 10) into base `2`. `/` is of course the inverse.
+
 .colon madness
---------------
+
 when you see a colon in code, it's one of 3 things:
+
 . definition (identifier on the left)
 . one of these adverbs: window (`':`) or each left/right (`\:` or `/:`).
 . force a verb to be monadic (builtin verb on the left)
 
-never will it be a literal, but if it _were_, then it'd mean "ignore this literal."
---------------
+or just the identity function, `::`.
 
-.`#/2`
+never would one intentionally write `x:y` to mean "return right argument", since one could always simply put `y` instead.
+
+==== `#/2`
+
+===== reshape
 
 * can columnize e.g. `0N 10!21` which is like j's `_2]\` but instead of filling, it leaves the last row ragged
 * if one of left's values is `0N`, then that axis length is computed by the length and other axes' lengths
-* `f` is applied to `x`, not each of `x`'s elts! e.g. `(0=2!)#!10` computes the mask `(0=2!)@!10` then applies it pointwise to `!10`. this is significant in e.g. `{`M=x[;2]}#(("dave";10;`M);("john";12;`M);("stacy";13;`F);("holly";20;`F))`
 * `i#x` shapes `x` to have `i` shape. it is not like j's `#`! e.g. `1 0 1 0 1#"hello"` returns `,0#,,0#,," "`! `{1 0 1 0 1}#"hello"` returns `"hlo"`! `i` is a shape vector as would be used in j's `$/2` e.g. `3 2 2#"cat"` produces:
 
 -------------
@@ -383,10 +389,19 @@ never will it be a literal, but if it _were_, then it'd mean "ignore this litera
 
 which has shape `3 2 2`, which is attained by shaping the 1D array, `(*/3 2 2)#"cat"`. thus we see that `#/2` is useful for systematically nesting.
 
-`f#x` is just a combination of `&` & `@`: `p#` is equivalent to `{x@&px}`. this is a reason why `&` is called "where". like how `<` is useful for sorting multiple vectors by a common order, so is `&` useful for filtering multiple vectors by a common filter.
+===== filter
+
+* `f#x` is just a combination of `&` & `@`: `p#` is equivalent to `{x@&px}`. this is a reason why `&` is called "where". like how `<` is useful for sorting multiple vectors by a common order, so is `&` useful for filtering multiple vectors by a common filter.
+* `f` is applied to `x`, not each of `x`'s elts! e.g. `(0=2!)#!10` computes the mask `(0=2!)@!10` then applies it pointwise to `!10`. this is significant in e.g. `{`M=x[;2]}#(("dave";10;`M);("john";12;`M);("stacy";13;`F);("holly";20;`F))`
+  ** this k3 example that apparently works in k3 but not in ngn/k: +++{x~|x}#("racecar";"nope";"bob")+++ gives `0#,"       ". i have no idea what that means, but apparently it's length is 0. anyway, `({x~|x}')#("racecar";"nope";"bob")` is correct in k6. i suspect that i'll often use this pattern of filtering with a predicate that's been each'd.
+
+.each
+
+each makes verbs 1:1. in some sense, atomic verbs become non-atomic, and non-atomic verbs become atomic.
 
 ''''
 
+* `Y'X` is equivalent to `-1++/X>/:Y`
 * eval (`./1`) is slow
 * freq, which replaced group in later versions of k, is `#'=`.
 * joins are implicit in k e.g. `(`a`b`d!3 2 5) ,' `a`b`c!1 2 3` produces ``a`b`d`c!(3 1;2 2;5 0N;0N 3)` and replacing `,/` by +++*+++ or +++*/+++ (they're equivalent given +++*+++'s rank) gives ``a`b`d`c!3 4 5 3`; we can see that default values are used as they are in fold. this is called `assoc-merge` in factor.
@@ -411,7 +426,7 @@ others:
 / unary or binary (with right arg) amend
 @[x;y;f]   amend  @["ABC";1;_:] -> "AbC"   @[2 3;1;{-x}] -> 2 -3
 @[x;y;F;z] amend  @["abc";1;:;"x"] -> "axc"   @[2 3;0;+;4] -> 6 3
-/ drill is the same but accepts deep indices. it obviates amend. i guess that amend exists because it's more efficient
+/ drill is the same but accepts deep indices. it obviates amend. i guess that amend exists because it's more efficient, or b/c it works for multiple args without each right (/:)
 .[x;y;f]   drill  .[("AB";"CD");1 0;_:] -> ("AB";"cD")
 .[x;y;F;z] drill  .[("ab";"cd");1 0;:;"x"] -> ("ab";"xd")
 .[f;y;f]   try    .[+;1 2;"E:",] -> 3   .[+;1,`2;"E:",] -> "E:typ"
@@ -420,6 +435,8 @@ others:
 ------------------------------------------------------------------
 
 .io
+
+TODO: add "seek" verb to ngn/k. takes a lambda from current position.
 
 * `[x]n:i y`, where `n` is `0` or `1` for lines or bytes and `i` is an io descriptor, is a verb. the unary case reads from `y`. the binary case writes `y` to `x`.
 * when +++`+++ is on the left, then it's stdout; when on the right, it means stdin: +++`0:("lines";"vines")+++, +++`1:"hello"+++, +++name:1:`;name+++. of course, you can use standard POSIX file descriptors `1` and `0` for stdout and stdin respectively. otherwise file descriptors may be gotten from `<:`
@@ -596,22 +613,6 @@ list atom
       `w   adverb         '   /:
       `x   external func
 --------------------------------------------------------------------------------
-\:
-I/O verbs
-  0:x read  lines
-x 0:y write lines
-  1:x read  bytes
-x 1:y write bytes
-   <s open          fd:<`"file.txt"
-   >i close         >fd
-
-x can be a file descriptor (int) or symbol or string such as
- "file.txt"
- "/path/to/file"
- "host:port"
- ":port"         /host defaults to 127.0.0.1
-TODO: add "seek" verb. takes a lambda from current position.
---------------------------------------------------------------------------------
 \+
 Verbs:    : + - * % ! & | < > = ~ , ^ # _ $ ? @ . 0: 1:
 notation: [c]har [i]nt [n]umber(int|float|char) [s]ymbol [a]tom [d]ict
@@ -624,7 +625,6 @@ special:  var:y     set    a:1;a -> 1
           o[..]     recur  {:[x<2;x;+/o'x-1 2]}9 -> 34
           [..]      progn  [0;1;2;3] -> 3
 
- !I odometer  !2 3 -> (0 0 0 1 1 1;0 1 2 0 1 2)
  !S ns keys   a.b.c:1;a.b.d:2;!`a`b -> `c`d
  &I where     &3 -> 0 0 0   &1 0 1 4 2 -> 0 2 3 3 3 3 4 4
  &x deepwhere &(0 1 0;1 0 0;1 1 1) -> (0 1 2 2 2;1 0 0 1 2)
@@ -721,25 +721,262 @@ only the following verbs actually concern relation; the rest are arithmetic, typ
 `&`:: non-0's
 `':`:: window
 
-i find shape, `#/2`, to be a bit of an odd choice for a language with ragged arrays. it's still useful for when you're dealing with rectangular arrays, still.
-
 they're approximately listed in the order that i expect, from most common to least common.
 
-looping:
+==== thinking "array"
+
+the common test for good array code is that you use few adverbs (higher-order fns), and their argument verbs (functions) are small. in many langs, control flow devices are part of the language. in freer langs such as factor, they're simply higher-order functions. in k also, they are higher-order functions. this is good, because now we need only this one rule to avoid both adverbs generally and control flow particularly. avoid nesting. verbs are flat; adverbs are not. one may freely use verbs, but adverbs must be used wisely. as much as possible, *put verbs on the right of adverbs, not on the left.*
+
+TODO: put this fact in a good section: "encode" with "where": "encode" maps permutations to indices. each permutation is 0...n, i.e. a base n-number. encode is a polynomial/linear equation, too, then, b/c it's `+/d^n`. odometer (`!`) represents cycles and modular arithmetic. modular arithmetic approximates a sawtooth wave. it can (though i'm not sure that it ever should) represent nested loop iterations, too: e.g. `!2 4` represents an outer loop runnig for two iterations and its inner one for 4 iterations. this generalizes the nested-`for` control flow pattern from a builtin language feature to a 1st-class map from "iteration index" to iteration value. operations on the result of odometer is equivalent to a `for` loop none of whose "header" subexpressions are mutated by/in its body. odometer is also multidimensional indices. all these are the same thing as regrouping [counting]. get to the (r-1)th digit, then incrementing regroups i.e. increments the next most significant digit. this generalizes modualar arithmetic by endowing a regrouping context. odometer does not handle mixed radix. compare `+!14 3` to `(3\)'!14`. the former is [0,14) zipped with [0,3). the latter is the first 14 naturals expressed in base 3. `+!4 3` equals `(4 3\)'!12` i.e. iota with encode generalizes odometer to mixed radix. *more generally is the group theory thing that the natural numbers can code anything.* array langs are particularly apt with this!
+
+this loop prints the map from input index `i` to each iteration's output value:
+
+.test.c
+[source,c]
+----
+#include <stdio.h>
+#include <math.h>
+int main(int argc, char** args){
+  int i;float j,v;
+  for(i=0,j=i;i<12;i++,v=(float)i*1.7,j+=v)
+    if((int)truncf(j)%2==0) printf("%i\t%f\t%f\n",i,j,v);
+    else                    printf("%i\t-\t\t-\n",i);
+  return 0;
+----
+
+.`cc -lm test.c && ./a.out`
+-------------------------
+0   0.000000    0.000000
+1   -           -
+2   -           -
+3   10.200001   5.100000
+4   -           -
+5   -           -
+6   -           -
+7   -           -
+8   -           -
+9   76.500000   15.300000
+10  -           -
+11  112.199997  18.700001
+-------------------------
+
+the lines with hyphens are those where those indices map to nothing. alternatively they could be said to not be in the map. in c, the map is produced by iteration, and (i,j,v) is computed for each iteration. we could say that `i` is the index and the map maps from `i` to `print(j,v)`. `print` can be replaced by any action/function. we could instead say that it's a map from `(i,j)` to `v`, or to `(j,v)` or whatever. this is the case because `(i,j,v)` is a relation [sql or prolog] i.e. that it can be indexed by any subset of its values to return the whole set of values.
+
+i express it in k:
+
+[source,k]
+------------------------------
+j:+\v:1.7*i:!12
+m:i!+(j;v)
+`0:(\t/)'$i,'({~2!_x[;0]}#m)@i
+------------------------------
+
+prints
+
+-----------------------------
+0   0.0    0.0
+1   0n     0n
+2   0n     0n
+3   10.2   5.1
+4   0n     0n
+5   0n     0n
+6   0n     0n
+7   0n     0n
+8   0n     0n
+9   76.5   15.299999999999999
+10  0n     0n
+11  112.2  18.7
+-----------------------------
+
+notice that in k there are many easy ways to build-up the map, since i'm dealing exclusively with data and not at all with control flow. i express the loop as a dictionary from `i` to `(j,v)`, filter by the values, associate the indices with the values all as a table, then format and print. the point is not in the elegance nor how exactly i express the map; the point is that any loop can be expressed as a map from iteration number to iteration value, and that maps are data and so can be composed, edited, etc as freely as data can be, whereas loops are not 1st-class objects and are not nearly as mutable nor composable.
+
+this is the same as the scan/while equivalence discussed later in these notes. notice how `j` was computed as a scan; emergent loop values (here, `j` being mutated—incremented by `v`—on each iteration) are computed & stored as scans, then used in a later array operation.
+
+*generally we translate control structures to maps from iteration number to that iteration's output. loops are maps from iteration number to output, and conditional branches are maps from branch number to body.*
+
+start with the minimum needed to code anything: 0 & 1. this generalizes in two equivalent directions: becoming a sequence of 0's & 1's, or staying one number and increasing in maximum value i.e. 0, 1, 2, 3, ...to infinity. of course any programmer knows that they're the same: 1110 bin is the same as 14 dec. they should be seen as the same: it's just value itself, expressed by a sequence of digits; the digits' meaning is exclusively determined by the radix.
+
+we borrow the group/galois theory brilliance that anything can be represented by natural numbers, then combine it with the fact that all natural numbers are equivalent to sequences of arbitrary-radix numbers which is equivalent to modular arithmetic, combined with that all programs are maps, then suddenly everything is a map from naturals to outputs, and apls/k excel(s) at working with that structure!
+
+TODO: in the name of arithmetic, push for powerful arithmetic being used in programming e.g. clifford algebras, convolution matrices, polynomials, en/decode. these conspicuous primitives obviously, greatly-should be discussed thoroughly so that people can actually USE THEM!
+
+===== mapping/association
+
+* we don't map; it's implicit. for 1:n, it's implicit via broadcasting else explicit via `/:` or `\:`. for 1:1, it's implicit else explicit via `'`
+* rather than writing loops, we use scan or fold. see the following section for discussion & examples
+* symmetric relation is broadcasting. asymmetric relation is pointwise association. asymmetric relation generalizes pointwise. k makes it easy to merge relations e.g. numbers divisible by 3 or 2: `~~+/((3!);(2!))@\:!10`.
+
+example #567 from _k3 idioms_ is worth study. it's like link:https://code.jsoftware.com/wiki/Vocabulary/curlyrt[j's `}`]: it uses selection vector `g` to determine which row to extract from:
+
+[source,k]
+----------
+x:`hot`white`short`old
+y:`cold`black`tall`young
+g:1 0 0 1
+(x,'y)./:(!#g),'g
+`cold`white`short`young
+----------
+
+===== exploit common arithmetic relations
+
+numbers have many symmetries & asymmetries. we can exploit these greatly. not only do they generalize well, but they're terse and fast because arithmetic is fast, and on digital processors, integer arithmetic is especially fast.
+
+alternation:: pow(-1,n). don't use it, though, since it isn't directly accessible in k6, and it's floating point. use `(n!)` instead, which generalizes and uses integer arithmetic.
+replace `x` by `y` where `p(x)`:: `x+y*px`
+choice:: `choices@f[x]` e.g. `("sell";"buy";stay)@sgn` where `sgn:((x>0)-x<0}`
+
+using (multi)linear algebra to express computations is very good when applicable.
+
+one of apls' greatest properties is that they rely greatly on arithmetic to determine selection vectors, rather than relying on higher-order functions & predicates, which are inefficient, inflexible, and must be defined. no one will ever design any system as perfect as arithmetic. when programs/logic are encoded as matrices, then _programs_ are enabled all their power: empty elements, broadcasting, boolean algebra / set union, negation, intersection.
+
+===== storage
+
+store a list of records. this way you can use fold, stencil, etc to properly relate sequenced elements. consider the following stock candle operations:
+
+[source,k]
+----------
+/    H  L  C  V  / pretend that these are valid hlcv values
+dat:(28 9  16 12
+     10 12 14 18
+     9  10 18 16)
+>':dat / compare each candle's hlcv to its prior
+(0 0 0 0
+ 0 1 0 1
+ 0 0 1 0)
+(|/>)':dat / candles any of whose hlcv was higher than its predecessor. returns same-length vector; 1st elt is 1 as a default value b/c the 1st elt has no prior.
+1 1 1
+(|/>)':dat[;0 2] / same, but consider only high & close
+1 0 1
+----------
+
+to stitch tables (to add attributes to a list of records): `X,'Y` or `+(X;Y)`, which are equivalent up to distinction:
+
+[source,k]
+-----------------------
+X:3 4#!10
+Y:3 4#24+!12
+X,'Y
+(0 1 2 3 24 25 26 27
+ 4 5 6 7 28 29 30 31
+ 8 9 0 1 32 33 34 35)
++(X;Y)
+((0 1 2 3;24 25 26 27)
+ (4 5 6 7;28 29 30 31)
+ (8 9 0 1;32 33 34 35))
+-----------------------
+
+let only your program's specifications' relations determine how you relate data. in k et al apls, relating data effectively means: 1. whether data are put into a common array; and 2. the composite array's shape; and as in all computational models, 3. coupling data as args of a (2+)-ary relation/fn. for example, if you relate two vectors, then don't put them in a list, since that's redundant; verbs already relate two vectors. so e.g. do `x+y` instead of `+/(x;y)`. don't group `x` & `y` together just because they _can_ be related. a good test of whether to de/couple data is syntax. in the above hlcv example, `>':` is very *terse and implicitly entails all of hlcv.* if i wanted to identify only particular columns, then i must add more syntax, namely in the above example, `[;0 2]`. if instead i wanted to commonly apply verbs to attributes without regard to each other, then it'd be nicer for me to not put them into a common table; i'd rather do `h-l` than `-/hlcv[;0 1]`, and indeed, beautifully, the syntax's verbosity reflects data storage & flow flow elegance. don't strive to de/couple your data; let the coupling naturally reflect the operations that you'll apply to the data.
+
+===== know how morphisms can be rearranged/delayed
+
+* we can factor actions (side effects) out of array ops (see the while example below)
+* make stencil operations small & simple. it avoids redundant computation; you don't want to compute a hefty stencil `H` over `4 H':!10`, because that'll compute `H` 4 times for 5 and 6. `4':!10` has 28 items. also it enables you to run any number of variably-sized stencils on one array, and decouples computations from any one stencil. try to avoid stencil; there are usually more elegant, more efficient solutions. for example, moving average can be done as a fold/scan: `{(((y-1)_a)-0,(-y)_a:+\x)%y}`.
+
+==== shape, maps, and conditionality
+
+TODO: merge §conditionality
+
+shape is useful for mapping. shape replaces higher-order functions (and probably `cond`). consider:
+
+[source,factor]
+---------------
+{ "racecar" "nope" "bob" } dup [ >upper ] map 2array
+---------------
+
+and
+
+[source,k]
+---------------
+0 32 {`c$y-x}'2 3#("racecar";"nope";"bob")
+---------------
+
+both return
+
+------------------------------
+{ { "racecar" "nope" "bob" }
+  { "RACECAR" "NOPE" "BOB" } }
+------------------------------
+
+this equivalence relies on identities; in the factor code, there's an implicit `[ ] map` that's missing because it does nothing. however, in the k code, that is seen as adding 0. the factor code is nicer in this case, but this situation generalizes to `nmap` in factor, and a matrix with _n_ rows in k.
+
+given that we have the empty program—called `::` in k—which is an identity under application,...idk, some theorem about numbers and programs being some algebraic structure so we have a sort of equivalence and this makes programs expressible as multidimensional arrays of numbers and we can manipulate the programs just as elegantly/powerfully as "../../coding.adoc" tells, such as representing each k operator by a length 5 bit sequenece, and the rest of the machine word's bits can be used as a bit set where each position being on or off corresponds to some algebraic property being satisfied or not.
+
+then again, a less algebraic perspective is to just say that `{(4,#x)#x}` is akin to `ndup`, and `map` is implicit in k unlike in factor. we could easily just do `(::;{`c$x-32})@'2 3#("racecar";"nope";"bob")`.
+
+you can do some interesting things with shape, that basically has to do with modualar arithmetic where the modulus is the input sequence's length. modular arithmetic relates to waves being in/out of phase, or rotation e.g:
+
+--------------
+2 6#1 6 5 2 4
+(1 6 5 2 4 1
+ 6 5 2 4 1 6)
+--------------
+
+for `y>0`, `rot:{y_(y+#x)#x}`.
+
+===== looping
+
+if you want to iterate through an array with persistent state, producing an array, then use a scan adverb. consider the following factor code:
+
+[source,factor]
+------------------------------------------------------------------
+! 1 if cross above, -1 if cross below.
+: cross ( s1 s2 -- {above/below/f} )
+  [ - sgn ] 2map                                             ! (1)
+  [ first ] [ rest-slice ] bi                                ! (2)
+  [ [ f ] [ 2dup = [ drop f ] [ nip dup ] if ] if-zero ] map ! (3)
+  nip f prefix ;                                             ! (4)
+------------------------------------------------------------------
+
+`(2)` breaks the seq into a state and a seq. `(3)` is the heart of the computation. it replaces runs of the state by `f` but if the iter elt is not the state, then the state is set to it. the state is thus not updated on each iteration. i can't use `accumulate*` (scan) because it necessarily uses the accumulated/returned value as the "prior" value in successive iterations, which is not the case here. if we express the state changes as a scan then there will commonly be runs of one value e.g. if the state is updated on the 4th iteration, then the first four elements of the scan will be `s s s s'`. so, naturally in the k version, i'll express the computation as a scan to accumulate the state, then a map which corresponds to the map over the sgn seq:
+
+i translate the stateful scan: +++{:[y=0;x;x=y;x;y]}+++. +++:[x=y;x;y]+++ is the identity function! so the actual translation is +++{:[y=0;x;y]}+++, which is arithmetically expressed as +++{y+x*y=0}+++. you can reason about that methodically as +++*+++ being and/intersection/product/implication, and `+` as being coproduct/or/else. the rest is easy. the whole repl session follows:
+
+[source,k]
+---------------
+sgn:{(x>0)-x<0}
+a:10 11 12 16 18 14 12
+b:2  3  7  19 18 14 11
+sgn a-b
+1 1 1 -1 0 0 1
+{y+x*y=0}\a-b
+1 1 1 -1 -1 -1 1
+/ next, i clearly want to identify the places where the value changes; that's =':
+=':{y+x*y=0}\sgn a-b
+0 1 1 0 1 1 0
+/ whoops. that's not right; i want the inverse:
+~=':{y+x*y=0}\sgn a-b
+1 0 0 1 0 0 1
+/ ok, but now i want to retain the original values; this is my mask. time to apply it to the original.
+{x*~=':{y+x*y=0}\x}sgn a-b
+/ set the first to 0, because it's always 0. pretty much the same as the factor version's line (4)
+@[{x*~=':{y+x*y=0}\x}sgn a-b;0;:;0]
+---------------
+
+and done! the actual definiton:
+
+[source,k]
+----------
+:cross:{@[x*~=':{y+x*y=0}\x;0;:;0]}sgn@-
+{@[x*~=':{y+x*y=0}\x;0;:;0]}{(x>0)-x<0}@- / notice the sgn fn's lambda literal definition inlined!
+----------
+
+without the `@` between `sgn` & `-`, trying to evaluate `cross[a;b]` gives +++`nyi+++, which i don't understand. i'd expect that, worst case, `-` would try to use the lambda as its left arg and throw a type error. anyway, whatever. simply restricting my implementation to k primitives & arrays revealed a better algorithm!
 
 * short-circuiting:
   ** return the same value twice when using fixpoint
   ** modify the output (or another variable) s.t. it fails the "while" condition
-  ** trim then iterate
-* example of fold as "while": +/ while sum<30: `*{(0<#x[1])&30>x@0}{@[@[x;0;+;x.1 0];1;{y_x};1]}/(0;6 11 16 21 50)` returns 33. you could de-nest the amends instead: `{x:@[x;0;+;x.1 0];@[x;1;{y_x};1]}`. remember that amend returns a modified copy; it is pure, not effectful. the fact of storing multiple data is kind of ugly compared to a fold that supports short-circuiting. we can do much better by using "unpack" (bind by pattern match) syntax: `{(a;r):x;(a+r[0];1_r)}`
+  ** trim then iterate e.g. to effectively accumulate, stopping when sum>30, and printing the accumulator on each iteration: +++`0:${#[1+*&30<x;x]}@+\6 11 16 21 50+++. compute all the accumulator values, the earliest index whose element fails "while"'s predicate, add 1 to it, and take that many elements, convert them to strings, print them. this example importantly demonstrates two things: 1. terminating a fold early is equivalent to completely looping through its trimmed scan; and 2. performing an action for each iteration is equivalent to performing it for each element of the scan. these are the case only when (what would be) while's predicate does not entail io. in this example, the loop body entailed io, but the predicate depended only on the accumulator, which is of a referentially transparent dataflow. unless there's operator fusion, this means more looping, which is less than ideal, but because array lang primitives so strongly suggest this pattern, the interpreters should fuse into one loop.
+  ** literal short-circuiting via "while", e.g. accumulate until sum>30: +++{30>*x}{(x[0]+x[1;0];1_x[1])}/(0;6 11 16 21 50)
++++ returns `(33;21 50)`. the fact of storing multiple data is kind of ugly compared to a fold that supports short-circuiting. for more complex loop states, you may want to use amend/drill or the "unpack" syntax.
+    *** "while" is necessary only if your loop predicate relies on or incurs side effects, including any that may be executed in "while"'s body e.g. +++(40>){`1:"> ";`I$-1_1:`}\0+++ to read-in numbers until you enter one that's greater than 40; here the predicate acts on an object gotten from io.
 
-.debugging & observation
+===== debugging & observation
 
 * use trace ` \` to print arbitrary intermediate values easily
 * use scan `\` to print intermediate values of a loop
 * use `,` as your verb that you pass to adverbs. because it has rank infinity, it makes behavior clear compared to atomic verbs.
 
-==== avoiding cond/jumps
+==== (avoiding) cond/jumps
 
 first, if you're unfamiliar with the term "hot code", see the following:
 
@@ -756,11 +993,15 @@ generally branching may be expressed as a map from natural numbers to programs (
 
 array langs are very apt for associating arguments with predicates: pairing an atom (arg) with a vector (of predicates) broadcasts, and a vector of args with a vector of predicates associates pointwise. if you use `cond` to select values rather than computations, then just run all the computations and use masks to filter aka select values.
 
-.algebraic consideration from 1st principles
+===== algebraic consideration from 1st principles
 
 predicates, types, logical values, maps, and the fact that all computation is relations i.e. grouping data into sets, where any datum may belong to multiple seqs/sets.
 
 we consider coproduct & product. these are seen equivalently across types, predicates, sets, and the boolean ring, ℤ/2. consider `(∩ (HashTable k t) t)` which states that variable `t` "satisfies a property" i.e. "matches/satisfies a predicate" aka has a non-null set intersection. adopt the habit of knowing types, (1st-order) predicates, set theory. abstain from higher-order logics; they're prettier at the cost of being more constrained, complex. work with data, not programs. metaprogramming is a mistake; it suggests that code should be considered as data. what ought to be done is avoiding code entirely, using only data. this is what prolog does. true, prolog supports macros (static metaprogramming), but that merely enables custom notations (dsls), which is entirely divorced from program logic.
+
+fixpoint is convergence to idempotency, a property common to boolean rings.
+
+booleans concern satisfaction/sufficiency, difference. these generalize to sets, wherein they're expressed as membership and set difference. 0 & 1 generalize to naturals, which may represent set cardinalities. viewing conditionality in terms of predicates, integers, sets, is refreshing and empowering, because it means that we may use nothing more than sets to define conditionality. given that all other coding is exclusively sequences/sets, this makes conditionality just another aspect of common data ops.
 
 ''''
 
