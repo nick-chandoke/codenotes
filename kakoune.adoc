@@ -43,6 +43,8 @@ current:: valid in `[un]set-option`. refers to the narrowest scope in which the 
     * if sharing sessions, get into the habit of using `:db` instead of `:q`!
   * `:q` detatches the client from the session; the other window & session are unaffected
 
+see link:https://github.com/mawww/kakoune/issues/3259[issue #3259] about binding sequences of keys in insert mode.
+
 === differences from vi
 
 see `:doc keys` for notation. nb. `lt` & `gt` represent `<` & `>`.

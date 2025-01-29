@@ -49,7 +49,7 @@ account>> drop [ owner>> ] [ cash>> dup ] [ debt>> ] tri@ > -- factor
 select owner,cash,debt,cash>0 from account                  -- sql
 ----
 
-immediately we see the inferiority of combinators! `x qs cleave` works only on a single datum, `x`. yes, we redundantly used `cash` in sql, but it's less complex! complexity isn't worth brevity. good code strives to maximize independence across codes, encoding dependencies only to exploit implicit facts e.g. 1. sql triggers explicitly encode dependence; 2. that n%m as a logical value represents whether n/m has a remainder, and that multiplying that by another number does not change the logical value if the logical value is false; this is dependence (mutual information; see the statistics / information theory definition of _dependence_) of how 0 is used by multiplication, modular arithmetic, and logical values' encoding of truthiness.
+immediately we see the inferiority of combinators! `x qs cleave` works only on a single datum, `x`. yes, we redundantly used `cash` in sql, but it's less complex! don't sacrifice simplicity for brevity! good code strives to maximize independence across codes, encoding dependencies only to exploit implicit facts e.g. 1. sql triggers explicitly encode dependence; 2. that n%m as a logical value represents whether n/m has a remainder, and that multiplying that by another number does not change the logical value if the logical value is false; this is dependence (mutual information; see the statistics / information theory definition of _dependence_) of how 0 is used by multiplication, modular arithmetic, and logical values' encoding of truthiness.
 
 this being said, i wonder how `[ [ first ] bi@ < ] sort` is done elegantly in sql. it wholly depends on why one would want [to compare on] the `first` of something. supposing `{ { 10 "a" } { 3 "z" } { 6 "d" } } [ [ first ] bi@ < ] sort .`, in sql that's `select x,y from t sort by x`, which easily supports arbitrary subsetting, expression selection, optionally filtered aggregates, joining,....
 
@@ -213,7 +213,7 @@ this section is for those who've already read the rest of this document.
   ** that one-to-many relations are stored in separate relations e.g. if i've a table `drug(prodname, chemname text primary key, dosage)` then it can't have a property `sideeffects`, since each drug has multiple. i must have a separate table `sideeffects(drug references drug(chemname), effect)`.
 * *exploit*: row values; numbers & strings; [builtin] [non-]aggregate ("core") [window] fns; `join`, `select`.
   ** `coalesce` is short-circuiting `or` like in lisp. like `iif` it's just a more convenient representation of `case when`.
-    *** `coalesce` returns the first non-null, or if all null, then returns `null`. it works with aggregates e.g. `select coalesce(sum(x),0) from t` returns scalar `0` for empty `t`.
+    *** `coalesce` returns the first non-null, or if all null, then returns `null`. it works with aggregates e.g. `select coalesce(sum(x),0) from t` returns scalar `0` for empty `t`. however, it does not work with window functions.
   ** you can encode strings especially to exploit helpful string functions (see below), even creating indexes on these
 * use `upsert` instead of `insert`, `update`, `replace`
 * recursive queries generalize literal relations just as horn clauses with symbols generalize horn clauses of only value literals. recursive queries are equivalent to horn clauses or functions. this power is of relating symbolic expressions. a recursive `select`'s expressions (of its many clauses) are related to the result of applying those expressions on the prior iteration; as in other reductionist langs, the expressions are transitively related by evaluating expressions on prior-output values.
@@ -386,36 +386,134 @@ sql's (relalg's) primitives are the (+,×,-,0)=(∪,∩,\,∅) ring, expressed i
 
 ===== window functions
 
+window fns are aggregate fns generalized to operate on overlapping subsets; compare with `group by`, which partitions into non-overlapping subsets.
+
 see `windowfunctions.html` for both a description of the window function design/mechanism, *and a list of the bulitin window functions.*
 
-a _window [frame]_ is a subset of a relation. the only thing that distinguishes it from a `select` expression is that each subset is associated with a row. this is much more powerful than otherwise: join, which associates each row being with exactly one other; or aggregate functions, which evaluate to a scalar, albeit one per group when `group by` is used. therefore window functions are extremely powerful but more particular versions of aggregates on `group by` that give aggregate outputs per row rather than just per group of rows.
+a _window [frame]_ is a subset of a relation. the only thing that distinguishes it from a `select` expression is that each subset is associated with a row. this is much more powerful than:
 
-* aggregate window functions' window frame is determined by a predicate given to the `order` clause. also the window's contents may be ordered.
+. `join`, which associates each row being with exactly one other
+. aggregate functions, which evaluate to a scalar, albeit one per group when `group by` is used.
+
+therefore window functions are more powerful, but more particular, versions of aggregate fns which give aggregate outputs per row rather than just per group of rows.
+
 * aggregate window functions don't present the bare columns problem.
-* even non-aggregate window functions effectively implement stateful loops (folds). aggregate winfns implement stateful loops that would be a pain to implement with a fold because their state isn't easily expressed by a single accumulator value, as is the case for aggregate functions on a rolling window e.g. selecting a value and the sum of its immediate neighbors. this is easily defined by a for loop in c, but not by `reduce` in factor, or especially by a fold in racket, haskell, python, &c.
-
-all binary functions are foldable i.e. usable as aggregates. only in typed langs is this not true, for they often use types like `a -> b -> c` or `a -> b -> b -> a` or `a -> b -> b`, instead of `a -> a -> a` or `a -> (b -> a) -> a` &c. all unary fns are mappable & applicable, and all binary fns are applicable and foldable. sql has only numbers (integers & floats) and strings (strings & blobs.) all other "typing" is done by relations & row values. thus sql meets my personal requirement for using only relations of types primitive to a physical cpu. therefore, excepting lack of metaprogrammability and the arguably bad & arbitrary constraint of needing to group all columns as tables, *the ability to define aggregate window functions should be all that's needed to make sql a perfect language*, even if its syntax is verbose.
+* _per se_ window fns can be used as aggregates, and ordinary aggregates can be used `over` windows
+* even non-aggregate window functions effectively implement stateful loops (folds). aggregate winfns implement stateful loops that would be a pain to implement with a fold because their state isn't easily expressed by a single accumulator value, as is the case for aggregate functions on a rolling window e.g. selecting a value and the sum of its immediate neighbors. this is easily defined by a for loop in c, but not so easily by `reduce` in factor (without lexical variables), and would be quite ugly by a fold in racket, haskell, python, &c.
 
 NOTE: because winfns' results are not per-row, window functions cannot be aliased then used in `where` clauses.
+
+as the sqlite docs show, the syntax is:
+
+----
+SELECT lag       (x)       FILTER(WHERE x>10) over     win1          WINDOW win1 AS (order by x)
+        |         |                 |          |         |                                |
+   window-fn (expr[,...])    [filter-clause]  OVER window-defn/name                  window-defn
+----
+
+the `window-defn` may feature `partition by` or `order by`. window fns are applied per partition. `partition` is semantically equivalent to `group by`, but is different syntax, particular to window fns. `order by` is interesting for window fns because unlike ordinary aggregates, *they're applied to sequences, more particular than sets. it's sql's single device for dealing with sequences.* for example, `row_number`'s functionality cannot be expressed in sql by any other means. *however*, window functions cannot be applied directly to other window functions; that can only be done indirectly by associating each group with a unique identifier then using `with`.
+
+====== frame spec
+
+* `range` & `groups` partition by element equality, where the elements are those of the `order by` expression(s).
+* `unbounded preceding` & `unbounded following` just mean the min & max values of the subset [partition]
+* in `BETWEEN a AND b`, either `a` may be `expr FOLLOWING` or `b` may be `expr PRECEEDING`. they cannot both be used simultaneously. for more complete description of rules, see the window function sqlite docs, _§2.2.2 frame boundaries_. the rules are sensible; they basically imply that the index referred to by `b` cannot be less than that which is referred to by `a`.
+* notice, in the `frame-spec` syntax diagram, the redundancy of {`UNBOUNDED PRECEEDING`, `expr PRECEEDING`, `CURRENT ROW`}, how it's present within the `BETWEEN ... AND` syntax, too. the documentation notes that `...` is syntactic sugar for `BETWEEN ... AND CURRENT ROW`. `BETWEEN` allows you to effectively specify the window as a substring (commonly called a _slice_, such as by python or factor coders), though here it's specified in terms of `CURRENT ROW`. a more literal representation is a loop in C:
+
+[source,c]
+----
+Vector out;
+for(i=0;i<len;i++)
+  out.push(winfn(slice(max(0,i-a),min(i+b,len))));
+----
+
+here `CURRENT ROW` corresponds to `i` and `a` & `b` represent the computed value of ``expr``'s as in `BETWEEN a AND b`.
+
+the default `frame-spec`, `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS`, identifies all prefixes of the [ordered] partition. remember that `range` implies that partitions are done by the expressions of the `order by` clause.
+
+* frame types specify the subsets that the aggregate will be applied to:
+  ** `rows`: the subtring containing current row, whose boundaries are computed by `a` & `b`
+  ** `groups`: all other values having `order by` values in common (equal to) with current row
+  ** `range`: requires exactly one `order by` expression (call it `x`), but otherwise generalizes `groups`' grouping predicate from equality to being in an interval. `range` groups by all rows whose `x` are in a range; as usual, the range contains the current row's `x` (call it `cx`), and its boundaries are deterimend by `a` & `b`. for example, `range between 2 preceding and 3 following` identifies subsets of a relation `where x is between cx-2 and cx+3`.
+
+exclusions (set subtractions):
+
+`exclude no others`:: no filtering
+`exclude current row`:: self-explanatory
+`exclude group`:: useful for the `rows` frame type. exclude current row and its _peers_ (rows sharing the current's `order by` or `partition by` expression).
+`exclude ties`:: exclude peers
+
+`filter` filters-out rows from subsets before computing the window fn over that subset. the window fn is still computed for every row.
 
 ====== examples
 
 .difference of adjacent elements
 
-this example's essence is `log`.
+this example's essence is `lag`.
 
 [source,sql]
 ----
 create table x(x);
-insert into x values(1),(10),(100),(2);
-with t(x) as (select x-lag(x) over (order by x) as d from x) select * from t where x is not null;
+insert into x values(1),(10),(100);
+with t(x,d) as (select x,lag(x) over (order by x) from x) select x-coalesce(d,0) from t;
 ----
 
-returns a column `x` of `1 8 90`.
+returns a column of `1 9 90`.
+
+.cdf
+----
+select row_number() over (order by x) as "index",x,cume_dist() over (order by x) as cdf from x;
+┌───────┬──────┬────────────────────┐
+│ index │  x   │        cdf         │
+├───────┼──────┼────────────────────┤
+│ 1     │ 1    │ 0.0909090909090909 │
+│ 2     │ 3    │ 0.181818181818182  │
+│ 3     │ 4    │ 0.272727272727273  │
+│ 4     │ 10   │ 0.454545454545455  │
+│ 5     │ 10   │ 0.454545454545455  │
+│ 6     │ 12   │ 0.545454545454545  │
+│ 7     │ 100  │ 0.636363636363636  │
+│ 8     │ 150  │ 0.727272727272727  │
+│ 9     │ 200  │ 0.818181818181818  │
+│ 10    │ 1000 │ 0.909090909090909  │
+│ 11    │ 2000 │ 1.0                │
+└───────┴──────┴────────────────────┘
+----
+
+.median
+----
+with m(v,n) as (select x,ntile(2) over (order by x) from x) select max(v) as median from m where n=1;
+┌────────┐
+│ median │
+├────────┤
+│ 12     │
+└────────┘
+----
+
+.moving average with period 4
+----
+select x,avg(x) over (order by x rows 3 preceding) as ma from x;
+┌──────┬──────────────────┐
+│  x   │        ma        │
+├──────┼──────────────────┤
+│ 1    │ 1.0              │
+│ 3    │ 2.0              │
+│ 4    │ 2.66666666666667 │
+│ 10   │ 4.5              │
+│ 10   │ 6.75             │
+│ 12   │ 9.0              │
+│ 100  │ 33.0             │
+│ 150  │ 68.0             │
+│ 200  │ 115.5            │
+│ 1000 │ 362.5            │
+│ 2000 │ 837.5            │
+└──────┴──────────────────┘
+----
+
+* `3 preceding` means 4 items per subset: the three preceding plus the current row.
+* you may want to discard the first 4 rows, since they're not averages of the prior 4 elements; they're the averages of fewer than 4 elements. because window-computed values cannot be used in ``select``'s `filter` clause (nor in `having`, btw), we can use `with` to discard those rows: `with y(n,x,ma) as (select row_number() over w,x,avg(x) over w from x window w as (order by x rows 3 preceding)) select x,ma from y where n>=4`
 
 ''''
-
-NOTE: sql is case-insensitive!
 
 * though tables' attribute sets are mostly fixed (though they can be updated by `alter table`), creating new tables on the fly is easy: just use `select` to get a subset of attributes or `join` to adjoin!
 * it's appropriate that sql forces everything to be in tables; that's symmetric treatment of singletons & collections. however, a table that implicitly stores global variables like lua's `_G` would be nice.
@@ -2145,7 +2243,14 @@ this section discusses using sqlite as an alternative to anything conceivable.
 | `.dump`                                               | write to stdout a sql source code that generates the currently-loaded db
 |======================================================================================================================================================
 
-^*^see `.help import`. input format is specified by `.mode`, the output format, unless overridden by `--ascii` or `--csv`. *the latter allows importing csv files without `.load csv`*! this makes extremely easy the querying of a db, passing to an editor, modding only part of the output, then updating the db with new values.
+^*^see `.help import`
+
+`.import --csv path/to/csv mytable` to import [read: `UNION ALL`] a csv with a table. the latter is the preferable alternative to `.load csv`, which both requires having a separate shared object file and knowing its path. somewhat unfortunately we cannot simply invoke `sqlite3` with a csv pathname. still, csvs are pretty nearly queryable as though they were proper sqlite dbs. actually, the best thing to do is use link:https://github.com/harelba/q[q] instead of sqlite directly here. csv files are easily editable using a text editor, yet q can query them like they're sqlite. this is an elegant & easy way to have modifiable but queryable dbs.
+
+the following may also be helpful:
+
+* link:https://github.com/simonw/csvs-to-sqlite[csvs-to-sqlite]
+* link:https://github.com/thombashi/sqlitebiter[sqlitebiter]: convert many kindsa of data to sqlite
 
 the following in-repl extension functions are useful:
 

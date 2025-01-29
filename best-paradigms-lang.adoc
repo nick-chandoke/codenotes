@@ -1,37 +1,4 @@
-== best paradigms lang (substring relation notations)
-
-NB. grammar, like typing, checks only some aspects of a program. are those aspects so important? i say not. grammatical correctness does not imply sensible ideas. sensible ideas do not imply correct form, but any encoding should see the form be far easier to fix or enforce than the information assuming the form! certainly the form should be easy to enforce and simple & elegant enough to enforce even programmatically. no form's complexity should rival the complexity of identifying the code's actual schema.
-
-* never introduce constraints beyond a program spec. an example of badly adding constraint is creating a _separate_/unique boolean type. non-numeric booleans lose their natural power e.g. `+/(>&5)` to get the number of elts greater than 5, or using on a logical vector addition instead of AND to get the number of conditions matched; this would allow one to ask "does an element match at least n/m conditions?" instead of merely "does an element match all, one, or none of the conditions?" as would be accessible only by using AND or OR. we see that logical vectors are useful in `u/@:e.` where u may be `+` or `+.` or `*.`. such designs are not in other langs, however, because they suffer the same damn problem as ever: they're literal, not virtual. even if the logical vector were to be returned as a stream [scheme; sequences in racket], it'd use thunks or some other non-optimal implementation.
-* language is not a _tool_; it's an expression of truth! it's common for programmers to say that, "unlike natural languages, some programming languages are better than others." but this is incorrect: some natural languages are better than others! those with fewer and more regularly-enforecd rules are objectively better; they communicate the same thoughts by less information (i.e. they eschew redundant information) which means less computation (encoding & decoding). some languages feature recursion, and some do not. for those that do, it's apt for the recursive case to come at the end of a sentence, because then, like tail calls, there's no need to backtrack—to how where the recursive case relates to its context after processing it. furthermore, as simpler examples, it's apt to have modifiers follow nouns, because this is easier to remember. for example, "a large, green, rotten, spicy guacamole" is difficult to parse because the reader/listener is presented with a train of abstract qualities and cannot apply them to an image until they finally arrive at "guacamole." english and japanese follow this pattern. spanish does not: in spanish it'd be "un guacamole grande, verde, podrido y picante." at least japanese's grammar consistently uses attributive noun phrases whereas english (as it's commonly used) has different grammatical structures for using adjectives vs attributive noun phrases e.g. in the anime _kiniro mosaic_ an english character speaks the english, "...flows through my gold-as-honey town" which _is_ correct english but no english speaker would ever phrase it like that; they'd use _which_ instead: "flows through my town which is gold as honey." this is despite no one ever saying "avocado which is green, rotten, &c" for obvious reasons of brevity. the ideal solution would be to modify english's grammar to omit _which_ and always have attributes follow nouns.
-
-TODO: consider apl conditional statements: that it's guarded statements: if(AaBbCc...) where majiscules are conditions and miniscules are associated programs. the `if` construct basically does (or (and A a) (and B b) (and C c) ...)
-TODO: add macro/template (e.g. hxt,m4,lisp) considerations
-TODO: add note that relationality is inevitable; all data must each be stored somewhere, and each in exactly its own unique place. data "near" other data are related; _near_ is a relation (specifically in a metric space.) another example: multiple servers, multiple chatrooms. discord servers are all independent (i guess; i'm really not sure how it technically works) so each user, though persistent across all servers, is unable to open communication channels across multiple servers freely; one can open group communication channels whose members [set elements] are each known to each other irrespective of servers (thus all being known to each other (common scope) in global discord usernamespace), but one cannot simply join two [voice] chats of two different servers. in fact, one can't even join two [voice] chats of a single server. this might be technically easy yet purposefully disabled, or maybe it was designed needlessly restrictively and would require particular effort to enable. the latter case would demonstrate poor design in the form of not acknowledging natural relation of data [stored across multiple locations as is always necessarily true excepting c-style data unions.]
-
-loops are a bit of a silly concept because they're ubiquitous. obviously all programs have many relations. all sets of relations may be looped over whether that relation set be one-to-one or one-to-many, or w/e, or whether defined ad-hoc or by a rule.
-
-also, ad-hoc vs rules is a bad distinction. much better than defining rules as code is identifying sets which are, as all things should be, virtual & sparse, and which may have extra properties added to them, thus achieving variable/object/class definitions of universal facts (such as a function of type X -> X which acts on _all_ x∈X (at least as far as the type can express; were types to be completely descriptive, they'd be the functions themselves, thus revealing functions are mere relations of subets.) unioned with ad-hoc facts. we see the silliness of ad-hoc vs universal quantification as separate [alternative] designs when we consider algebras, which are all defined of axioms (which are ad-hoc) yet defined over the algebra's set; this duality reveals the truth that, simply, _all_ relations are specified by some relation of variables each of which is variably constrained, denoting some subset of some context-specified set. much like using a number (for 0..n-1) or pair of numbers to denote the number of times or indices over which to iterate. the j verb `}` is a good example of the power of ad-hoc sets; such functionality would, in other languages/designs, be done by a function rather than array. ultimately the pinnacle of coding is when the only "functions" are update/put/delete (generally x -> x'; put is `const x'` and delete is x'=∅) and select/get. update is a bit uncommon, used only to mutate sets, which is helpful only for 1. discarding information or 2. writing to persistent media. really point (1) isn't even needed if a runtime inferrs which data is henceforth unused. select is implicit in the mere mention of variables; this leaves all the rest of a program stored as "general data" (cf lexical-grammatical "code".) thus rather than "programming languages," we should have relational models, such as sql, prolog, or apl's array/rank model. these languages are all good because they focus on the only truth: relation.
-
-NOTE: this document is being superceded by its implementation, which features some improvements.
-
-this document is intended to be a terse spec of the ideal programming language. it's changed greatly since discoveries about sql and the relationship among [text|byte]strings, numbers, sequences, and strings.
-
-all information is filtered information as related to other information. this is seen clearly in sql's `select` statement. where `select f(a) from t` may be thought of "applying a function to" `a` which was extracted from `t`, it's more correct to see f(a) as `a` as it's related to some relations/vars of relation `f`. indeed, `f` is a unary relation in that it's a relation with a designated "hole" (free var), whose name is specified in `f`'s signature and is usefully bound only within `f`'s body.
-
-.blend of stack and non-stack
-
-feature push & pop fns. if the stack is omitted, then it'll default to the default stack. i'm considering a notation that supports implicitly filling free values from the stack. not sure if that's sensible, but it's more sensible than either using only the stack or not at all.
-
-=== digitstring lang
-
-all things being numbers and strings, they support arithmetic and substring, which uses python's index notation [i] or [i:j], except that it supports predicates also.
-
-.algebraic design
-
-before we delve into the language, i'd like to note that originally i'd thought that the language would have algebraic underlyings. however, i realize that algebra is too contrived. instead of modeling the world by algebras, imposing our assumptions, considering only information (again, datastrings) is better. whatever data we work with may permit some patterns or others, but only at that time—per program—should we design & use algebras. there's no reason to try to identify an algebra for the language itself. *use algebras & designs only for programs.*
-
-that said, there must still be a set of primitive operations & encodings that comprise the language. these should manipulate essential aspects of informaiton. thus we modify order & values at given positions. this is ultimately elegantly & succinctly represented by `set` & `substring`, which we express as index brackets `[]` which i discuss in detail below.
+== ideal lang: substring relation notations
 
 ==== literals
 
@@ -43,6 +10,8 @@ that said, there must still be a set of primitive operations & encodings that co
   ** pure substitution vs mutative substitution is chosen by whether there's an `=` present
 
 ==== arithmetic
+
+june 2024: +*- (boolean algebra / set (isomorphic algebras)). "distribute" is the same as each, and is its own primitive. "@" (as in k) is just intersection with a predicate, which is the same as where/filter.
 
 .operators
 
@@ -148,7 +117,6 @@ should short-circuiting be done by a construct rather than by a symbol, like lis
 
 ''''
 
-* remember that prolog is more powerful than erlang,haskell,&c b/c it uses predicates which generalize constructor or argument pattern matching.
 * erlang principle: program for the positive case, and let the program crash. this eliminates bloat and makes finding bugs easier.
 * state vs purity is just whether things read & write things in *shared scope* vs *pass things* to each other. the message passing model (e.g. thread mailboxes) generalizes functions.
 * if something fails, then the "crash" should be limited to the subset of the program that failed. again, prefer living programs.
@@ -494,7 +462,3 @@ rather than cons pairs, generalize to a structure with arrows car & cdr. definin
 this example uses only lists, not keeping separate state. the information needed to write the fn is contained in the single argument. that's not considerable! do not think of this as clever; it's just an encoding that does not explicitly bind to part of the information that we need; whether the information is given an identifier or not, or whether that information is only selected from the list or copied to another section of memory (e.g. a varibale or in a stack) is irrelevant!
 
 this example is here to encourage you to stop thinking about _data structures_ per se, but instead think in terms of selecting information patterns from a given object without regard to "cells" like data structures are usually assumed to have: a collection of relations of cells, like vertices in a graph (incl list, tree, &c.) instead, reason about information _parsers_—things that select information from a thing. *the information used should determine the structure; the structure should not be decided first.* this necessitates that all code is virtual, with implementation computed thereof. "cells" are a terrible woe; they encourage one to distinguish between `(values 5 6)`, `'(5 6)`, and `'(5 . 6)`, or an identifier varying over scope, which is utter nonsense, since *their information is equivalent*. information is all; all else is linguistic cruft. coders do only two things: 1. import & store information and 2. select information, both unambiguously (i.e. without information loss.) _information_ consists of: 1. literal data; 2. orientation/relation [patterns]. e.g. `6` is a literal data (not datum, because there's no plurality. consider it as a bitstring; now it's suddenly multiple! gasp, what magic!?), and _sequence_ is a relation pattern (namely orderd by an index permitting an order or by pred & succ pointers.)
-
-.repl
-
-a stack state repl would be very nice with relations.

@@ -14,6 +14,7 @@ running summary of coding by j:
 relations (which naturally permit orders which may be of relevence) -> multisets -> sets
 
 [TODO]
+* a test of any language is not how short its code is, but how short its code and accompanying documentation are!
 * syntax highlighting in kak for idioms; each idiom gets a different color depending on the kind of idiom [functionality].
 * graphical tiered display of modifier trains, with annotations of the kind of modtrain pattern it is e.g. AAV, VVV, or VV. b/c trying to parse-out nested parens and break <code strings which represent trains> into parts is horrible. ofc we'd need a good interface for modifying these structures. for starters, though, just having adjacent displays of code and a tree would be amazingly helpful already. afterward we can have a fully opengl environment with keybinds for selecting subexprs.
   ** use `5!:6` to get defs. `par=:{{5!:6 <'g' [ (g=.u f.) :: ] 0}}` works like `(2++@-/&?)par`; it's an adverb which takes an expression. replace `5!:6` by `5!:4` to produce a diagram instead of parenthetical.
@@ -214,7 +215,7 @@ each axis corresponds to a sql attribute, and each corresponds to an axis of an 
 
 ===== how is j relational?
 
-arrays obviously relate by indices with each index being a symmetry e.g. `∀j∃iarr[i][j]` is `<(<i;<a:){arr` in j. in j arrays are rectangular but may be sparse. the relational model does not recognize sequences necessarily, though, as prolog does, it may do so elegantly as a very useful builtin. generally, however, indices are no different from values so we may say e.g. `R(1,"bat").R(100,"cat").` to mean the sparse array R[1]="bat" & R[100]="cat". this is akin to a hashmap that supports efficient lookup by keys or values ambivalently. naturally, relations are the most general structure. effectively implementing a hashmap by them is obvious. arrays are implemented by them by sorting by their attributes, since an array is nothing more than an ordered set; even if the indices are multidemensional, they're still totally ordered.
+arrays obviously relate by indices with each index being a symmetry e.g. `∀j∃iarr[i][j]` is `<(<i;<a:){arr` in j. in j arrays are rectangular but may be sparse. the relational model does not recognize sequences necessarily, though, as prolog does, it may do so elegantly as a very useful builtin. generally, however, indices are no different from values so we may say e.g. `R(1,"bat").R(100,"cat").` to mean the sparse array R[1]="bat" & R[100]="cat". this is akin to a hashmap that supports efficient lookup by keys or values ambivalently. naturally, relations are the most general structure. effectively implementing a hashmap by them is obvious. arrays are implemented by them by sorting by their attributes, since an array is nothing more than an ordered set; even if the indices are multidimensional, they're still totally ordered.
 
 so there are set operations, which are most general; then there are operations that support only indexed sets i.e. arrays.
 
@@ -330,7 +331,7 @@ sadly, sql does not support defining functions on tables. if it did, then we cou
 
 ''''
 
-ultimately all computing is relations which group distinct/disjoint data as needed. all multidemensional arrays can be seen as a single linear array with non-trivial indexing e.g. a table can be referenced two-dimensionally by an index `i` and the number of columns in the table `nc`: `i mod nc`. all joins are relations of sets of indices which is ultimately expressed as a set of tuples of indices. thus the only special property of sequences/arrays in addition to sets is that indices auto-update when the set's size changes.
+ultimately all computing is relations which group distinct/disjoint data as needed. all multidimensional arrays can be seen as a single linear array with non-trivial indexing e.g. a table can be referenced two-dimensionally by an index `i` and the number of columns in the table `nc`: `i mod nc`. all joins are relations of sets of indices which is ultimately expressed as a set of tuples of indices. thus the only special property of sequences/arrays in addition to sets is that indices auto-update when the set's size changes.
 
 array models like j suggest the programmer to keep data in order during assembly, traversal, and disassembly; relational models like sql & prolog suggest the programmer to know by which relations data are related. the array model imposes inappropriate overhead which also limits how the programmer reasons [models data]. however, it is convenient for cases of data being related by indices. namely sequence operations (namely `,` `;.±[12]`, `/`, `\`) and `"` are useful for such relations by index. one may wonder whether one can relate by indices just as well as relate by predicates or sets. TODO: explore index-based (sequence) models vs set-theoretic/relational models (which may be indexed).
 
@@ -863,8 +864,7 @@ a: is the framing fill for boxed things. btw do not confuse _framing fill_ with 
 
 see https://code.jsoftware.com/wiki/Vocabulary/Agreement and https://code.jsoftware.com/wiki/Vocabulary/FramingFill for deets.
 
-1.
-consider x : 3 4 5 and y : 3 4 9 6. the cf is 3 4. this frames the output! it is just a shape! there's no data there! all the *data* are in the 5 and the 9 6! 3 4 just tells how many (and the shape) of the data (and the output!) there are 3×4 length-5 things pointwise associated with 3×4 9 6 matrices! so we associate each 5 with each 9 6, which works b/c there are the same number. ok, so what's the shape of the output? easy: it's 3 4 S where S is whatever the verb's output shape is! discussing frame as a shape really is perfectly apt! it FRAMES the data, and the data is in the cells!
+1. consider x : 3 4 5 and y : 3 4 9 6. the cf is 3 4. this frames the output! it is just a shape! there's no data there! all the *data* are in the 5 and the 9 6! 3 4 just tells how many (and the shape) of the data (and the output!) there are 3×4 length-5 things pointwise associated with 3×4 9 6 matrices! so we associate each 5 with each 9 6, which works b/c there are the same number. ok, so what's the shape of the output? easy: it's 3 4 S where S is whatever the verb's output shape is! discussing frame as a shape really is perfectly apt! it FRAMES the data, and the data is in the cells!
 
 2. consider x:5 and y:9 6. then x v y will replicate *then* pad! they are not alternatives! here 5 becomes 9 5 via replication, then 9 6 via padding. replication ensures the correct number of *items*!
 
@@ -1876,6 +1876,8 @@ link:https://www.jsoftware.com/help/dictionary/intro25.htm[`.` is useful for lin
 TODO: this section needs great revision now that i've considered the nature of tacitity and combinators' inherent flaw.
 
 .systematic tacitifying example
+
+(historical note: this is the consideration that got me into j and back into factor from scheme! combinators made me want to really see how _reduced_ code could be. a year or two later i'd find that terse, information-dense encodings are indeed important!)
 
 consider `(f4 a) f3 a f2 y[a=.f1 y`. seems like it'd be nicer if tacit i.e. without mentioning `y` nor using local binds. in factor that's `dup f1 f2 _f4a f3` where `_f4a` is some expression that i've yet to identify; to me the hook pattern `dup f1 f2` was obvious, then of course the result of that is one of the two arguments to `f3`; that's how i arrived at this incomplete expression thus far. the trouble is that applying `f2` consumes `a`, removing it from context. replacing `f2` by `dup [ f2 ] dip` satisfies. so `_f4a` would be a higher-order fn that takes `f2` as its parameter. so a complete solution is `dup f1 dup [ f2 ] dip f4 f3`. it would be more appropriately expressed as `dup f1 [ f2 ] keep f4 f3` if `keep` were defined as `dup call`. another interpretation, but not one that i find immediately easy, is that both `f4` and `f2&y` are applied to `a`.
 
@@ -3185,7 +3187,7 @@ QRS
 VWX
 ----
 
-you'll probably want to use fetch (`{::`) as a more ergonomic multidemensional select, especially if you're unboxing! this being said, if there is no unboxing to do, then it's still more ergonomic!
+you'll probably want to use fetch (`{::`) as a more ergonomic multidimensional select, especially if you're unboxing! this being said, if there is no unboxing to do, then it's still more ergonomic!
 
 note that the same selection works for amend (`}`) also:
 [source,j]

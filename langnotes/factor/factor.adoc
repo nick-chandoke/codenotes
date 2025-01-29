@@ -2,6 +2,8 @@
 notes by nicholas chandoke. currently undergoing significant revision.
 :toc:
 
+"if you build from source, you could put just the CONSTANT definition in .factor-boot-rc and then do a bootstrap, so you don't have to reload and save a new image every time you start factor"
+
 .cool vocabs
 
 NOTE: many of these—namely those starting with "factor.extra"—don't export documentation; but you can read their source code at `<factor install dir>/extra/...` and some have a `MAIN:`.
@@ -137,7 +139,7 @@ basically it's like scheme but better. its semantics are like c but the language
   ** no order of operations, so no need for parentheses. the only nested expressions are quoted programs.
   ** homoiconic syntax. b/c the model is simple, this means that's there's practically _no_ syntax (except eDSLs), and the syntax describes the program exactly
 * dynamic. because programs are first class objects (just sequences whose execution the compiler can optimize), there's hardly a need for metaprogramming. regardless, macros are available.
-  ** whereas lispers usually use macros and call that metaprogramming, factor does the equivalent of quoting sexps & calling `eval` all over the place during or before runtime.
+  ** whereas lispers usually use macros and call that metaprogramming, factor does the equivalent of quoting sexps & calling `eval` all over the place during or before runtime. simply pushing something to the stack is effectively inserting into an sexp, and `drop`, `nip`, etc are akin to removing elts from the sexp. data "officially" become quoted when you use `curry`. however, currying only delimits programs for deferred execution; it does not change how the program is modified before/during execution. the lack of distinction between "before" and "during" is granted to factor by the fact that the entire program is only its data, which is stored on the data stack. whereas an ast must be traversed, a stack's "traversal" is moot; words are executed, and so the stack simply undergoes mutation in-place until the program terminates.
   ** makes dsls easy, especially since it comes with a peg parser.
 * (TODO: confirm) compiled factor programs are pretty small (if you don't use vocabs that require higher runlevels) and fast. certainly not as fast as a forth, rust, v, fortran, go (probably). but for all that factor affords, its efficiency is excellent!
 * get as close or far from your target hardware as you want. you can inline assembly, use simd, or not. ffi for python or c/dlls is easy, too.
@@ -150,6 +152,7 @@ pay attention to these facts! they reduce the complexity of the programming & la
 * you want multithreading. there is yet no multithreading in factor. it has coroutines, but cannot use true parallelism. it's too bulky to use the picolisp strategy of simply spawning multiple pl os threads.
 * you want a solver, e.g. prolog or stm
 * enormous set of included libraries (good b/c much functionality, bad b/c bloated)
+* unlike arturo/rebol, there are no optional parameters. e.g. constructing http requests is much less flexible.
 
 TODO: can i use the elegance of a stacklang with a non-reductive system like prolog? term-rewriting catlangs are common, but reductive. stacklangs have an implicit, reductive model of traversing the stack. are term-rewriting catlangs implicitly, necessarily reductive?
 
@@ -1042,7 +1045,7 @@ these are in `peg`:
 | a?       | `optional`
 | a*       | `repeat0`
 | a+       | `repeat1`
-| (a|b)    | `choice`
+| (a\|b)    | `choice`
 |================================================================
 
 the following are in `peg.parsers`:
@@ -1713,6 +1716,8 @@ arrays make the following regular, unpredicated maps easy: 1:1 (pointwise relati
 
 this section firstmost describes array operations in factor, and secondarily compares factor to j's array model and array models generally, discussing the shortcomings of the array model and how to nicely code solutions in factor that array models do not elegantly permit. i'm using j as the array language of comparison because it's the only array language that i've used. in retrospect k would have been a better choice at least for its linked list structure instead of boxed arrays. likely it's comparably fast, has a smaller executable, and less-complex source code. any other array language, such as apl, k, elymas, uiua, is just as fine a substitute for j.
 
+NOTE: to be efficient, rather than calling multiple `map`'s (or other traversal) in sequence, you'd compose their  argument quotations then call the traversal once.
+
 .symmetric traversals and array shape (metadata)
 
 an _array_ is a map from indices to individual elements. each operation in this section concerns either the array's metadata (namely shape) or element values i.e. it concerns the relation between index and value, or relation among indices, or relation between indices and natural numbers.
@@ -1753,7 +1758,7 @@ most general to least general: `split-indices`, `subseq-index`, `find`, `member?
 [options="header"]
 |=========================================================================================
 | factor                                                          | j
-| `split-indices`, `snip-slice`, `cut-when` (`sequences.extras`)  | `x u;.±<1|2> y`
+| `split-indices`, `snip-slice`, `cut-when` (`sequences.extras`)  | `x u;.±<1\|2> y`
 | `subseq-index`, suffix arrays, `start-all` (`sequences.extras`) | `E.`
 | `q find`                                                        | <idk j anymore so w/e>
 | `member?`                                                       | `e.`
@@ -1821,6 +1826,18 @@ this is very apl/c-like, using integers and O(1) access at the nth elements and 
 `find` is like `loop` except with an integer argument, which makes it convenient for sequences.
 
 *all this to say that `find-integer-from` is our go-to. however, before you try that, and now that you understand the traversal primitives, first look for solutions in `sequences.generalizations`. that vocab is the most powerful one in all of factor, effectively making factor an array language.* also the `generalizations` and `combinators.smart` are your best friends. they enable symmetry for arbitrary-degree relations.
+
+.test whether the 2nd element from each of many arrays is even
+[source,factor]
+-------------------------------
+USE: generalizations
+1
+{ 1 2 3 } { 4 4 6 } { 7 8 9 }
+[ nth ] 3 apply-curry 3 cleave*
+3array [ even? ] all?
+-------------------------------
+
+note that if you have arrays of booleans, and you want to just do like k `&/`, that's simply `narray unclip-slice [ vand ] reduce` in factor.
 
 * `combinators.extras` vocab:
   ** `chain` composes n quotations, short-circuiting if any returns `f`, *and applies it*: `6 { [ 1 + ] [ 10 * ] [ 3 / ] } chain` returns `6 1 + 10 * 3 /` and the literal composed quotation is `[ 1 + [ 10 * [ 3 / ] [ f ] if* ] [ f ] if* ]`.
@@ -1904,7 +1921,7 @@ TODO: `x#y` below is incorrect
 | `y string>number x or`                                   | `x".y`
 | the `random` vocabulary                                  | `?`, `?.`
 | the `prettyprint` vocab                                  | `":`
-| `>base`                                                  | `x#<.|:>y` (unmixed bases)
+| `>base`                                                  | `x#<.\|:>y` (unmixed bases)
 | the `math.bitwise` vocab                                 | `b.`
 | `classify` (`sequences.extra`)                           | `=y`, i think
 | `<iota>`                                                 | `i.y`
@@ -2067,7 +2084,35 @@ then `{ 1 30 6 } { 24 60 60 } #.` returns `5406`, and `5406 { 24 60 60 } #:` ret
 4 10 <iota> xu\y . ! outputs { { 0 1 2 3 } { 4 5 6 7 } { 8 9 } }
 ----
 
-NEXT: outfix (x u\. y) should be trivial to implement in terms of infix
+.outfix (`x u\. y`)
+[source,factor]
+----
+: outfix ( seq n -- outfixes )
+  over length -rot
+  [ swap <rotated> ] [ tail-slice ] bi-curry* compose [ keep ] curry
+  [ neg <rotated> ] compose { } map-integers-as ;
+----
+
+which is more neatly but perhaps not as efficiently coded by locals:
+
+[source,factor]
+---------------
+:: outfix ( seq n -- outfixes )
+  seq length [ [ seq swap <rotated> n tail-slice ] keep neg <rotated> ]
+  { } map-integers-as ;
+---------------
+
+my first implementation, before the above, better one was suggested to me:
+
+[source,factor]
+----
+: outfix ( seq n -- outfixes )
+  [ [ length ] dip - ] 2keep [ + ] curry swap
+  [ length ] keep [ <slice> ] curry [ curry compose ] keep
+  [ 0 swap ] prepose swap
+  [ bi cord-append ] 2curry
+  { } map-integers-as ;
+----
 
 .nub sieve
 [source,factor]
@@ -2679,6 +2724,72 @@ i find the internal representation of `modern.html` odd—namely that it include
 
 the `html5` vocab is yet unfinished. idk why it was started; html5 validation software already exists, and for parsing, an html soup parser would work.
 
+== http client
+
+firstly, be aware! if you construct a `url` object yourself, you *must* check its validity! to check validity, you cannot merely pretty-print the url! the pretty-printed url may be perfect, but the url object may not be! namely, i've gotten 400 Bad Request errors from servers because the `path` slot of the url did not begin with a slash! thus i presume that the request was e.g. "GET path/to/resource" instead of "GET /path/to/resource"!
+
+=== POST data
+
+see "HTTP client post data" in the factor docs. summary: may be `f`, bytes are sent as-is, strings and assocs are url-encoded (via `assoc>query`), or for the finest specification, pass a `post-data` tuple. however, apparently bytes just don't work, and strings are not url-encoded. see the following example.
+
+pass data as a string w/o url encoding (same as cURL's -d option):
+
+.simple version
+[source,factor]
+-----------------------------------------------------
+"a=b&c=+*&d=e" URL" http://localhost:3000" http-post*
+-----------------------------------------------------
+
+performing `ascii encode` on the string makes `http-post` error, and the string is not url-encoded.
+
+.fully-specified version
+[source,factor]
+-------------------------------------------------------------------------------------------------
+"POST" URL" http://localhost:3000" f "1.1" H{ } clone ! begin filling params for request boa
+"a=b&c=+*&d=e" ascii encode f "application/x-www-form-urlencoded" ascii post-data boa ! post data
+f 1 request boa http-request*
+-------------------------------------------------------------------------------------------------
+
+the second `ascii` (used as `post-data`'s `content-encoding` parameter) seems redundant, and replacing it by `f` does not change behavior, at least for this example.
+
+pass dict of post params, which factor encodes before sending:
+
+.simple version
+[source,factor]
+--------------------------------------------------------------------------------
+H{ { "a" "b" } { "c" "+*" } { "d" "e" } } URL" http://localhost:3000" http-post*
+--------------------------------------------------------------------------------
+
+sends the following request:
+
+-----------------------------------------------
+POST / HTTP/1.1
+Connection: close
+Host: localhost:3000
+User-Agent: Factor http.client
+content-length: 16
+content-type: application/x-www-form-urlencoded
+
+a=b&c=%2B%2A&d=e
+-----------------------------------------------
+
+note that it sets the `content-type: application/x-www-form-urlencoded` header sends the params as a url-encodes query string in the body. to accomplish cURL's `-d` behavior, you must manually specify the assoc as a query string, which generally may be not url-encoded. the following does not work because setting the `content-type` header is ignored; apparently the content type is inferred from the post data type (namely a string here) sometime within `http-request*`:
+
+[source,factor]
+---------------------------------------------------------------------------
+"a=b&c=+*&d=e" URL" http://localhost:3000" <post-request>
+"application/x-www-form-urlencoded" "content-type" set-header http-request*
+---------------------------------------------------------------------------
+
+the solution is to use `post-data`:
+
+[source,factor]
+------------------------------------------------------------------------------------------------------------------------
+"a=b&c=+*&d=e" ascii encode f "application/x-www-form-urlencoded" f post-data boa URL" http://localhost:3000" http-post*
+------------------------------------------------------------------------------------------------------------------------
+
+note that in this case, simply passing a string does not work! we must pass a bytestring only! whattttt the hell. idk what the supposed utility is of specifying the encoding post-param.
+
 == http servers
 
 .responders (the req->resp fn)
@@ -2686,46 +2797,73 @@ the `html5` vocab is yet unfinished. idk why it was started; html5 validation so
 * in a responder, `HTTP request variables` (see docs) are set: `request`, `url`, `params`, `responder-nesting`,
 * to practically write a response, use `furnace.actions`. invoke `<action>` then set its properties, which are described in `Furnace action configuration`. `display` is the main property for GET requests, analagously: `submit` for POSTs, `replace` for PUTs, `update` for PATCHes; set it to a quotation that takes a request and returns a response.
 
-.template/example
-[source,factor]
-----
-USING: io.servers                   ! tcp/ip
-       http                         ! provides the `request` class
-       http.server                  ! http
-       furnace.actions              ! easy http responses
-       http.server.responses        ! simple http response bodies
-       html.templates.chloe         ! xhtml template device
-     ! http.server.dispatchers      ! what's this?
-       http.server.static           ! ftp emulation
-       http2.server
-     ! http.server.cgi              ! cgi: external subproc handles req->resp
-     ! logging.server
-       present                      ! to convert url to string
-       io.streams.string formatting ! printf to string
-;
+.useful vocabs
+[options="header"]
+|==================================================================================
+| vocab                     | description
+| `io.servers`              | tcp/ip
+| `http`                    | provides the `request` & `response` classes
+| `http.server`             | http server
+| `http.server.dispatchers` | what's this?
+| `http.server.static`      | ftp emulation
+| `http2.server`            | subclass of `http-server`. upgrades requests to http2
+| `http.server.cgi`         | cgi: external subproc handles req->resp
+| `logging.server`          | logging
+|==================================================================================
 
-! specify the req->resp handler. somewhy we do so by setting a global name.
-<action>
-[ request get [ url>> present ] [ header>> ] bi
-  [ "you requested resource: %s with these headers:\n%u" printf ] with-string-writer <text-content> ] >>display
+.convenience vocabs
+[options="header"]
+|========================================================
+| vocab                     | description
+| `http.server.responses`   | response bodies
+| `furnace.actions`         | easy http forms
+| `html.templates.chloe`    | xhtml template device
+|========================================================
+
+before i show an example server, i'll explain the ways that you can code _responders_: fns from http requests to responses:
+
+. the server uses whatever responder is set to the global variable `main-responder`
+. said responder must be a class that implements `call-responder*`. i'll assume that you're using `trivial-responder`
+  .. i haven't yet imagined a scenario in which you'd want to define your own class and implementation. if you do, then know that `call-responder*`'s `path` argument is given as an array e.g. path "/hi/there" is given as `{ "hi" "there" }`.
+. the `response` class has obvious fields. `body` is the interesting part, since it's the actual payload. body may be a string, or anything else that implements `call-template*` (of the `html-templates` vocab).
+  .. the implementing class that i find most interesting is `callable`. its effect must be `( -- )` because the callable should print the response to `output-stream`. this is my preferred form, since it's so general and has smaller code and runtime complexities/costs than collecting into, then outputting, a string.
+. despite the names, `<html-content>` and `<text-content>` both accept a body, which is directly put into the `response` object, which means that the body may be an object of any class that implements `call-template*`.
+. finally, during the evaluation of each response, the `request` local variable is set. see the `request` class for all the data that it contains.
+. the global `development?` variable controls whether to respond with either a trace or a code 500 if your responder has an error
+
+.example: server with pages at /headers and /query
+[source,factor]
+-------------------------------------------------------------------------------------------------------------------------------
+USING: http.server http.server.responses http.server.dispatchers io.servers sequences.extras ;
+
+: resp ( quot -- responder ) <text-content> <trivial-responder> ; inline
+: print-dict ( dict -- ) [ ": " glue print ] assoc-each ; inline
+
+<dispatcher>
+[ request get header>>      print-dict ] resp "headers" add-responder
+[ request get url>> query>> print-dict ] resp "query"   add-responder
+"c'mon bro, ain't no page there!"        resp >>default ! optional. if omitted, then a generic 404 is given
 main-responder set-global
 
-8080 httpd  ! start an httpd server at port 8080
+8080 httpd  ! start the server on port 8080
 stop-server ! run this whenever you're ready to stop it. see io.servers for more useful words.
-----
+-------------------------------------------------------------------------------------------------------------------------------
 
-* `<http-server> 8080 >>insecure f >>secure start-server` creates then starts a new http server on port 8080, leaving the http-server object on the stack.
-  ** you *must* specify both `insecure` and `secure`; otherwise the server will fail to run, citing error "permission denied."
-* `httpd` is a convenience function for all that; however, because it does not execute in a coroutine, it blocks until the server dies. this is very bad for development outside of windows os, since only windows supports ^C to stop the running factor thread!
-* `handle-get` apparently defines responses of other actions. idk when one would do this.
+the responder paths' are split on slashes, and the first one is tested against the given url, so if you want to serve local files, you'll need a special initial path segment to specify that.
+
+[source,factor]
+---------------
+! localhost/fs/path/to/file will respond with the file at myroot/path/to/file
+<dispatcher> "myroot" <static> "fs" add-responder
+---------------
+
+this is by far the most elegant, simple, capable server design that i've seen. by this dispatch design, the url's path is the function, and its parameters are given by the url's query.
+
+NOTE: if you're running the server from the listener, and your http client gives a "server reset connection" error, then kill the factor process and make a new one, then try again. idk why this happens yet, but i suspect that it has to do with running `listener-window`, which i commonly do after calling `dark-mode`.
+
+* `httpd` is a convenience word for `<http-server> 8080 >>insecure f >>secure start-server` creates then starts a new http server on port 8080, leaving the http-server object on the stack. you *must* specify both `insecure` and `secure`; otherwise the server will fail to run, citing error "permission denied."
 * i suppose that `wait-for-server` is useful only if we want to block until the server terminates itself, or receives such a signal e.g. by someone requesting URL path `/stop` of the server.
 * `http-server` subclasses `threaded-server`, which has attrs `max-connections`, `encoding`, `timeout`.
-
-TODO: compare factor's server against mongoose and redbean. linking factor with mongoose may be a good solution. [nov 2023] mongoose is marketing itself as an "embedded web server for electronic devices." a few years ago it was just a webserver, but a well-designed one: small, elegant, (mostly) pure c99, few or no external libs. mongoose is GPL or commercial license, however: either totally free or pay. redbean is zlib/isc/bsd/mit.
-
-as a reminder: URLs are akin to command lines: they're a sequence and map of parameters e.g. `cp -rut place f1 f2 f3` is represented by URL `/cp/f1/f2/f3?r&u&t=place`.
-
-i don't understand ``action``'s `rest` parameter, nor do i understand `http.server.rewrite`.
 
 === html templates
 
@@ -2759,6 +2897,7 @@ concatenativity: stack programs—the sequence (composition) of subprograms (wor
 == statistics
 
 * `USE: math.statistics`
+* `math.statistics.running` enables efficient access to the current 1st 4 statistical moments, count, range, & sum, and simple computations thereof (e.g. variance) at any given time during traversal of data point inputs
 
 .about quantiles
 
@@ -2788,6 +2927,41 @@ USING: db.sqlite db db.tuples db.types ;
 ----
 
 you can view a representation of the select, update, or delete statement, computed of the tuple, that will be passed to the db by using `<select-by-slots-statement>`, `<update-tuple-statement>`, or `<delete-tuples-statement>`.
+
+if your schema has a primary key, then the update statement uses the primary key exclusively in the `where` clause; only the non-pk attributes may be updated. if you want to have a single-attribute table which acts only as a set, then you may have a primary key (which is nice b/c it's indexed), but you must manually generate a statement e.g: 
+
+[source,factor]
+-----------------------------------------------------------------------------
+TUPLE: x a ;
+x "x" { { "a" "a" TEXT +user-assigned-id+ } } define-persistent
+[ "create table if not exists x(a text primary key)" sql-command ] with-my-db
+-----------------------------------------------------------------------------
+
+now i want to prepare a statement for "insert or ignore into x values(('cat'))". factor's `db` vocab does not provide a mechanism for "insert or ignore" statements, so we'll have to make one ourselves, by modifying a normal insert statement. `[ x <insert-user-assigned-statement> . ] with-my-db` gives a description for the `sqlite-statement` tuple, which consists of a template string stored in `sql`, and `in-params` to populate that string, after they're automatically escaped. as expected, `out-params` is `{ }` because insert statements don't have output. thus i execute:
+
+.custom "insert or ignore" statement
+[source,factor]
+-------------------------------------------------------------
+: put-x ( x -- )
+  x db-connection get insert-statements>>
+  [ drop
+    "insert or ignore into x(a) values(:a);"
+    x "a" "a" TEXT { +user-assigned-id+ } <sql-spec> 1array
+    { } <prepared-statement> ] cache
+  [ bind-tuple ] keep execute-statement ;
+
+"SAMPLE" x boa [ put-x ] with-my-db
+-------------------------------------------------------------
+
+this code was adapted from `insert-user-assigned-statement`. note:
+
+* i specify the `x` class (which is a key in the db connection's `insert-statements`) manually, since i'm also manually specifying an insert statement specific to the `x(a)` schema.
+* the prepared `statement` is disposable. using `cache` ensures that we create an insert statement only once per class per invocation of `with-my-db`
+  ** like `insert-user-assigned-statement`, i still use `cache` for consistency, but my quotation starts with `drop` because whereas `<insert-user-assigned-statement>` takes a class as input, i'm specifying a statement literally, not as a function of any input.
+* omitting `[ bind-tuple ] keep` inserts a blank into the db
+* if you don't store the statement in the db connection's `insert-statements` slot, then at the end of `with-my-db`, when `dispose` is called on the `sqlite-db-connection`, then "the database file is locked" error is thrown. this error is itself erroneous; the actual issue is not the db being locked, but rather something else; basically we tried some manual, low-level stuff, and did it incorrectly.
+
+`sql-command` just generates a `<simple-statement>`, which exactly equals a `<prepared-statement>`, then calls `[ execute-statement ] with-disposal`. if a statement will be called multiple times, then it's more efficient to prepare it once, then execute that prepared statement many times. at the core of it all is `execute-statement*`—namely its method for `object` (and namely when that object is a `statement`), and the core of _that_ is `query-results`.
 
 (because sql's syntax is the same for selecting from tables as it is from views) you can select from views just as well:
 
@@ -2830,8 +3004,6 @@ SYNTAX: LIKE" lexer get skip-blank parse-string like boa suffix! ;
 
 the code that really makes `select-tuples` work is the `<select-by-slots-statement>` hook. it specifies how a tuple is converted into a sqlite statement. we don't need to bother understanding `make-query*`; just do `>query` to make your usual query tuple into a `query`, then set its attributes e.g. `[ my-query-tuple >query "column4" >>group select-tuples . ] with-my-db`.
 
-`<prepared-statement> execute-statement` may be useful somehow. and why is that hard to use compared to `sql-command` despite it being higher-level?
-
 TODO: how to use binds? e.g. how can i "insert or ignore into tbl values($1,$2,$3)" with a tuple `{ "bats" now f }`?
 
 === `NULL` values
@@ -2860,7 +3032,7 @@ TUPLE: mytuple a b c ;
 mytuple "mytable" { { "a" "a" INTEGER +primary-key+ } { "b" "b" VARCHAR } { "c" "c" INTEGER } } define-persistent
 ----
 
-is incorrect despite no error being thrown. the trouble is that +primary-key+ is a union class, not a singleton class. as such, it represents a set of things. the way that `define-persistent` works is that any primary key—any one of those singleton classes—may be specified in any one column. 
+is incorrect despite no error being thrown. the trouble is that +primary-key+ is a union class, not a singleton class. as such, it represents a set of things. the way that `define-persistent` works is that any primary key—any one of `+primary-key+`'s singleton classes—may be specified in any one column e.g. `mytuple "mytable" { { "a" "a" INTEGER +user-defined-id+ } { "b" "b" VARCHAR } { "c" "c" INTEGER } } define-persistent` would be correct.
 
 anyway, incorrectly using `+primary-key+` allows `insert-tuples` to work as expected: trying to insert a tuple with an extant primary key appropriately raises the "constraint violation" error. however, `update-tuple` fails with a strange error: "incomplete input."
 
@@ -3087,7 +3259,7 @@ by the way, the ideal way to store a set of n-dimensional data is as a map from 
 
 .using tuple arrays
 
-`0 <class-array> map-as` produces an a "cannot call run-time computed value" error. you must do `map >class-array`.
+`0 <class-array> map-as` produces a "cannot call run-time computed value" error. you must do `map >class-array`.
 
 ==== encoding numbers
 
@@ -3157,13 +3329,49 @@ i prefer link:https://justine.lol/braille/[bd aka braille dump] for hex dumping 
 
 i note this so that you won't be confused like i was when i saw so few bytes but `wc -c` said 201 like i'd expected.
 
+== sockets
+
+.factor
+[source,factor]
+--------------------------------------------------------------------
+USING: io.sockets io.encodings.ascii io.streams.duplex destructors ;
+"127.0.0.1" 3000 <inet4> ascii <server> dup ! (1)
+accept drop
+[ readln                                    ! (2)
+  "hello to you!" print                     ! (3)
+] with-stream                               ! (4)
+print                                       ! (5)
+dispose                                     ! (6)
+--------------------------------------------------------------------
+
+. see `<server>`'s documentation about choosing & specifying host descriptions
+. read message from client (here, netcat)
+. send a message to the client. `with-stream` binds the duplex socket to the default input & output streams, so `print` sends to the client
+. `with-stream` closes the stream, so we don't call `dispose` separately on the socket returned by `accept`
+. now that `with-stream` has returned the default input stream to stdout, we print the client's message
+. close the server socket and any connected sockets (of which there are none here; whne `with-stream`'s block finishes, that connection's socket is closed, leaving none left in this example
+
+TIP: factor also supports unix sockets in particular, which facilitate interprocess communication on one machine. however, these cannot be used with netcat (to my limited knowledge), so i don't document that here.
+
+to be a client, sending messages to a server:
+
+`netcat -l -p 3000` then:
+
+[source,factor]
+--------------------------------------------------
+"127.0.0.1" 3000 <inet4> ascii
+[ "sending a msg!" >byte-array print ] with-client
+--------------------------------------------------
+
+you'll notice that i didn't used neither `send` nor `receive`. i have no idea what they are used for.
+
 == PRs
 
 * make db.tuples' `do-each-tuple` row-polymorphic, thus enabling things like indexing rows
 * when loading a program, list all errors (namely unfound symbol errors) at once, and suggest import locations as the listener does, outputting an import string like when you try _running_ a program. my example is loading `.factor-rc`; i was told many times that a word was "found in the current vocabulary search path."
 * make a word to reload `.factor-rc` without restarting the listener (actually, i think that i encountered this already but forgot what the word is called)
 
-== factor hackery ("fhacktory")
+== factor hackery
 
 === (custom) images
 
