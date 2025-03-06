@@ -2,7 +2,60 @@
 notes by nicholas chandoke. currently undergoing significant revision.
 :toc:
 
-"if you build from source, you could put just the CONSTANT definition in .factor-boot-rc and then do a bootstrap, so you don't have to reload and save a new image every time you start factor"
+REVISION
+========
+
+notes' new structure:
+
+. intro to factor: stack, cat, and discussing how factor programs generalize fns, and how purity is no longer applicable, since the code is not applicative.
+. how to code well in factor: combinators, quotations, currying, stack shuffling (retain [somewhere], discard, or shuffle; e.g. `pick` & `rot` both bring, of `x y z`, `x` to the top, but `pick` copies whereas `rot` moves), factoring, and code structure.
+  .. to retain something on the stack when a quotation will be called multiple times, then use `curry`, as is common in looping/iteration combinators like `loop`, `each`, `map`.
+  .. to copy something, then use `over`, `pick`, etc
+  .. to leave something on the stack as a return value, then depending on the data flow, you'll use either `dup`, `tuck`, or `[ ... ] keep [ ... ] dip`
+  .. to apply a symmetry to multiple data on the stack, use "cleave", "spread", or `apply` combinators e.g. `2bi`. `tri*`, or `bi@`.
+  .. otherwise sometimes you'll want to use general shuffle words. don't worry about making it beautiful; as you code, over time you'll naturally begin to notice more elegant ways to manage the stacks
+. vocab reference
+. caveats
+. tuning: using numbers, bytes, avoiding: reflective objects, pp, and certain vocabs like peg, if you can. otherwise you'll have to deal with longer compilation times and (much) larger executables. a good deal of effective tuning technique is to use the array paradigm in factor, which is easily accomplished by virtual sequences.
+
+factor's fried quotations used to use local namespaces and dictionaries, but at some point the fried quotations became converted into proper programs. idk how it does it, but i know that the algorithm is simple:
+
+. to insert a datum into a quotation e.g. `[ x y _ z ]`, simply split at the `_`, then `curry` & `prepose`: `[ z ] curry [ x y ] prepose`.
+. to insert a quotation inline (akin to scheme's `,@`), e.g. `[ x y _ z ]`, it's basically the same except that we use `compose` instead of `curry`: `[ z ] compose [ x y ] prepose`
+
+back when factor used hashtables, i'd recommend to avoid fried quotations because they're difficult to follow in the walker; however, now that the quotation is fully built before being executed, you can just prettyprint it to see what it is before execution, but that's unnecessary since you already know what it is because you coded it as a fried quotation. thus fried quotations are now both easy to understand in code, and easy to follow in the walker. so freely use `B` in fried quotations to debug!
+
+factor is not the most lightweight nor easiest to install (due to dependencise and long compilation times), but it's simple, cross-os (though iirc, only x86), has all the functionality that you'll ever need, and makes going from nothing to complete programs exceptionally fast.
+
+.deducing stack effects & shuffle words example
+
+we'd do `now [ swap time- duration>seconds 30 < ] curry filter`, but were we to not use `curry`, it'd be `now swap [ [ time- ... ] keepd ] filter nip`. i deduced this thus: assuming that we use `filter`,
+
+. filter mandates that its quotation:
+  .. take something atop the stack
+  .. leave an output (assumed as boolean) atop the stack
+  .. not change the stack height
+. the timestamp returned by `now`:
+  .. must be retained for upcoming iterations
+    ... under the boolean output, as per (2a)
+  .. and in such a way that `time-`'s argument are properly ordered
+. to satisfy all of (3), we think, "which retain word do we use?", and answer the question by considering:
+  .. which datum we want to retain
+  .. where we want to retain it.
+  .. b/c we want to do `<now> _ time-` and retain `<now>` under a value, `keepd` is the natural choice
+. finally, we don't want to retain the timestamp, so we nip
+
+.stack management tips
+
+"ahh! i'm stack shuffling too much!"
+> are you using `keep`?
+
+"ahh! there're `keep`'s everywhere!"
+> use a `cleave` combinator such as `bi` or `tri`
+
+remember: your code should clearly associate data with operations. `cleave` associates one datum with many ops. `napply` associates multiple data with one op. `spread` associates with each of many data an op. then there are variants, such as `2tri`, which associates two data with 3 binary ops.
+
+''''''''
 
 .cool vocabs
 
@@ -286,7 +339,23 @@ being left-to-right is nice in that we can put comment initiators (`!`) anywhere
 * using a quotation in `::` without `compose` or `call` (thus giving a larger return stack than expected)
 * "cannot create slice from 1 to 0": slice on empty sequence, commonly by `unclip-slice`
 
+inference branching:
+
+you may be baffled to find that `[ sum ] sort-by` works but `[ 0 [ + ] reduce ] sort-by` gives an inference branch error, citing that the quotation's effect is now `( x x x -- x x x )` instead of `( x -- x )`. the trouble is caused by the ellipses in `reduce`'s declared stack effect. similar issues arise with using `map` instead of `reduce`. so just use `call(`, i suppose.
+
 .run-time computed values
+
+TODO: investigate how the `flushable` word affects run-time computability
+
+TODO: figure this one out:
+
+----------------------------------------------------------------------------------------
+[ "SPY" now-utc 1 months time- 1 day aggregates [ t>> [ YYYY-MM-DD ] with-string-writer ] map! DAILIES_DIR directory-files diff ] dip ! somehow, putting this after the computed quotation then doing swap each gives a "cannot call run-time computed value" error, but using dip does not?!
+[ in? ] curry [ first-unsafe ] prepose [ filter! [ first-unsafe ] sort-by ] curry
+[ "/v2/aggs/grouped/locale/us/market/stocks/" prepend f (poly) "results" of
+  [ [ "T" of ] [ f json>c ] bi 2array ] map! ] prepose
+[ [ DAILIES_DIR prepend-path [ fwobj ] curry ] bi when* ] curry
+----------------------------------------------------------------------------------------
 
 first check that you did `prepose`, not `prepend`. `prepend` is for sequences in general; `prepose` is considered specially for quotations by the compiler. `prepose` works where `prepend` gives the "cannot apply such-and-such to run time computed values" error.
 
@@ -294,6 +363,15 @@ the help document "Stack effect checking escape hatches". it mentions `call(` & 
 
 * the `literals` vocab is parse-time computation, like macros, except that macros result in callables whereas literals result in values.
 * macros are very convenient, too, for specifying dynamically-computed values that are known before runtime.
+
+.the call/curry trick
+[source,factor]
+-------------------------------------------------------------------------------------
+[ [ ... ] compose ] when ! conditional prepose makes quotation run-time computed, but
+[ call( x -- x ) ] curry ! call( makes its effect statically known
+-------------------------------------------------------------------------------------
+
+.macros
 
 the following code failed b/c `ndip` (and probably `npick`, too) can't take a run-time computed value:
 
@@ -333,6 +411,8 @@ actually, a little later, when i passed a run-time-computed quotation to `reduce
 MACRO: reduce-collect ( ..a seq q: ( ..a e -- ..a ?collectval ) -- ..a collection )
   dup infer in>> length 1 + dup 1 + [ (reduce-collect) ] 4 ncurry ;
 ----
+
+moving on, i found that `SOMESET get-global >hash-set [ in? ] curry map-filter` gave the "cannot apply 'call' to a run-time computed value" error but removing `>hash-set` solved that error.
 
 .conditional combinator problems (this section probably needs revision or elimination)
 
@@ -433,6 +513,12 @@ the lesson is that `if` is the primitive selective evaluator and is perfectly si
 === implementation
 
 * the `tools.deploy` vocab allows compiling to native executables which neither require factor to be installed on host nor expose source code!
+
+=== continuations
+
+TODO: actually work with the code and test my understanding
+
+a _continuation_ is a point of execution. for example, in `3 4 5`, the continuation begins before 3. after 3 is evaluated, then the continuation is at 4. the continuation is the cursor in a program (a sequence of words); it's a position to execute from.
 
 === other considerations
 
@@ -1220,7 +1306,9 @@ terminal: blank or ∈ ["'|{}=()[].!&*+?:~<>]
 
 == debugging
 
-firstly, using `prettyprint` is not apt for debugging a running program, though it's fine in the listener to print values that you don't want kept on the stack. to inspect values during runtime, use `break` and the inspector (context-click an object then select "Inspector") or factor's logging framework. to produce values for logging, use `unparse` or `unparse-short` of the `prettyprint` vocab.
+firstly, using `prettyprint` is not apt for debugging a running program, though it's fine in the listener to print values that you don't want kept on the stack. to inspect values during runtime, use `B` (an alias for `break` in `tools.continuations` and the inspector (context-click an object then select "Inspector") or factor's logging framework. to produce values for logging, use `unparse` or `unparse-short` of the `prettyprint` vocab.
+
+to set a breakpoint for a word—especially useful for words that you don't use directly, but are ultimately entailed in the definitions of words that you use—use `breakpoint` for example, to break at the start of executing generic word `call-responder*` for the `file-responder` type, do `M\ file-responder call-responder* breakpoint`. to remove the breakpoint hook, do `M\ file-responder call-responder* reset`. `M\ file-responder call-responder*` satisfies `word?`, so it supports having a breakpoint set for it. *do not use `breakpoint` on common words* like `map` or `append`! because the listener or walker employs such words, setting a breakpoint upon them will cause the listener or walker to infinite loop.
 
 one trick is to push some values before a breakpoint, then drop them sometime later. that way they'll be on the stack in the walker. this is easier than making & setting dynamic variables, and besides, the "variables" dialog shows only symbols declared in `scratchpad`. `IN:` does not change this fact.
 
@@ -1756,19 +1844,19 @@ whereas j uses indices, factor uses slices. they're effectively equivalent. `sub
 most general to least general: `split-indices`, `subseq-index`, `find`, `member?`.
 
 [options="header"]
-|=========================================================================================
-| factor                                                          | j
-| `split-indices`, `snip-slice`, `cut-when` (`sequences.extras`)  | `x u;.±<1\|2> y`
-| `subseq-index`, suffix arrays, `start-all` (`sequences.extras`) | `E.`
-| `q find`                                                        | <idk j anymore so w/e>
-| `member?`                                                       | `e.`
-| `nths`, `nth`                                                   | `{`
-| `[ index ] keep length or`                                      | `x i. y`
-| `[ reverse ] dip [ index ] keep length or`                      | `x i: y`
-| #x≥2: `natural-search`; else see _§using the stack well_        | `x I. y`
-| `<groups>`, `<clumps>`, `delete-slice`                          | `x u\.y`
-| `all-subseqs`                                                   | ???
-|=========================================================================================
+|========================================================================================================
+| factor                                                                         | j
+| `split-indices`, `snip-slice`, `cut-when` (`sequences.extras`), `cut[-slice]`  | `x u;.±<1\|2> y`
+| `subseq-index`, suffix arrays, `start-all` (`sequences.extras`)                | `E.`
+| `q find`                                                                       | <idk j anymore so w/e>
+| `member?`                                                                      | `e.`
+| `nths`, `nth`                                                                  | `{`
+| `[ index ] keep length or`                                                     | `x i. y`
+| `[ reverse ] dip [ index ] keep length or`                                     | `x i: y`
+| #x≥2: `natural-search`; else see _§using the stack well_                       | `x I. y`
+| `<groups>`, `<clumps>`, `delete-slice`                                         | `x u\.y`
+| `all-subseqs`                                                                  | ???
+|========================================================================================================
 
 .asymmetric traversals
 
@@ -1885,7 +1973,7 @@ these operations change the array shape. they remove information. `append` remov
 | `call`                                                   | `".y`
 | `swap`, `dup`                                            | `~`
 | juxtaposition, `compose`, `prepose`                      | `@`
-| fried quotations (discouraged)                           | `=.`
+| fried quotations                                         | `=.`
 | `y dup v u`                                              | `(u v)y`
 | `y v x swap u`                                           | `x(u v)y`
 | `f h bi g`                                               | `(f g h)y`
@@ -1915,22 +2003,22 @@ these operations change the array shape. they remove information. `append` remov
 TODO: `x#y` below is incorrect
 
 [options="header"]
-|======================================================================================
-| factor                                                   | j
-| `dup length <iota> <zipped> sort-keys unzip nip`^[1]^    | `/:y`
-| `y string>number x or`                                   | `x".y`
-| the `random` vocabulary                                  | `?`, `?.`
-| the `prettyprint` vocab                                  | `":`
-| `>base`                                                  | `x#<.\|:>y` (unmixed bases)
-| the `math.bitwise` vocab                                 | `b.`
-| `classify` (`sequences.extra`)                           | `=y`, i think
-| `<iota>`                                                 | `i.y`
-| `[ and ] filter`, `[ [ ] curry replicate ] 2map harvest` | `x#y`
-| `dup length <iota> vand sift`                            | `I.y` (where y is a boolean vector)
-| <implemented below>                                      | `~:y`
-| <implemented below>                                      | `x#[.:]y` (mixed bases)
-| <see bulleted notes>                                     | `"`
-|======================================================================================
+|================================================================================================================
+| factor                                                                    | j
+| `dup length <iota> <zipped> sort-keys unzip nip`^[1]^                     | `/:y`
+| `y string>number x or`                                                    | `x".y`
+| the `random` vocabulary                                                   | `?`, `?.`
+| the `prettyprint` vocab                                                   | `":`
+| `>base`                                                                   | `x#<.\|:>y` (unmixed bases)
+| the `math.bitwise` vocab                                                  | `b.`
+| `classify` (`sequences.extra`)                                            | `=y`, i think
+| `<iota>`                                                                  | `i.y`
+| `[ and ] filter`, `[ [ ] curry replicate ] 2map harvest`                  | `x#y`
+| `dup length <iota> vand sift` or `<enumerated> [ nip ] assoc-filter keys` | `I.y` (where y is a boolean vector)
+| <implemented below>                                                       | `~:y`
+| <implemented below>                                                       | `x#[.:]y` (mixed bases)
+| <see bulleted notes>                                                      | `"`
+|================================================================================================================
 
 ^[1]^ or `rank` from the `math.statistics` vocabulary, which has the same order but starts at 1 instead of 0.
 
@@ -2020,7 +2108,7 @@ TODO: generalize fork & hook to n-ary.
 
 if we use `follow`, we must `unclip-slice` before `follow`, because its argument quotation is `( ... prev -- ... result/f )`; thus it operates on the current element of the list, and the rest of the list must be part of the `...`. using `follow` requires the input sequence to be non-empty. also, we can't use `follow` at all, because inside its quotation, we must decide whether to include the current element or not. however we stop at a break condition, we generally include the current element in the output; however, eventually the input sequence may be exhausted. eventually we whittle-down to an empty sequence and the current element; we still accept the current element but cannot `unclip-slice`. however, we cannot leave the sequence empty, because we already have the rule that if it's empty, then accept the current element! thus we must replace the empty sequence by a designated value, e.g. `f`, then test it, and if it's `f` then we don't accept the current element! it's an ungraceful handling of an off-by-1 error!
 
-`loop` actually provides the most elegant efficient solution. in most functional languages manual looping would be cumbersome, but in factor, because it allows accessing the whole stack from within a quotation, and makes stateful updates easy, and leverages currying & composition, it's quite nice:
+`loop` provides a solution, though i'll show a better one afterward.
 
 [source,factor]
 ----
@@ -2052,7 +2140,17 @@ the only reason that we need this complicated device is when we want to stop a r
 
 a neat side-effect of this is that it effectively returns a zipper: an accumulation and the remainder of the sequence that was not accumulated.
 
-this sholud be a combinator. writing it without fried quotations would be quite difficult.
+the better way is to use fried quotations and continuations:
+
+[source,factor]
+--------------------------------------------------------------------
+0 { 1 10 420 65 74 100 54 } 500
+'[ _ _ [ + dup _ >= [ swap continue-with ] when ] each nip ] callcc1
+--------------------------------------------------------------------
+
+this returns either the sum of all if it's less than 500, or the smallest sum of prefixes greater than 500. `nip` removes the continuation object, since by that point it won't be used.
+
+i expect that continuations are new to you. put breakpoints wherever you like to inspect the running code. note that `continue-with` is available to use in the quotation passed to `callcc1` and returns from the continuation with a "return" value (not to be confused with `return` which returns nothing), and `callcc1` calls the quotation with the continuation object pushed onto it (this is the object to pass to `continue-with`). finally, callcc1 leaves the stack as it was before the quotation was called; this is why i curried the inital sum value, 0, and the array, and the threshold value, into the quotation—so that when the continuation finishes, only the sum will be left on the stack.
 
 .`#[.:]`
 [source,factor]
@@ -2794,8 +2892,8 @@ note that in this case, simply passing a string does not work! we must pass a by
 
 .responders (the req->resp fn)
 
-* in a responder, `HTTP request variables` (see docs) are set: `request`, `url`, `params`, `responder-nesting`,
-* to practically write a response, use `furnace.actions`. invoke `<action>` then set its properties, which are described in `Furnace action configuration`. `display` is the main property for GET requests, analagously: `submit` for POSTs, `replace` for PUTs, `update` for PATCHes; set it to a quotation that takes a request and returns a response.
+* in a responder (to be exact, during execution of `call-responder*`), `HTTP request variables` (see docs) are set: `request`, `url`, `params`, `responder-nesting`,
+* wrt furnace actions, `display` is the main property for GET requests, analagously: `submit` for POSTs, `replace` for PUTs, `update` for PATCHes; set it to a quotation that takes a request and returns a response.
 
 .useful vocabs
 [options="header"]
@@ -2825,16 +2923,15 @@ before i show an example server, i'll explain the ways that you can code _respon
 . the server uses whatever responder is set to the global variable `main-responder`
 . said responder must be a class that implements `call-responder*`. i'll assume that you're using `trivial-responder`
   .. i haven't yet imagined a scenario in which you'd want to define your own class and implementation. if you do, then know that `call-responder*`'s `path` argument is given as an array e.g. path "/hi/there" is given as `{ "hi" "there" }`.
-. the `response` class has obvious fields. `body` is the interesting part, since it's the actual payload. body may be a string, or anything else that implements `call-template*` (of the `html-templates` vocab).
+. the `response` class has obvious fields. `body` is the interesting part, since it's the actual payload. `body` may be a string, or anything else that implements `call-template*` (of the `html-templates` vocab).
   .. the implementing class that i find most interesting is `callable`. its effect must be `( -- )` because the callable should print the response to `output-stream`. this is my preferred form, since it's so general and has smaller code and runtime complexities/costs than collecting into, then outputting, a string.
 . despite the names, `<html-content>` and `<text-content>` both accept a body, which is directly put into the `response` object, which means that the body may be an object of any class that implements `call-template*`.
-. finally, during the evaluation of each response, the `request` local variable is set. see the `request` class for all the data that it contains.
 . the global `development?` variable controls whether to respond with either a trace or a code 500 if your responder has an error
 
 .example: server with pages at /headers and /query
 [source,factor]
 -------------------------------------------------------------------------------------------------------------------------------
-USING: http.server http.server.responses http.server.dispatchers io.servers sequences.extras ;
+USING: http http.server http.server.responses http.server.dispatchers io.servers sequences.extras ;
 
 : resp ( quot -- responder ) <text-content> <trivial-responder> ; inline
 : print-dict ( dict -- ) [ ": " glue print ] assoc-each ; inline
@@ -2852,14 +2949,18 @@ stop-server ! run this whenever you're ready to stop it. see io.servers for more
 the responder paths' are split on slashes, and the first one is tested against the given url, so if you want to serve local files, you'll need a special initial path segment to specify that.
 
 [source,factor]
----------------
+-----------------------------------------------------------------------------
 ! localhost/fs/path/to/file will respond with the file at myroot/path/to/file
 <dispatcher> "myroot" <static> "fs" add-responder
----------------
+-----------------------------------------------------------------------------
 
-this is by far the most elegant, simple, capable server design that i've seen. by this dispatch design, the url's path is the function, and its parameters are given by the url's query.
+if you're wondering how it is that it doesn't try to find the file at `/fs/path/to/file`, let me explain: the `path` input supplied to `file-responder`'s `call-responder*` method is a slice that doesn't include the head; this is so because the `path` parameter is supplied by the `dispatcher` class' `call-responder*` method which employs `find-responder`, which employs `rest-slice`. so this changes the `path` given to `call-responder*`; however, you'll find that `request get url>> path>>` is the full path including the leading `/fs`. the request object is never modified.
 
-NOTE: if you're running the server from the listener, and your http client gives a "server reset connection" error, then kill the factor process and make a new one, then try again. idk why this happens yet, but i suspect that it has to do with running `listener-window`, which i commonly do after calling `dark-mode`.
+'''''''''''''''''''''''''
+
+this is by far the most elegant, simple, capable server design that i've seen. by this dispatch design, the url's path's 1st segment is the function, the rest of the path segments are the command line arguments, and parameters are given by the url's query. e.g. the command line `git commit -am 'my commit'` could be represented by the url `/git/commit?a&m=my20%commit`.
+
+NOTE: if you're running the server from the listener, and your http client gives a "server reset connection" error, then that's because there's a dependent vocab that isn't compliing. e.g. if my `my-server` vocab depends on `my-utils`, then if i edit `my-utils` such that it fails to compile, then i get the "server reset connection" error.
 
 * `httpd` is a convenience word for `<http-server> 8080 >>insecure f >>secure start-server` creates then starts a new http server on port 8080, leaving the http-server object on the stack. you *must* specify both `insecure` and `secure`; otherwise the server will fail to run, citing error "permission denied."
 * i suppose that `wait-for-server` is useful only if we want to block until the server terminates itself, or receives such a signal e.g. by someone requesting URL path `/stop` of the server.
@@ -2875,6 +2976,96 @@ docs are found at the following vocab pages after loading them:
 * `html.templates.fhtml`
 
 both implement the `template` interface of the `html.templates` vocab. chloe templates support conversion to responses via `<chloe-content>`. this being said, one can simply do `<fhtml> [ call-template* ] with-string-writer <html-content>`
+
+== websocket (client)
+
+websockets are made in the design of unix sockets; they're lightweight, full-duplex realtime communication. once established, the connection remains open and both client & server may send or receive any bytes at any time. the websocket protocol is extremely small & simple.
+
+though websockets are not http, `ws:` & `wss:` use ports 80 & 443 respectively, and link:https://en.wikipedia.org/wiki/WebSocket#Opening_handshake[http is used to establish websocket connections]; the websockt server responds with http code 101 ("switching protocols"). this is why factor's `http.websockets` vocab does not have any words for establishing nor managing connections.
+
+as usual in factor, there are no websockets handles to pass around; a connection is opened which sets `output-stream` & `input-stream`. in fact, the whole websockets vocabulary just `add-websocket-upgrade-headers ( request -- request )`, constants, and words for de/encoding bytes per the websockets protocol.
+
+=== usage
+
+words on the right are defined in terms of those on the left:
+
+* `get-read-payload-length` > `read-payload` > `read-websocket` > `read-websocket-loop`
+* `send-websocket-bytes > ``send-websocket-text` > `send-[un]masked-message`
+
+so generally you should use only `read-websocket[-loop]`, and inside its quotation, `send-unmasked-message`. `read-websocket-loop` loops until either you say to stop or the ws protocol or connection mandates stopping. in `read-websocket ( -- obj opcode loop? )`, `obj` is the payload.
+
+NOTE: according to wikipedia, a client must mask all frames sent to the server, and the server must not mask any of its frames; so suppose that `send-unmasked-message` exists for implementing websocket servers.
+
+we've yet to turn a url into a context in which the input & output streams are set so that we can actually use these websocket words! enter the common `http.client` vocab, which already has builtin automatic support for websockets! observe:
+
+--------------------------------------------------------------
+"wss://delayed.polygon.io/stocks" <get-request> ...
+T{ request
+    { method "GET" }
+    { url URL" https://delayed.polygon.io/stocks" }
+    { proxy-url URL" " }
+    { version "1.1" }
+    { header
+        H{
+            {
+                "Sec-WebSocket-Extensions"
+                "permessage-deflate; client_max_window_bits"
+            }
+            { "Host" "delayed.polygon.io" }
+            { "Upgrade" "websocket" }
+            { "Sec-WebSocket-Version" "13" }
+            { "Cache-Control" "no-cache" }
+            { "Pragma" "no-cache" }
+            { "Sec-WebSocket-Key" "01K2CcLS2FBLWYkMzFm/eQ==" }
+            { "User-Agent" "Factor http.client" }
+            { "Connection" "Upgrade" }
+        }
+    }
+    { cookies V{ } }
+    { redirects 10 }
+}
+--------------------------------------------------------------
+
+what we'll be doing differently from normal http requests is that rather than reading a whole body into a byte array at once, we must leave the connection open and handle data as it streams-in. this is accomplished by the lowest-level http word, `do-http-request`. looking at its definition, it's unclear how to use it, so let's see how a familiar word, `http-request*`, is defined in terms of it:
+
+[source,factor]
+--------------------------------------------------------------
+: http-request* ( request -- response data )
+    BV{ } clone [ '[ _ push-all ] do-http-request ] keep
+    B{ } like over content-encoding>> decode [ >>body ] keep ;
+--------------------------------------------------------------
+
+for http requests, this executes as follows:
+
+. `BV{ }` on stack
+. `do-http-request` pushes all chunks into said vector and returns a `response`. the `BV{ }` is kept on the stack.
+. convert `BV{ }` into `B{ }`
+. decode it per the response's `content-encoding`
+. set the response's `body` to that decoded string, keeping the `response`
+
+for ws, it executes as follows:
+
+. `BV{ }` on stack
+. `do-http-request` pushes all of nothing into said vector and returns a `duplex-stream`. the `BV{ }` is kept on the stack.
+. convert `BV{ }` into `B{ }`
+. execution halts at `content-encoding>>` b/c duplex streams don't support that.
+
+so clearly `http-request*` is inappropriate for ws, but `do-http-request` is still instrumental. if you carefully observe the definition of `do-http-request`, you'll see that the `( chunk -- )` quotation is not even used in the ws case (to be precise, when `upgrade-to-websocket?` returns `t`)! so naturally for ws we'll use `[ drop ] do-http-request`.
+
+it pushes all into a byte vector then converts it into a decoded byte array. this implies that `chunk` is bytes. generally you must assume that chunk is not a fully parsable string, so you must incrementally parse & act on bytes as they come in. if your ws server sends json, then this is fine, since `read-json` blocks until enough input comes in to return a well-formed object.
+
+TIP: if you want to read `do-http-request`'s code, then read its source code, not the parsed definition as shown in the help browser, because it's defined in terms of a fried quotation.
+
+.example
+[source,factor]
+-----------------------------------------------
+USING: http.client http.websockets io.streams.duplex ;
+"wss://delayed.polygon.io/stocks" <get-request>
+[ drop ] do-http-request ! returns duplex stream
+! first bytes are 65533 (unicode unknown char) then 'I', then the actual message that i want
+[ read-json ! read-websocket
+] with-stream
+-----------------------------------------------
 
 == filesystem
 
@@ -2913,29 +3104,68 @@ therefore if you simply want the element at the xth percentile: `percentile ( se
 
 == database
 
+NOTE: i have no documentation on reading from rusult sets which are generated by manual sql queries such as `simple-statament`'s. `query-map` & `query-each` should make it often easy. i have nothing on `+foreign-id+ either. in fact, does factor's db vocab do _any_ table joining?!
+
+TODO: revise all notes where the priamry key is manually specified! despite the factor docs for `+primary-key+`, multiple columns may have primary keys! observe:
+
+[source,factor]
+----------------------------------------------
+TUPLE: person name age phone ;
+person "ppl"
+{ { "name"  "namae" TEXT    +db-assigned-id+ }
+  { "age"   "sai"   INTEGER +db-assigned-id+ }
+  { "phone" "denwa" TEXT    }
+} define-persistent
+
+person create-table ! CREATE TABLE ppl(namae text, sai integer, denwa text, primary key(namae,sai));
+----------------------------------------------
+
+if you want to never have your primary keys auto-generated, then you can still use `+db-assigned-id+` or `+random-id+`, but just never insert a tuple whose primary key fields are `f`; then you can use `ensure-table` instead of manually specifying that sql statement for `sql-command`. 
+
+.foreign key example (adapted from `resource:basis/db/tuples/tuples-tests.factor`)
+[source,factor]
+---------------
+TUPLE: artist name ;
+artist "artists" { { name "name" TEXT +db-assigned-id+ } } define-persistent
+
+TUPLE: song title artist album ;
+song "songs"
+{ { title  "title"  TEXT }
+  { artist "artist" TEXT { +foreign-id+
+                           artist ! tuple class
+                           "name" ! sql attribute name
+                         } }
+  { album  "album"  TEXT }
+} define-persistent
+---------------
+
+remember: if something's undocumented, then read the source code! even though definitions showed in the help viewer can be helpful, they don't have the exact same form as source; e.g. fried quotations don't appear in their original form, and neither comments nor indentation are preserved. additionally, having multiple definitons all strung together, defined in order (because, like in c, factor requires that a word be defined before it's used in another word's definition).
+
 query tuple slots accept values for which `where` (of the `db.queries` vocab) has a method. you can read the method definitions to see how the data are transformed into query clauses.
 
 [source,factor]
 ----
 USING: db.sqlite db db.tuples db.types ;
-[ f ! any value
+[ f                         ! any value
   { "vietnamese" "bingsu" } ! any of these multiple values. the `sequence` instance of `where`
-  NULL ! attr is null
-  8 [a,inf] ! attr>=8. the `interval` instance of `where`. you can see inside the method's definition that infinite intervals are handled specially.
+  NULL                      ! attr is null
+  8 [a,inf]                 ! attr>=8. the `interval` instance of `where`. you can see inside the method's definition that infinite intervals are handled specially.
   mytuple boa
   >query "genre" >>order select-tuples . ] with-my-db
 ----
+
+TODO: document `person new "(202)%" likeexp boa >>phone [ select-tuples ] with-my-db .`
 
 you can view a representation of the select, update, or delete statement, computed of the tuple, that will be passed to the db by using `<select-by-slots-statement>`, `<update-tuple-statement>`, or `<delete-tuples-statement>`.
 
 if your schema has a primary key, then the update statement uses the primary key exclusively in the `where` clause; only the non-pk attributes may be updated. if you want to have a single-attribute table which acts only as a set, then you may have a primary key (which is nice b/c it's indexed), but you must manually generate a statement e.g: 
 
 [source,factor]
------------------------------------------------------------------------------
+-------------------------------------------------------------
 TUPLE: x a ;
-x "x" { { "a" "a" TEXT +user-assigned-id+ } } define-persistent
-[ "create table if not exists x(a text primary key)" sql-command ] with-my-db
------------------------------------------------------------------------------
+x "x" { { "a" "a" TEXT +db-assigned-id+ } } define-persistent
+[ x ensure-table ] with-my-db
+-------------------------------------------------------------
 
 now i want to prepare a statement for "insert or ignore into x values(('cat'))". factor's `db` vocab does not provide a mechanism for "insert or ignore" statements, so we'll have to make one ourselves, by modifying a normal insert statement. `[ x <insert-user-assigned-statement> . ] with-my-db` gives a description for the `sqlite-statement` tuple, which consists of a template string stored in `sql`, and `in-params` to populate that string, after they're automatically escaped. as expected, `out-params` is `{ }` because insert statements don't have output. thus i execute:
 
@@ -3259,7 +3489,8 @@ by the way, the ideal way to store a set of n-dimensional data is as a map from 
 
 .using tuple arrays
 
-`0 <class-array> map-as` produces a "cannot call run-time computed value" error. you must do `map >class-array`.
+* `0 <class-array> map-as` produces a "cannot call run-time computed value" error. you must do `map >class-array`.
+* if you `TUPLE-ARRAY: x` then words `>x-array` and `<x-array>` are generated which respectively convert a sequence to, or initialize with given capacity, a tuple array.
 
 ==== encoding numbers
 
