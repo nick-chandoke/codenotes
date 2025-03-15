@@ -55,6 +55,75 @@ we'd do `now [ swap time- duration>seconds 30 < ] curry filter`, but were we to 
 
 remember: your code should clearly associate data with operations. `cleave` associates one datum with many ops. `napply` associates multiple data with one op. `spread` associates with each of many data an op. then there are variants, such as `2tri`, which associates two data with 3 binary ops.
 
+.come from apl, not scheme
+
+in other words, know how to use sequences in factor. factor is not a pure language, but purity does not help factor like purity helps applicative languages, because there's no namespace to maintain/track, mutation isn't troublesome.
+
+.array solution
+[source,factor]
+----------------------------------------------------------------------------------------------------
+: factor-prefix ( x y -- prefix rem-x rem-y )
+  [ ] [ [ = ] { } 2map-as [ not ] find drop ] [ [ length ] bi@ min ] 2tri or [ cut ] curry bi@ nip ;
+
+"catamaran" "cats, the play" factor-prefix [ . ] tri@
+"cat"
+"amaran"
+"s, the play"
+
+"cats" "cats" factor-prefix [ . ] tri@
+"cats"
+""
+""
+----------------------------------------------------------------------------------------------------
+
+.same, in k
+[source,k]
+-----------------------------------------------------
+factorprefix:{l:(#y)&#x;i:*&~(l#x)=l#y;(i#x;i_x;i_y)}
+factorprefix["catamaran";"cats,the play"]
+("cat"
+ "amaran"
+ "s,the play")
+
+factorprefix["cats";"cats"]
+("cats"
+ ""
+ "")
+-----------------------------------------------------
+
+the k solution is less elegant in that i need to bind to local variables, but more elegant in that k's verbs are designed to be symmetric, so i don't need to account for the case of equal strings especially. also factor's `2map` trims the iteration to the shortest of its two input sequences, whereas in k, due to its use of shapes, we must manually trim both sequences before using `=`.
+
+in scheme (or haskell, erlang, etc), we use linked lists, so we'd uncons, using a zipper-style iteration, which naturally leaves the prefix and the suffixes.
+
+.scheme-style solution
+[source,factor]
+---------------------------------------------------------------------------------------------------------------------------
+V{ } clone -rot pick '[ 2dup [ empty? ] either? [ f ] [ [ unclip-slice ] bi@ pick = [ swap _ push t ] [ nip f ] if ] if ] loop
+[ >string ] tri@
+---------------------------------------------------------------------------------------------------------------------------
+
+this solution is surprisingly elegant; we don't need to track the index, and this zipper-like approach is very well suited to this task.
+
+in c, we'd use a simple `for` loop with `break`—the most efficient and simplest solution. we can do that in factor, too, by creating a quotation via `bi-curry@` and `find-integer`—or rather, we would, but thankfully we have `sequences.generalizations`, so we don't have to:
+
+.c-like version (`nfind`)
+[source,factor]
+------------------------------------------------------------------------------
+USE: sequences.generalizations
+2dup [ = not ] 2 nfind 2drop 2over [ length ] bi@ min or [ cut ] curry bi@ nip
+------------------------------------------------------------------------------
+
+.c-like version (`find`)
+[source,factor]
+----------------------------------------------------------------------------------------------
+[ ] [ [ length ] bi@ min ]
+[ [ nth ] bi-curry@ [ bi = not ] 2curry [ find-integer ] keepd or [ cut ] curry bi@ nip ] 2tri
+----------------------------------------------------------------------------------------------
+
+TIP: the most fundamental form of `find` is called `find-integer-from`. whereas `each-integer-from` corresponds to a `for` loop from i to n, `find-integer-from` corresponds to the same but enabling `break`. in other words, `find-integer-from` is like `until` with an index under the quotation except that now the quotation is curried to the quotation.
+
+consider the task of, given two strings, return their common prefix and the remainder of each string.
+
 ''''''''
 
 .cool vocabs
@@ -516,9 +585,7 @@ the lesson is that `if` is the primitive selective evaluator and is perfectly si
 
 === continuations
 
-TODO: actually work with the code and test my understanding
-
-a _continuation_ is a point of execution. for example, in `3 4 5`, the continuation begins before 3. after 3 is evaluated, then the continuation is at 4. the continuation is the cursor in a program (a sequence of words); it's a position to execute from.
+a _continuation_ is a point of execution. for example, in `3 4 5`, the continuation begins before 3. after 3 is evaluated, then the continuation is at 4. the continuation is the cursor in a program (a sequence of words); it's a position to execute from. see <<_factor/j_bilateral_translation_table>> for a simple example.
 
 === other considerations
 
@@ -1900,7 +1967,8 @@ if the particulars above aren't sufficient, then here are some primitives and re
 
 * `kernel` vocab:
   ** `if`
-  ** `loop`
+  ** `loop`/`while`/`until` (general loop)
+    *** `follow`/`produce` (general loop but accumulate values like a scan)
 * `math` vocab:
   ** `each-integer-from`
   ** `find-integer-from`
@@ -2068,6 +2136,17 @@ dup 1 0 <shifted> v= all? ! (1|.!.0 x)=x
 
 clump-map can be composed easily, too:
 
+produces 570.
+
+[source,factor]
+----
+! factor                  ! corresponding j
+dup 1 0 <shifted> v= all? ! (1|.!.0 x)=x---------------
+{ 1 10 420 65 74 100 54 } 0 over [ + dup 500 > ] find drop swapd tail
+-------------------
+
+produces a stack of `( 570 { 74 100 54 } )`.
+
 [source,factor]
 ----
 ! vector ops version
@@ -2104,43 +2183,38 @@ TODO: generalize fork & hook to n-ary.
 20 [ 4 + ] [ 3 * ] &. ! equivalent to j (3&*)&.(4&+)20
 ----
 
-.`F:.` with `Z:`
+.`F:.` with `Z:` (folds which may short-circuit based on the accumulator)
 
-if we use `follow`, we must `unclip-slice` before `follow`, because its argument quotation is `( ... prev -- ... result/f )`; thus it operates on the current element of the list, and the rest of the list must be part of the `...`. using `follow` requires the input sequence to be non-empty. also, we can't use `follow` at all, because inside its quotation, we must decide whether to include the current element or not. however we stop at a break condition, we generally include the current element in the output; however, eventually the input sequence may be exhausted. eventually we whittle-down to an empty sequence and the current element; we still accept the current element but cannot `unclip-slice`. however, we cannot leave the sequence empty, because we already have the rule that if it's empty, then accept the current element! thus we must replace the empty sequence by a designated value, e.g. `f`, then test it, and if it's `f` then we don't accept the current element! it's an ungraceful handling of an off-by-1 error!
+this is a short-circuiting sequence iterator. factor comes with sequence iterators, and short-circuiting combinator `find[-integer[-from]]`, but no short-circuiting sequence iterators. but don't worry! if you look at the definition of `find`, you'll see that it's just `[ length-operator find-integer-from ] keepd`, and `find-integer-from`, like `each-integer-from`, is a general looping combinator, not particular to sequences; thus `length-operator` is our "magic" word that makes any general iterator into one over a sequence. "magic" is quoted b/c it's really just `[ length ] [ nth curry ] bi`.
 
-`loop` provides a solution, though i'll show a better one afterward.
+like how `reduce` is just `swapd each`, so we can use `find` but have it short-circuit by sticking a boolean on the stack:
 
 [source,factor]
-----
-! accumulate until our sum is >=500
-0
-{ 1 10 420 65 74 100 54 }
-[ 2dup [ 500 >= ] [ empty? ] bi* or
-  [ f ]
-  [ unclip-slice [ + ] curry dip t
-  ] if
-] loop >array
-----
+------------------------------------------------------
+0 { 1 10 420 65 74 100 54 } [ + dup 500 > ] find 2drop
+------------------------------------------------------
 
-returns
+produces `570`.
 
-----
-570
-{ 100 54 }
-----
+if we want to return the remainder of the list, it's just a simple modification:
 
-originally i wrote it in terms of `if-empty`, and even then it was improper. i was very confused trying to figure-out why my stack effects didn't check, until i realized:
+[source,factor]
+---------------------------------------------------------------------
+{ 1 10 420 65 74 100 54 } 0 over [ + dup 500 > ] find drop swapd tail
+---------------------------------------------------------------------
 
-. ``loop``'s stack effect implies that when the loop is done, the stack must be as it was before the loop began.
-. the loop is executed on each loop. therefore if i were to put the vector and input sequence in the loop body, then those literal values would be pushed on every iteration.
-. `if-empty` is not good to use inside `loop` because its stack effect discards the input sequence when it's empty, but per point (1), i must leave the sequence on the stack so as to not add nor remove anything from how it was before `loop` was called.
-. i'd used `push` instead of `[ push ] keep`. my thinking was simply incongruous about keeping the vector on the stack but using `push ( elt seq -- )`.
+produces a stack of `( 570 { 74 100 54 } )`.
 
-the only reason that we need this complicated device is when we want to stop a reduction (not a map) when some predicate of _the accumulator_ is satisfied. if the predicate were of an input in the sequence, then we could just `dup <pred> find drop [ head ] when* <initval> <quot> reduce`.
+by the way, though we can use `find` as a short-circuiting fold, factor does not come with any short-circuiting scan. no problem, though; we just do the same but push a copy of the accumulator to a vector:
 
-a neat side-effect of this is that it effectively returns a zipper: an accumulation and the remainder of the sequence that was not accumulated.
+[source,factor]
+----------------------------------------------------------------------------------
+V{ } clone 0 { 1 10 420 65 74 100 54 } pick '[ + dup _ push dup 500 > ] find 3drop
+----------------------------------------------------------------------------------
 
-the better way is to use fried quotations and continuations:
+returns `V{ 1 11 431 496 570 }`.
+
+we can also instead use fried quotations and continuations:
 
 [source,factor]
 --------------------------------------------------------------------
@@ -2148,9 +2222,11 @@ the better way is to use fried quotations and continuations:
 '[ _ _ [ + dup _ >= [ swap continue-with ] when ] each nip ] callcc1
 --------------------------------------------------------------------
 
-this returns either the sum of all if it's less than 500, or the smallest sum of prefixes greater than 500. `nip` removes the continuation object, since by that point it won't be used.
+this returns either the sum of all if it's less than 500, or the smallest sum of prefixes greater than 500—in this case, 570. `nip` removes the continuation object, since by that point it won't be used.
 
 i expect that continuations are new to you. put breakpoints wherever you like to inspect the running code. note that `continue-with` is available to use in the quotation passed to `callcc1` and returns from the continuation with a "return" value (not to be confused with `return` which returns nothing), and `callcc1` calls the quotation with the continuation object pushed onto it (this is the object to pass to `continue-with`). finally, callcc1 leaves the stack as it was before the quotation was called; this is why i curried the inital sum value, 0, and the array, and the threshold value, into the quotation—so that when the continuation finishes, only the sum will be left on the stack.
+
+finally, remember that we cannot so easily use `until` or `loop` because they aren't specialized to traverse through sequences. granted, there's not much needed to make them do so, but why put in the redundant effort? *`find` is the most general looping combinator; it combines `each` and `until`.*
 
 .`#[.:]`
 [source,factor]
@@ -2597,7 +2673,6 @@ so of course we can't use that 2nd sequence of duples.
 * any time that data have an attribute in common, where that attribute is relevant to some fn that the data are passed to, put the data in a sequence then iterate over it.
 * if you're having trouble orienting composition/currying of fns throughout a stack process, then just define a helper fn or combinator. stack langs work best when each word has a short definition.
 * manual recursion really is rare! surprisingly, even `(split)`'s definition is non-recursive!
-* if you're resorting to `fry` (fried quotations), you're almost certainly not using the stack well
 * if you're nesting combinators and getting stack effect mismatch errors, then check the stack effects (ctrl+i in the graphical listener) of each part individually and algebraically reason through what outer quotations mandate vs what your inner quotations effects are.
 
 basically: express symmetries as sequences and asymmetries as relations of sequences. these relations are commonly themselves sequences. `[ H{ } set-at ]` is a sequence/relation of two distinct things paired particularly, and this relation is passed to `2each`, which relates a matrix (having two axes [of symmetry]) to an operation (program).
