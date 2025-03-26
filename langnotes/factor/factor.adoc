@@ -9,9 +9,10 @@ notes' new structure:
 
 . intro to factor: stack, cat, and discussing how factor programs generalize fns, and how purity is no longer applicable, since the code is not applicative.
 . how to code well in factor: combinators, quotations, currying, stack shuffling (retain [somewhere], discard, or shuffle; e.g. `pick` & `rot` both bring, of `x y z`, `x` to the top, but `pick` copies whereas `rot` moves), factoring, and code structure.
+  .. currying is not always the most elegant, since it requires composing, which can be difficult, especially in nondeterministic loops through multiple sequences, namely when you must, inside a quotation passed to `map`, curry the current element then compose that `curried` with another quotation to be passed to an iterator such as `find`, all still inside that quotation passed to `map`. contrastingly, the stack is just the stack as the computation goes on; it's easy to shuffle it at any point in the computation.
   .. to retain something on the stack when a quotation will be called multiple times, then use `curry`, as is common in looping/iteration combinators like `loop`, `each`, `map`.
   .. to copy something, then use `over`, `pick`, etc
-  .. to leave something on the stack as a return value, then depending on the data flow, you'll use either `dup`, `tuck`, or `[ ... ] keep [ ... ] dip`
+  .. to leave something on the stack as a return value, then depending on the data flow, you'll use either `dup` (copy atop), `tuck` (copy below), or `[ ... ] keep` (copy on top with fn of stack). `over` is equivalent to `swap tuck`, btw. your proficiency in shuffling the stack will show itself in your ability to notice such relations, by thinking in terms of datum position on the stack and duplication.
   .. to apply a symmetry to multiple data on the stack, use "cleave", "spread", or `apply` combinators e.g. `2bi`. `tri*`, or `bi@`.
   .. otherwise sometimes you'll want to use general shuffle words. don't worry about making it beautiful; as you code, over time you'll naturally begin to notice more elegant ways to manage the stacks
 . vocab reference
@@ -47,6 +48,8 @@ we'd do `now [ swap time- duration>seconds 30 < ] curry filter`, but were we to 
 
 .stack management tips
 
+* the more frequently data is used, the nearer the top of the stack you should put it
+
 "ahh! i'm stack shuffling too much!"
 > are you using `keep`?
 
@@ -54,6 +57,15 @@ we'd do `now [ swap time- duration>seconds 30 < ] curry filter`, but were we to 
 > use a `cleave` combinator such as `bi` or `tri`
 
 remember: your code should clearly associate data with operations. `cleave` associates one datum with many ops. `napply` associates multiple data with one op. `spread` associates with each of many data an op. then there are variants, such as `2tri`, which associates two data with 3 binary ops.
+
+stack management is always simple and organic:
+
+. put together fragments of code as they occur to you. notice which data they consume. 
+. produce those data and put them on the stack
+. if those same data are consumed in other places, too, then keep the data by using [variants of] `dup` or `keep` depending on whether you want to keep the data under some others vs above others.
+. if there are symmetries among data & functions expressible by a combinator, then so express
+
+if some symmetries are only _almost_ obeyed, then you may express in terms of a combinator and a variant of `drop`.
 
 .come from apl, not scheme
 
@@ -63,7 +75,10 @@ in other words, know how to use sequences in factor. factor is not a pure langua
 [source,factor]
 ----------------------------------------------------------------------------------------------------
 : factor-prefix ( x y -- prefix rem-x rem-y )
-  [ ] [ [ = ] { } 2map-as [ not ] find drop ] [ [ length ] bi@ min ] 2tri or [ cut ] curry bi@ nip ;
+  [ ]
+  [ [ = ] { } 2map-as [ not ] find drop ] ! find is used equivalently to "filter first" here, or "where first" [apl]
+  [ [ length ] bi@ min ]
+  2tri or [ cut ] curry bi@ nip ;
 
 "catamaran" "cats, the play" factor-prefix [ . ] tri@
 "cat"
@@ -123,6 +138,111 @@ USE: sequences.generalizations
 TIP: the most fundamental form of `find` is called `find-integer-from`. whereas `each-integer-from` corresponds to a `for` loop from i to n, `find-integer-from` corresponds to the same but enabling `break`. in other words, `find-integer-from` is like `until` with an index under the quotation except that now the quotation is curried to the quotation.
 
 consider the task of, given two strings, return their common prefix and the remainder of each string.
+
+.row-polymorphic iterators
+
+that `map` is row-polymorphic practically makes it magical: it's no longer constrained to that the mapping function must be of only one element! instead, it's that the function must handle _at least_ the current iteration's element! this is described by the row-polymorphic type signature `{r|x}`, using purescript's notation. thus now map, fold, and each are basically the same, since `map` is just `each` with pushing into a vector or setting an array's ith element. thus `map` should really be called `collect`. this means that we can use `map` to trivially implement scan: `-10 { 6 2 9 } [ + dup ] map nip` returns `{ -4 -2 7 }`. so if you want to make your own looping combinator, it's trivially easy to do so: just use `push` and `each` (or `find` if you want short-circuiting). for example, let's push 5* the sum of the current & prior elements only when the distance between the current & prior elements is at least 7, and stop once their sum is at least 20:
+
+[source,factor]
+--------------------------------------------------------------------------------------------------------
+{ 10 6 4 20 9 16 12 }       ! input seq
+[ first ] [ rest-slice ] bi ! 1st elt is init elt, on the stack below seq to iterate over
+! idiom: make new output vec, curry to each's quotation, and keep it on stack after `each` finishes
+V{ } clone
+[ '[ [ [ + [ 20 >= ] keep ] [ - abs 7 > ] 2bi [ 5 * _ push ] [ drop ] if ] keep swap ] find 2drop ] keep
+--------------------------------------------------------------------------------------------------------
+
+`find 2drop` is common when using `find` only for a short-circuiting fold. the stack's data order must be considered a bit, but it's simple here: it's reverse order; the `if` condition tops the stack, with the data to act on below it, and finally the boolean telling whether to stop the loop is below, but must be swapped with the current element which we kept so that it becomes the new loop state, stored properly under the boolean.
+
+j's `F:` & `Z:` verbs can handle this, but whereas in factor you can have multiple data on the stack below, in j, like in haskell, you must have exactly one accumulator, so you'd have to join your multiple data into one tuple of them, and pattern-match them out inside the loop lambda.
+
+also, note that in this particular case of the loop state being the prior element, we could better express this in terms of clumps, without a persistent loop state:
+
+[source,factor]
+--------------------------------------------------------------------------------------------------------
+{ 10 6 4 20 9 16 12 } 2 <clumps> V{ } clone
+[ '[ first2-unsafe [ + [ 20 >= ] keep ] [ - abs 7 > ] 2bi [ 5 * _ push ] [ drop ] if ] find 2drop ] keep
+--------------------------------------------------------------------------------------------------------
+
+the loop state is useful only if you want something to change incrementally as you encounter new elements in a loop.
+
+.tricky loop example
+
+this takes two sorted arrays; it maps over one, and for each element `x` in that array, it returns `y`, the greatest element less than `x` in the other array:
+
+[source,factor]
+---------------------------------------------------------------------------------------------------------------
+0                                         ! initial index (index into array B)
+{ 1.0 1.1 1.2 1.3 2.1 2.4 2.6 3.4 4 5 6 } ! array to map over
+{ 0 1 3 5 7 }                             ! array B
+
+! build-up a quotation
+
+! two data used in each of the next two quotations
+[ length        ]
+[ [ nth ] curry ] bi
+
+! two quotations to be composed together
+[ [ < ] compose [ dupd ] prepose ! retain x on the stack for successive iterations of find-integer-from
+  [ find-integer-from ] 2curry ]
+[ [ [ or 1 [-] dup ] curry ] dip ! curry the length with `or`; if no element is found, use the last (rightmost)
+  compose [ swapd ] compose ! x i y -> i x y
+] 2bi compose
+
+[ 2array ] compose ! ( x y -- z )
+[ swap ] prepose   ! map puts x atop i. find-integer-from needs i above.
+map
+---------------------------------------------------------------------------------------------------------------
+
+anyone used to reading applicative code would probably feel a bit in their gut just looking at this. however, this is concatenative code! whereas applicative code's topology can be approximately understood upon a glance—namely by its nesting & indentation—concatenative code should be read linearly (since concatenative code is necessarily linear), one word at a time. the comments for `bi` & `2bi` would not be in production code, but the rest would be. after all, this is an unusually complex traversal. the actual code as i have it in my `util` vocab:
+
+[source,factor]
+---------------------------------------------------------------------------------------------------------
+! precondition: A & B are sorted number sequences
+! scaffolds for iteration over A that matches each a in A with y, the
+! greatest element in B less than a; then performs f(x,y).
+! you'll want to nip after using the quotation to iterate
+! example:
+! { 1.0 1.1 1.2 1.3 2.1 2.4 2.6 3.4 4 5 6 }
+! { 0 1 3 5 7 } [ 2array ] align-seqs-by-value map nip .
+! { { 1.0  1 }
+!   { 1.1  1 }
+!   { 1.2  1 }
+!   { 1.3  1 }
+!   { 2.1  1 }
+!   { 2.4  1 }
+!   { 2.6  1 }
+!   { 3.4  3 }
+!   {   4  3 }
+!   {   5  5 }
+!   {   6  5 } }
+: align-seqs-by-value ( A B f: ( x y -- z ) -- 0 A q: ( i x -- j z ) )
+[ 0 -rot [ length ] [ [ nth ] curry ] bi
+  [ [ <=> +lt+ = ] compose [ dupd ] prepose ! retain x on the stack for successive iterations of find-integer-from
+    [ find-integer-from ] 2curry ]
+  [ [ [ or 1 [-] dup ] curry ] dip ! curry len(B) to or; if find ret f, use B's last elt
+    compose [ swapd ] compose
+  ] 2bi compose
+] dip compose [ swap ] prepose ; ! swap b/c map puts x atop i. find-integer-from needs i above.
+---------------------------------------------------------------------------------------------------------
+
+for comparison, here it is in applicative style (javascript-like):
+
+--------------------------------------------------------------
+f(A,B){
+  i=0
+  L=length(B)
+  g(x){
+    gtIdx=findIntegerFrom(i, L, (i) => {x < B[i]}) or L
+    2array(x, B[max(0, gtIdx - 1)]) // [-] is - 0 max
+  }
+  map(A,g)
+}
+--------------------------------------------------------------
+
+notice the nested scopes! i shadow `i`, use `L` & `i` in `g`, and `x` in the lambda passed to `findIntegerFrom`! this is why the factor code is so hairy. maybe i should have just written it in applicative style in factor by using locals. then again, the tricky part was just thinking about how best to code such a complex relation. also, this applicative code might not be perfectly accurate; i have no way to test it. seems about right, at least.
+
+another important note about this example: it demonstrates that, like such words as `length-operator`, it's common in factor to modify some items on the stack but leave the stack the same height and of mostly the same form; this style of programming is to take multiple arguments and return multiple, so that they are prepared for certain combinators such as `map`, but now the map traversal is modified. this is unheard of in non-stack languages. instead, what's common in applicative functional languages is a slew of combinators that take specific varieties of arguments (e.g. some take binary functions with or without some extra arguments that affect how the function executes, and there may be ternary variations or whatever other variations), so you have very many functions that are mostly the same, and hopefully one of them is just what you want; god forbid you need even the slightest variation, since then you'd have to define your own function! the stack is much more flexible since words/combinators hardly require the stack to be particularly constrained. building-up or modifying quotations is common practice in factor. very rarely do applicative languages have higher-order functions from functions to functions, and those that do exist are typically very much less flexible than corresponding factor versions.
 
 ''''''''
 
@@ -192,7 +312,7 @@ SYNTAX: ?:
 * `math.functions` includes common functions like `^` (exponentiation), logarithms, and trigonometric functions.
   ** *you should completely familiarize yourself with this vocab*
 * `math.intervals` and `math.vectors` are useful, too
-  ** try to use `math.vectors.simd` wherever possible!
+  ** try to use `math.vectors.simd` wherever possible! in fact, it's the best way to use bit vectors, too, since it actually is proper vector operations on numbers, for large bases (e.g. `uchar-16` is vector ops for 16-length vectors each of whose values are 0..255). this is overkill for mere bitwise operations since there's no simd type for a bit vector, so you'd just use `math.bitwise` & `math.bits` (which are surprisingly accomodating). i have no idea why factor has each of bit arrays & vectors as their own structures, let alone whose elements are _booleans_ instead of numbers; don't use them; i see no advantage to them, and converting between boolean sequences and integers is a hassle!
 * rational numbers (abbreviated as "ratios") are always used in factor for division unless floats are explicitly specified. their syntax as `a/b` or `a+b/c` is also supported e.g. `1+1/2 5 *` gives `7+1/2`.
 
 * `$[ ... ]` for static eval
@@ -1094,14 +1214,37 @@ USING: io io.launcher io.encodings.utf8 ;
 
 .stdin & stdout redirection
 
-[source,factor]
-----
-<process> { "cat" } >>command "outfile.txt" >>stdout ascii
-[ "this output is in a file!" print ]
-with-process-writer* ! or omit the asterisk if you don't need the process object nor its status
-----
+pass in stdin and output to a file:
 
-if you run `"cat" ascii [ "hello!" print ] with-process-writer` in factor in a terminal (i.e. by launching factor with `export -n DISPLAY`), then you see the output directly in the terminal. you can replace `cat` by a curses program e.g. `w3m` and see that curses programs work fine, too.
+[source,factor]
+----_-----------------------------------------------------------
+<process> { "cat" } >>command "outfile.txt" >>stdout
+ascii [ "this output is in a file!" print ] with-process-writer*
+----_-----------------------------------------------------------
+
+use `with-process-writer*` (no asterisk) if you don't need the process object nor its status.
+
+pass in stdin and output to a string in factor:
+
+[source,factor]
+------------------------------------------------------
+<process> { "cat" } >>command
+ascii [ "hi!" print flush readln ] with-process-stream
+------------------------------------------------------
+
+WARNING: always flush the input stream before trying to read the subprocess's output! if you don't, then the subprocess may indefinitely await input, leaving the program hanging!
+
+you can replace `cat` by a curses program e.g. `w3m` and see that curses programs work fine, too.
+
+.example: invoking k from factor
+[source,factor]
+-------------------------------------------------------------
+<process> { "/home/nic/.local/bin/k" } >>command
+ascii [ "`0:`j@3+!9" print flush readln ] with-process-stream
+json> ...
+-------------------------------------------------------------
+
+pushes `{ 3 4 5 6 7 8 9 10 11 }` to the stack.
 
 NOTE: `binary` encoding does not work with `with-process-writer` nor `with-file-writer`! it gives some odd error: `element-size` does not define a method for the <such-and-such> class (class depends on what you're writing) dispatching on <item of that class>.
 
