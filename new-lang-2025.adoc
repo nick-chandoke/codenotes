@@ -1,0 +1,108 @@
+= index-centric computing
+
+rather than nested iterators, i want to iterate once over the cartesian product of indices, except generally not the full cartesian product; i may choose during the iteration to not try any further multidimensional indices matching a given predicate. this is the same as the prolog thing of having iteration naturally continue so long as next() returns non-NULL. this system should, when used for such a simple scheme, require no more computation than a loop in assembly: next() would plainly be, in x86, the duple ([cmp ecx len; jlt], inc ecx). we don't need an else; if a predicate fails, then of course we'll try other predicates, if any are left. and any predicate may modify the set of remaining predicates; this design is like a mix of a `for` loop and a `while` loop, but of course is generally represented by `if` & conditional jump. another concern is managing which data must be preserved vs may be overwritten/repurposed throughout computations. again, like in <align-seqs>, to be clear, this is for control flow only, unlike prolog which has a global fact db. my technique works in any language (incl. asm) and is for variably local control flow. it may be global, but there are no special affordances for that. this is meant to be as inline as a loop block.
+
+the actual source code should read like english, and wrt symmetries, with w/o using the word "per" b/c ALL RELATIONS MUST BE IMPLICIT. especially, there are often multiple ways to express relations e.g. x per y or y per x being equivalent b/c it's just a cartesian product either way. e.g. "n-clumps of sessions, times of candles whose v or n accumulated since the session's start exceeds the prior 3 session's total v or n respectively."
+
+characteristics:
+
+. no nesting/scope
+. index/virtual-sequence-based. allows multiple simultaneous multidimensional indices/subsets (generalizes partitions in that they may have non-null intersections) of any structure.
+. trivial factoring e.g. sums of two seqs of equal length becomes expressed in terms of one index variable.
+. non-black-box traversals. e.g. one should be able to define binary search as its own idea, but effortlessly augment it AT AN ARBITRARY INVOCATION POINT to terminate with a given error value if it compares the target to a prime number. this could be achieved by mandating that each traversal expose its loop condition (i.e. next()) so that it can be modified.
+
+implementation: system like prolog, but computation like factor. we want the stack so that we can do row-polymorphic stuff. code will be expressed by inline combinators. the stack will be used (and will use the cpu's stack literally), but locals will be available, too, and those values will be stored in general purpose cpu registers. it'll be automatic; when something is saved by a variable name (like in a `let` block), then it'll be automatically stored in whatever the next available register is. there will be manual locals management; you must unset a local, which will free its register. simd will be used whenever possible. my goal is to basically have a forth implementation with the semantics of prolog and the efficiency of apl, and all of this being done with the most succinct data structures possible so that we avoid the heap as much as possible. with modern processors, with avx and 64-bit registers, this should be very easily achievable for all code that does not need to store large collections of arbitrary data at a time (such as reading in a large list of json objects all of which must be retained in whole in memory for operations such as median). this is possible because good code never needs more than about 6 objects on the stack, nor needs more than 6 locals at a time. i'm yet unsure how the decision to store data in a local vs a stack is relevant given that we won't be nesting computations; usually i use locals in factor to avoid shuffling, which is only ever an issue for (deeply) nested quotations.
+
+in a stack lang, when you *do* find that you've somehow made your code deeply nested, it's often easier to just put elements far down on the stack, then pull them back up as needed, rather than to try to curry & compose them into a complex tree of quotations. perhaps even better, though, is to, instead of nesting many common traversals such as `map-filter`, create your own traversal that takes n aspects [data] on the stack and uses combinators such as `n&&` to clearly specify a sequence of predicates that return data or f.
+
+the system, like haskell's "at" pattern matching, must make delimitation something that may optionally be used if desired i.e. that we can ever ask which sets a set/obj is a subset/elt of, or for sequences, which indi(ces) a sequence/obj is at or is a substring or subsequence of. i.e. we should be able to efficiently relate data. slices correspond to substrings, index seqs correspond to permutations (which have strictly more info than subsets).
+
+excepting non-commutative folds over ordered data, data subsetting/subsequencing and indexing should be O(1). this is a requirement for full flexability (and application of the very powerful integer arithmetic to creating selection masks) in unnested relating without worry about cost. an example is that we should be able to clump something then collect-by or group-by each clump, which gives us the new slices (for group-by) or subsequence selection vectors (for collect-by) each with their own indexing from 0 (e.g. this is the nth clump) while retaining association with the original index so that i can, without extra computation, for an arbitrary element of the original sequence, its index in the original sequence, and to which clump it belongs to, and its index, if present, in the vector returned by collect-by. that group-by pushes into a vector is terrible design: we create new memory, have more-complex code, and lose the relation between original indices and the groups' indices. the loss of relation is the worst aspect of functional languages, as is the limitation of relation the worst aspect of functions. `collect-by` has a beautifully simple definition, both in code and abstract form; however, the very simple difference of pushing objects instead of their indices loses relation! it's exactly the same as k's `=:` except that it doesn't return indices. consider this apl-like thought wrt this system's prolog form of simply being a sequence of predicates that the system then intersects naturally for one complex traversal. as always, we should explot the extreme flexibility (multiple simultaneous data representations), ubiquity, efficiency (lightweightness), and mathematical properties of integers e.g. order, partition, or arithemtic, e.g. it's easier to use a fold to compute an average by multiplying current elt by 1/n then adding it to an accumulator than to collect into an array then sum it and divide by its length! apls are excellent for using integers for everything, including preserving relation, but they lack in that they can't relate among lambdas (no shared scope, except by using globals. this is at least analagous, if not equivalent, to lacking row-polymorphic stack effects), and in that they...don't make composing relations as simple as prolog...i should study this by coding in k in practice.
+
+at least in the meantime, it's easy to simply do array programming in factor. it might not be quite as nice as a proper array lang, but that's only to say that operations aren't fused or otherwise specialized, and the notation isn't as brief. this is efficient, flexible, and easy. just think "how would i code it in <your apl of choice>" then write that code literally in factor. granted, you start there; if it's obviously more natural to code it in a more "factor" way then just do that; the important thing is that your thinking is array-oriented.
+
+the "changes" fn demonstrates that we should not try to be as efficient as possible; such high efficiency should be achievd only automatically by computational systems. the larger code size, let alone complexity, is not worth the marginal improvement; and such improvements should be considered relative to the hw that the code will run on, the language runtime's efficiency (if any), and other code in your program (optimize only where it makes the MOST difference).
+
+traversals should be implied by the traversed data and their indices. the order of traversal is given by the ordinals, and the set of indices by the intersection of the index sets, plus any ad-hoc, user-specified unions or intersections, or repeats (which is just union with the infinite-sized set of integers mod n). tracking state is troublesome only ever b/c you must change state wrt traversals, and keeping those properly arranged can be difficult. however, if you simply specify variable changes as rules (i.e. "when cond, mutate in such-and-such way") then there's no trouble! binding to locals is not at all inconvenient if done apl-style. with unnested traversals, scope isn't an issue; that vars are freed automatically when scope ends might be fine.
+
+the stack is very computationally and expressively convenient/natural for many expressions, so definitely keep using it to express computations, even if the actual computation is done by registers instead, under-the-hood. forks aren't concatenative nor as flexible as the stack. i aim to avoid using the heap, but if i do, then allocated memory won't actually be freed; it'll just be made available for new uses.
+
+the implementation will simply compile source code directly into machine code. it may do this to produce an executable, or may do this on the fly as jit.
+
+maybe the "find the 1st candle of each session for which each its 3 prior days' sessions of the same type [as this day's given session] has a sum volume greater than the average of the prior 3" code would be nicer to code as regrouping—like mixed-radix, but more general—where i traverse once, building-up relations & sums among days and sessions.
+
+e.g. cs [ day+=priorday!=day; session+=priorsession!=session; f(day,session) ... ] each. then i'd just specify the RELATION OF INDICES AND THEIR CORRESPONDING SETS plainly: nth session of mth day vs nth session of days m-[1:3]. again, the traversal is implicit, or rather, it defaults to all n in sessions and all m in days. an index variable in a natural number is 0..n-1; in a slice [m:n], from [m,n], and for an array, for all its valid indices, traversed in ascending order.
+
+using predicates (higher-order fns / quotations/lambdas) sucks b/c they break relation, but they're good in that they're efficient: they apply the quotation to each element and basically fold that result into few data, which keeps memory usage small. so let's have a system that associates computations with data (as quotations do) yet presents like apl vectors, and has a system that automatically keeps data copies rather than reducing them e.g. if i do vector expr `x*y+x`, thet corresponds to `[ [ + ] 2map ] keep [ * ] 2map`. i really should find a less-trivial example, but this demonstrates that i translate applicative code into concatenative/stack code (though i'd just explicitly code concatenatively w/optional registers anyway) so that it's obvious which data to retain. eh, this being said, i could just as easily go full-applicative by clearing all registers that were bound within a lambda, which naturally & simply implements nested scopes (though not closures, but they aren't needed anyway, as demonstrated by their total lack in stack langs. not once have i even thought about closures nor wished for a more convenient way to code anything in factor).
+
+so my main trouble in coding is that i'll do e.g. `[ [ v>> ] [ n>> ] bi 2array ] map unzip` b/c it's clear & easy, but i totally cringe at the idea of using 2array n times (i mean can you imagine coding malloc & free for each iteration of a loop? awful! it'd be better to malloc once, set many times in each iteration, then free after the loop, but why would we even malloc at all?! of course we'd just set registers! it's only two values, and this is known statically!) then unzipping, when i could just create two n-arrays and populate them with v & n, which is common and should be its own combinator...except that it shouldn't be a combinator, because combinators are TEMPLATES, but rather a language feature for expressing such patterns elegantly by using a bit of LOGIC to convert by effective code (as in "effectively do x, but actually it's y") into literal code. to do what i actually ideally would do in factor is very bloated and unclear for how simple a concept it is:
+
+: map-into-2 ( xs q: ( x -- a b ) -- as bs )
+  [ [ length dup [ 0 <array> dup [ set-nth ] curry ] bi@ swapd
+    [ [ keep ] curry ] dip compose ] dip
+    [ dip ] curry prepose
+  ] keepd swap each-index swap ;
+{ 3 6 4 5 2 } [ [ 6 * ] [ 20 / ] bi ] map-into-2
+
+=> { 18 36 24 30 12 } { 3/20 3/10 1/5 1/4 1/10 }
+
+compare it to the prolog-like solution `a[i],b[i]=f(x[i])`, which implicitly binds i to RHS x; b/c x is a sequence, i corresponds to a slice, which allows creation of the default contiguous traversable, the "array" data structure; so they're created for a & b, which implictly exist by being LHS exprs. then just evaluate this expression for all i. this system depends on being built with particular consideration of indexed structures, and constraints on those indices e.g. contiguous or not, or integral or natural indices (cf hash map), and whether the indices are ordered. it can exploit these properties and knowledge of integers to make efficient code. btw, indices is the ideal solution, not having a compiler try to recognize certain code patterns then convert them to more efficient alternatives! that's ridiculously ungeneralizable and complicated!
+
+indices are general relation. EVERY data structure should, in code, ever be useful only if its indices are used; without indices, the structure is ignored, and it's considered only as generally & vaguely as any object. data are usually dichotomized into atoms vs structures. i suggest better terminology: indexed vs non-indexed. indices may be multidimensional, and any data may support multiple indexing schemes simultaneously. even data that grows in a linukd-list fashon (e.g. ll's, rose trees) should be indexed; indexed does not imply O(1) access. and ofc, since indices are by default free variables, we may identify subsets of structures by using predicates e.g. `{x[i]|x[i]>5}` applied to a rose tree, which would simultaneously identify i & x[i]. naturally no more x[i] would simultaneously be stored in mmeory than the max arity of expressions entailing x[i].
+
+an indexable mod n, depending on cmp(#x,n), would be clumps or repetition. because the mod n applies to indices, the "mod n" augmentation converts any O(1)-access-&-modify structure into a mutable ring buffer. the most general flexibility comes in manual indexing expressions e.g. n-groups is defined as `λi. x[i*n:i+n]`, and n-clumps as `λi. x[i:i+n]`, and repetition as `λi. x[i mod n]`. notice that there's no need to specify that `i+n<i`; the system automatically restricts the index expression `i+n` to those for which `x[i+n]` is defined, which it can do b/c n is, at the time of evalutation, fixed, as is #x. if x is growable then we'd need to flag whenever its size changes and if this flag is set at time of an evalutation, re-compute the evalution of i. i think that this may likely be insensible in practice, though. index maps are composable, so you can do e.g. n-groups of repetition.
+
+much of these thoughts reflect(s) that i prefer tags over hierarchies; they're soupier: they don't strictly conform to hierarchies, but they may, and they may conform to multiple simultaneously, which may even overlap! consider using a set of graph nodes like i did in sql to traverse a tree; the "tree-ness" is not kept as metadata; such structure is never explicitly stated in the code, and indeed, it is NOT in the code, it is in the data! one must search for it by trying to traverse the data as a tree.
+
+NEXT: about `changes` algorithm: suffix #x-1 only if it isn't the last elt, right?! is this check necessary in the k solution?
+
+adjacent indices give slices all having some common property
+if empty, returns the exact same input seq
+this code is actually pretty simple, but this syntax is visually unapparent;
+were it represented graphically like in quartz composer, its definition would be clear.
+in k this is simply {&~=':f x}, which reads 100% literally: "(indices) where f(x) changes."
+* k's primitives are natural, so i don't need to add 0 nor (#x)-1; and i don't need to account for x being empty, because i don't have to break x into first & rest, because ': handles that already. this compounds b/c i must apply q to both first and rest.
+* i also have to implement where and each-pair myself, though this is done very implicitly by my simple use of each-index and using the stack, and storing the current f(x) as the new prior. then i must drop it afterward.
+tl;dr: not natural primitives, and compounding complexity in explicitly coding it as a single traversal, instead of composing ideas then having the single traversal be computed of them.
+granted, i could just do the omst literal translation of k into factor:
+[ map [ = not ] 2 clump-map [ 1 + and ] map-index sift 0 prefix ] curry [ length 1 - ] bi suffix
+but this isn't as efficient. granted, perhaps k actually doesn't do nearly as much optimizing as i'd think, in which case it's just briefer factor with better primitives, and no row-polymorphic stack ops. granted, this is factor, not forth, and i'm running on x86, not a 320MHz risc-v Soc evalution cpu w/16kb data sram, so such optimization is a waste, despite being a good theoretical exercise to develop an ideal stack language. still, said language would be declarative and all would be defined in terms of relations. that solution would be...well, firstly we note that it's necessarily a computation of a sequence rather than a set i.e. indices are implicit in the sequence order. next we consider predicates, starting with what we want: 0,{i|f(x[i])<>f(i[i-1])},#x-1. using i-1 as an index for x implies the domain of i: [1..#x). in this ideal language, we are done. however, unless we somehow cleverly memoize, this computes f 2n-1 times. see the two examples below. the system would need to use induction to infer that it can compute f only n times and store only the prior f(x). how would this generalize to storing multiple data? well, actually it'd be easier, though perhaps more limited, to just have a rule for clumps; obviously per-element computations need to be computed only once per element, so for n-clumps, use a ring buffer for the prior n-1 elts then apply f(x) to the nth elt.
+
+: changes ( seq init-vec-len q: ( elt -- prop ) -- idxs )
+  pick empty?
+  [ 2drop ]
+  [ [ <vector> 0 suffix!
+      tuck ! store vec for retval
+      [ push ] curry [ [ drop ] if ] curry ] dip ! part of each's quot
+    [ [ tuck = not ] compose [ dip 1 + swap ] curry prepose [ each-index drop ] curry
+      [ rest-slice ] prepose ]
+    [ [ first ] prepose ] bi swap
+    [ length 1 - ] tri suffix! ] if ; inline
+
+applicative version:
+
+:: changes ( s #v0 q: ( elt -- prop ) -- idxs )
+  s empty? [ s ]
+  [ #v0 <vector> 0 suffix! :> V s
+    [ first q ]
+    [ rest-slice [ q tuck = not [ V push ] [ drop ] if ] each-index drop V ]
+    [ length 1 - ] tri suffix! ] if ; inline
+
+derived from the prolog-like solution given above: v.push(0); for i in 1..len(x) if (f(x[i])<>f(x[i-1])) v.push(i); v.push(len(x))}
+this computes f 2n-1 times, but is otherwise perfectly efficient:
+
+: changes ( s q -- idxs )
+  dupd [ 1 swap [ length ] keep [ nth ] curry ] dip compose
+  [ bi@ = not ] curry [ dup dup 1 - ] prepose
+  V{ 0 } clone [ [ push ] curry [ [ drop ] if ] curry compose each-integer-from ] keep
+  swap length suffix! ;
+
+same, but computes f n times, but traverses twice. O(2n).
+it's the same definition except that there's a `map` after `dupd`, and there's no `dip` & `compose`:
+
+: changes ( s q -- idxs )
+  dupd map 1 swap [ length ] keep [ nth ] curry
+  [ bi@ = not ] curry [ dup dup 1 - ] prepose
+  V{ 0 } clone [ [ push ] curry [ [ drop ] if ] curry compose each-integer-from ] keep
+  swap length suffix! ;
+
