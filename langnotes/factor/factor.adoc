@@ -2,8 +2,7 @@
 notes by nicholas chandoke. currently undergoing significant revision.
 :toc:
 
-REVISION
-========
+.REVISION
 
 notes' new structure:
 
@@ -19,7 +18,7 @@ notes' new structure:
 . caveats
 . tuning: using numbers, bytes, avoiding: reflective objects, pp, and certain vocabs like peg, if you can. otherwise you'll have to deal with longer compilation times and (much) larger executables. a good deal of effective tuning technique is to use the array paradigm in factor, which is easily accomplished by virtual sequences.
 
-factor's fried quotations used to use local namespaces and dictionaries, but at some point the fried quotations became converted into proper programs. idk how it does it, but i know that the algorithm is simple:
+factor's fried quotations used to use local namespaces and dictionaries (like `[let` &al locals still do), but at some point the fried quotations became converted into proper programs. idk how it does it, but i know that the algorithm would basically be:
 
 . to insert a datum into a quotation e.g. `[ x y _ z ]`, simply split at the `_`, then `curry` & `prepose`: `[ z ] curry [ x y ] prepose`.
 . to insert a quotation inline (akin to scheme's `,@`), e.g. `[ x y _ z ]`, it's basically the same except that we use `compose` instead of `curry`: `[ z ] compose [ x y ] prepose`
@@ -401,30 +400,14 @@ TODO: can i use the elegance of a stacklang with a non-reductive system like pro
 it's been suggested that the stack is not suitable for some coding; comomnly the quadratic formula is suggested. however, i defeat that argument here:
 
 [source,factor]
-----
-: ± ( a b -- a+b a-b ) [ + ] [ - ] 2bi ;
-: solve-quadratic ( a b c -- r1 r2 )
-  rot 2 * [ * 2 * ] keep
-  [ [ [ neg ] [ dup * ] bi ] dip - sqrt ± ] dip [ / ] curry bi@ ;
-----
+------------------------------------------------
+: solve-quadratic ( a b c -- x1 x2 )
+  [ neg ] dip rot
+  [ -4 * * over sq + sqrt [ + ] [ - ] 2bi ] keep
+  2 * [ / ] curry bi@ ;
+------------------------------------------------
 
-i consider this code more elegant than applicative versions. it only took me a few minutes to translate from the math notation to this code. true, to a newcomer who isn't familiar with the stack, solving for this code would be difficult. the method for coding a stack lang elegantly is not obvious, but the method is simple and simple to teach, and once one knows it, then coding elegantly in factor is easy. the method is mostly about ordering the stack such that related elements are near each other on the stack; then you must learn how to curry well, and using a particular set of primitives such as `each`, `bi`, and others.
-
-the code annotated:
-
-[source,factor]
-----
-:                  ! syntax that starts a definition
-solve-quadratic    ! the name of the word which we're defining
-( a b c -- r1 r2 ) ! "stack effect", analagous to a function/type signature. we require three inputs to be atop the stack, and after consuming them all, the word leaves two outputs on the stack. forth uses the same notation, but in forth it's a comment. factor has a stack checker to statically catch errors. an equivalent, terser, but less documenting notation is used by uiua: an integer e.g. ( x -- ) would be expressed by -1 to mean that this word reduces the number of elements on the stack by 1.
-  rot ! ( b c a )
-  2 * ! ( b c 2a )
-  [ * 2 * ] keep ! b 2a*2*c 2a. keep performs a computation with the stack, then pushes the top of the stack back to the top
-  ! the following code dips; 2a is taken off the stack, then this computation is performed, then 2a is put back atop the stack
-  [ [ [ neg ] [ dup * ] bi ] dip ! dip below 4ac. replace b by -b b². stack is now -b b² 4ac
-    - sqrt ± ] dip ! stack is now -b+√(b²-4ac) -b-√(b²-4ac)
-  [ / ] curry bi@ ; ! divide both by 2a
-----
+i consider this code more elegant than applicative versions. coming-up with the code wasn't a struggle; in fact, it was quite simple & plain: just identify that there are some computations with `f(b)`, `g(b,c,a)`, then `a`, so naturally we want b on the bottom, `c` & `a` in the middle, and `a` on top.
 
 of course, the solutions that you see on link:https://rosettacode.org/wiki/Roots_of_a_quadratic_function#Factor[rosetta code] are a bit more complex because they have special consideration for numerical precision.
 
@@ -1217,10 +1200,10 @@ USING: io io.launcher io.encodings.utf8 ;
 pass in stdin and output to a file:
 
 [source,factor]
-----_-----------------------------------------------------------
+----------------------------------------------------------------
 <process> { "cat" } >>command "outfile.txt" >>stdout
 ascii [ "this output is in a file!" print ] with-process-writer*
-----_-----------------------------------------------------------
+----------------------------------------------------------------
 
 use `with-process-writer*` (no asterisk) if you don't need the process object nor its status.
 
@@ -2062,7 +2045,7 @@ most general to least general: `split-indices`, `subseq-index`, `find`, `member?
 | `member?`                                                                      | `e.`
 | `nths`, `nth`                                                                  | `{`
 | `[ index ] keep length or`                                                     | `x i. y`
-| `[ reverse ] dip [ index ] keep length or`                                     | `x i: y`
+| `[ <reversed> ] dip [ index ] keep length or`                                  | `x i: y`
 | #x≥2: `natural-search`; else see _§using the stack well_                       | `x I. y`
 | `<groups>`, `<clumps>`, `delete-slice`                                         | `x u\.y`
 | `all-subseqs`                                                                  | ???
@@ -2225,7 +2208,7 @@ TODO: `x#y` below is incorrect
 | `classify` (`sequences.extra`)                                            | `=y`, i think
 | `<iota>`                                                                  | `i.y`
 | `[ and ] filter`, `[ [ ] curry replicate ] 2map harvest`                  | `x#y`
-| `dup length <iota> vand sift` or `<enumerated> [ nip ] assoc-filter keys` | `I.y` (where y is a boolean vector)
+| `[ and ] map-index sift` or `<enumerated> [ nip ] assoc-filter keys`     | `I.y` (where y is a boolean vector)
 | <implemented below>                                                       | `~:y`
 | <implemented below>                                                       | `x#[.:]y` (mixed bases)
 | <see bulleted notes>                                                      | `"`
@@ -2282,11 +2265,11 @@ clump-map can be composed easily, too:
 produces 570.
 
 [source,factor]
-----
+---------------
 ! factor                  ! corresponding j
-dup 1 0 <shifted> v= all? ! (1|.!.0 x)=x---------------
+dup 1 0 <shifted> v= all? ! (1|.!.0 x)=x
 { 1 10 420 65 74 100 54 } 0 over [ + dup 500 > ] find drop swapd tail
--------------------
+---------------
 
 produces a stack of `( 570 { 74 100 54 } )`.
 
@@ -3724,11 +3707,11 @@ in factor, we use `seek-input` & `seek-output`. the seek types that they take ar
 
 .replace last n characters of a file
 [source,factor]
-----
+-----
 : overwrite-file-end ( str path -- )
   binary [ >byte-array dup element-size 1 + neg seek-end seek-output write ] with-file-appender ;
 "ZE" "/home/nic/samplefile" overwrite-file-end ! initial file content was "stuff"; now it's "stuZE"
-----
+-----
 
 important notes:
 
@@ -3743,9 +3726,9 @@ tl;dr: think of `with-file-writer` as "set file content" and `with-file-appender
 think of the integer argument passed to `seek-absolute` as "skip this number of bytes, then read." the same is true of writing, naturally. with a file called `TEST` whose content is `12345` followed by a newline, the following makes it `123ZZ` followed by a newline:
 
 [source,factor]
-----
+---------
 "TEST" binary [ 3 seek-absolute seek-output "ZZ" B{ } like write ] with-file-appender
-----
+---------
 
 ==== inspecting binary files
 
@@ -3780,7 +3763,7 @@ i note this so that you won't be confused like i was when i saw so few bytes but
 
 == sockets
 
-.factor
+.server
 [source,factor]
 --------------------------------------------------------------------
 USING: io.sockets io.encodings.ascii io.streams.duplex destructors ;
@@ -3793,14 +3776,14 @@ print                                       ! (5)
 dispose                                     ! (6)
 --------------------------------------------------------------------
 
-. see `<server>`'s documentation about choosing & specifying host descriptions
+. see ``<server>``'s documentation about choosing & specifying host descriptions
 . read message from client (here, netcat)
 . send a message to the client. `with-stream` binds the duplex socket to the default input & output streams, so `print` sends to the client
 . `with-stream` closes the stream, so we don't call `dispose` separately on the socket returned by `accept`
 . now that `with-stream` has returned the default input stream to stdout, we print the client's message
-. close the server socket and any connected sockets (of which there are none here; whne `with-stream`'s block finishes, that connection's socket is closed, leaving none left in this example
+. close the server socket and any connected sockets (of which there are none here; when `with-stream`'s block finishes, that connection's socket is closed, leaving none left in this example
 
-TIP: factor also supports unix sockets in particular, which facilitate interprocess communication on one machine. however, these cannot be used with netcat (to my limited knowledge), so i don't document that here.
+TIP: factor also supports unix sockets in particular, which particularly & only facilitate interprocess communication on one machine. however, these cannot be used with netcat (to my limited knowledge), so i don't document that here.
 
 to be a client, sending messages to a server:
 
@@ -3812,7 +3795,7 @@ to be a client, sending messages to a server:
 [ "sending a msg!" >byte-array print ] with-client
 --------------------------------------------------
 
-you'll notice that i didn't used neither `send` nor `receive`. i have no idea what they are used for.
+you'll notice that i used neither of the `io.sockets` vocab's `send` nor `receive`. i have no idea what they are used for.
 
 == PRs
 
@@ -3857,10 +3840,10 @@ see `ui.tools.listener` vocab.
 in the listener, evaluate:
 
 [source,factor]
-----
+---------------------------
 SYMBOL: S_
 get-datastack S_ set-global
 dark-mode listener-window
-----
+---------------------------
 
 then, in the new window: evaluate `S_ get-global set-datastack`.

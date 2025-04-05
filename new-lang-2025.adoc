@@ -106,3 +106,7 @@ it's the same definition except that there's a `map` after `dupd`, and there's n
   V{ 0 } clone [ [ push ] curry [ [ drop ] if ] curry compose each-integer-from ] keep
   swap length suffix! ;
 
+
+that one stock problem: "given a seq [(time,val1,val2)], partition into days, then partition each day into hours, then, for each hour, find the first time, if any, that that hour's cumulative val1 or val2 was at least 3 times the average val1 or val2 of the 3 prior days."
+
+* that i must be particular about which array i pass to `find` (as opposed to which arrays i curry into some traversals within find's quotation) is a total pain. i must do it b/c find returns an object from the array that it traverses over.

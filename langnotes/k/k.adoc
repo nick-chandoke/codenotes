@@ -2,6 +2,12 @@
 nic chandoke's notes
 :toc:
 
+.spring 2025: factor vs k
+
+i like the stack _per se_. i less care about the brevity or non-redundancy that combinators provide, though they're nice, too. mostly, though, i just like that i can put things on the stack, each datum on the stack being its own concept/object, which, because it's on the stack, can be used anywhere; it's like easy, efficient global namespacing, but without the names. consider the `factorprefix` or `solve-quadratic` examples in the factor docs. it's just nice to see data transform one step at a time, and branch off into multiple computations at certain points of execution.
+
+''''''''''''''''''''''''''''''''''''''''''''''
+
 k3 & k6 much differ. this document details k6 & ngn/k yet. a section comparing k3 & k6 will be added. it's been implied that k3 & k4 are practically interchangeable, as are k5 & k6.
 
 .terminology & notation
@@ -37,6 +43,7 @@ k is categorically better than j:
 * there's no function composition in k...not sure if that's better or worse. j's fncomp was good but flawed; i'm unsure whether such things should be boldy discarded, or retained despite that they only offer convenience rather than a robust programming code.
 * k is easily learned in a weekend
 * because j verbs aren't 1st-class, j has a special tacit dsl. b/c k verbs are 1st-class, there's no need for a dsl; we can just define combinators such as `fork2:{[f;g;h;x;y] g[f[x;y];h[x;y]]}`. that being said, (ngn/)k _does_ have a dsl, described below.
+  ** still sucks compared to factor's `bi`, since, by using inline/row-polymorphic combinators, we can access arbitrary depth of the stack (TODO: get an example)
 
 .differences from j
 
@@ -113,7 +120,7 @@ small, simple, powerful language. easy to learn quickly. small implementation co
 | fast                                                        | usually decently fast
 | interpreted                                                 | compiled (interpreted is prohibitively slow)
 | elegant, terse syntax                                       | simpler, more-regular, but less-elegant syntax. definitely less terse in text, though comparably terse in tokens.
-| simple program modeL                                        | simple program model
+| simple program model                                        | simple program model
 | programs as data, and function arrays, rather than m.p      | metaprogrammable
 | one data structure                                          | _many_ separate, uncoordinated data structures
 | few, ambivalent fns                                         | many fixed-valence fns
@@ -177,7 +184,7 @@ in factor:
 : ¡ ( n -- v ) [ f ] [ [ sgn ] keep [a..b] ] if-zero ; inline ! <iota> that supports negatives, too
 : renko ( x -- x ) unclip-slice over length <vector> [ push ] keep
   [ [ last ] [ push-all ] bi-curry
-    [ [ [ - abs U / >integer ¡ ]
+    [ [ [ - abs U /i ¡ ]
         [ tuck - sgn [ + ] [ * u * ] bi-curry* prepose ] 2bi map
       ] compose ] dip compose each ] keep ;
 --------------------------------------------------------------------
@@ -209,7 +216,7 @@ btw, the actually correct solution is `renko:{[c;U](*c),*|{(lp;acc):x;(lp+0^*|i;
 --------------------------------
 : renko ( c u -- r )
   [ unclip-slice dup rot ] dip rest-slice                     ! [(*c;());1_c;1_U]
-  [ [ [ over - [ sgn ] [ abs ] bi ] dip / >integer * ¡ ] keep ! ¡:(sgn d)*_(abs d:y-lp)%z
+  [ [ [ over - [ sgn ] [ abs ] bi ] dip /i * ¡ ] keep ! ¡:(sgn d)*_(abs d:y-lp)%z
     [ * ] curry map                                           ! i:z*
     ! the following operations don't match the order of evaluation seen in the k solution:
     [ ?last 0 or + ] 2keep                                    ! lp+0^*|
@@ -225,7 +232,7 @@ and without comments:
 --------------------------------
 : renko ( c u -- r )
   [ unclip-slice dup rot ] dip rest-slice
-  [ [ [ over - [ sgn ] [ abs ] bi ] dip / >integer * ¡ ] keep [ * ] curry map
+  [ [ [ over - [ sgn ] [ abs ] bi ] dip /i * ¡ ] keep [ * ] curry map
     [ ?last 0 or + ] 2keep swap [ + ] curry map
   ] 2map nip swap prefix ;
 --------------------------------
@@ -292,7 +299,22 @@ each stock symbol is stored exactly once, unlike in a sql table, where it'd be s
 * unlike sql, i don't need to care how i structure my data. i can structure my data in a table or across many vectors—whatever makes expressing my desired computations most elegant.
 * outer joins on keys is implicit when applying a binary operation to two dicts. this is probably not as efficient as sql's joins, since sql's joins (like its indexing & filtering) relies on indexes: maps from index attribute to rowids. sql's full system could be implemented in k fairly easily, but it'd be a bit a work. indexes are sql's core, and can be implemented in k by using grading vectors. the only trick to doing the k implementation well is handling modifying all indexes when tables are mutated. you could just re-grade all indexes each time that the number of records changes, or, when a table's records' values are updated (the number of records does not change) then you can re-grade each updated attribute's grading vector. that sounds inefficient. ideally, like balancing trees, we want mutations to force re-evaluation only of small, local index substructure.
 
-TODO: (re)solve the sort/filter problem: if we filter then sort, then we've less to sort, but we can't, in k, do select x from x where thres>f x order by f x, where we compute f x only once, since in k, filtering (<f x) changes its indices. we could have one primitive to which combines sort & filter: it accepts an ordered vector of indices which may feature -1's, which indicate that they should be filtered-out. this is actually not particular to sorting, but to selecting generally. internally this can be implemented as "AND(mask,idxs) under (+1)". also, this design is more apl-like. higher order fns that change length is quite a lisp/haskell design. filtering is a bummer b/c it changes length, which both loses information and changes structure, thus interfering with relations of indices, affecting things like join or sort. sql's select statement is synergistic; join (iterated lookup), filter, sort, limit (slice output), are all coded together, and flexibility is supported by clauses of the grammar being optional or required depending on which prior clauses were used. yet is it less flexible than k/apls? if apls were to adopt this synergistic form, would we sacrifice anything? if so, could ew modify the grammar or devise a synergistic system that has all the flexibility/granularity that we desire? bqn's group operator omits -1's from selection vectors—nice.
+.the filter-sort problem
+
+`select x from x where thres>f x order by f x` where we compute f x only once. in k, filtering (<f x) changes its indices, so we cannot use masks alone to write this query. a primitive which combines sort & filter would be nice. it'd accept an ordered vector of indices which may feature -1's, which indicate that they should be omitted. this is actually not particular to sorting, but to selecting generally. internally this can be implemented as "AND(mask,idxs) under (+1)". also, this design is more apl-like. higher order fns that change length is quite a lisp/haskell design. filtering is a bummer b/c it changes length, which both loses information and changes structure, thus interfering with relations of indices, affecting things like join or sort; however, if we convert a sequence of bits to a set of integers, then changing size does not change the set's structure! this comes at the cost of set lookup not being as fast as parallel traversal of sequences (unless we sort the set and the set of indices to access, and use left inner join, which is not as fast as masks but might be faster than some set intersection algorithms). sql's select statement is synergistic; join (iterated lookup), filter, sort, limit (slice output), are all coded together, and flexibility is supported by clauses of the grammar being optional or required depending on which prior clauses were used. yet is it less flexible than k/apls? if apls were to adopt this synergistic form, would we sacrifice anything? if so, could ew modify the grammar or devise a synergistic system that has all the flexibility/granularity that we desire? bqn's group operator omits -1's from selection vectors—nice.
+
+solution:
+
+[source,k]
+-------------------------------------------------------------------------------
+a:2 1 3 16 7 / x: input
+z:2*a        / f(x): common factor of b & c
+b:<z         / sort by f(x)
+c:z<7        / filter by cmp(f(x),thres)
+a@b^&~c      / select from a where c order by b (technically b set minus not c)
+-------------------------------------------------------------------------------
+
+we must use where (`&:`) and intersect (technically set minus, (`^`), but they're equivalent here b/c `b` is a superset of `c`) (or find (`?`), which is equivalent); we cannot do it by masks alone in k.
 
 my original thought was:
 
@@ -341,7 +363,7 @@ notice how now the grade features now-invalid index 2, but the ordinals, `<<a`, 
 
 an alternative solution (which may be a bit faster) is `{(x@p)@&(6>a)@p:<a:*'x}`. here the common transform `(@p)` is applied to the mask and `x`. then the mask is applied to `x`.
 
-the 1st solution that cameron came-up with is: `{H:x@&t>G:f x;H@<G x?H}`. the curious things is that computing f twice would be O(n) still, but x?H is O(mn) where m<n (b/c H⊂x).
+the 1st solution that cameron came-up with is: `{H:x@&t>G:f x;H@<G x?H}`. the curious things is that computing f twice would be O(n) still, but x?H is O(mn) where m<n (b/c H⊂ x).
 
 for dictionaries: `{(p@&(t>a)@p:<a:f x)#x}`
 
