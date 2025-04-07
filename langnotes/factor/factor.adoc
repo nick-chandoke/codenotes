@@ -243,6 +243,74 @@ notice the nested scopes! i shadow `i`, use `L` & `i` in `g`, and `x` in the lam
 
 another important note about this example: it demonstrates that, like such words as `length-operator`, it's common in factor to modify some items on the stack but leave the stack the same height and of mostly the same form; this style of programming is to take multiple arguments and return multiple, so that they are prepared for certain combinators such as `map`, but now the map traversal is modified. this is unheard of in non-stack languages. instead, what's common in applicative functional languages is a slew of combinators that take specific varieties of arguments (e.g. some take binary functions with or without some extra arguments that affect how the function executes, and there may be ternary variations or whatever other variations), so you have very many functions that are mostly the same, and hopefully one of them is just what you want; god forbid you need even the slightest variation, since then you'd have to define your own function! the stack is much more flexible since words/combinators hardly require the stack to be particularly constrained. building-up or modifying quotations is common practice in factor. very rarely do applicative languages have higher-order functions from functions to functions, and those that do exist are typically very much less flexible than corresponding factor versions.
 
+.practical factorability and reuse of code
+
+using many small words is easy in catlangs because we merely copy/cut & paste. many small words means more granular control over computation. many of these words are inline, so there's no cost to invoking them. consider the following code:
+
+[source,factor]
+-----------------------------------------------------------------
+: timestamp>sec ( t -- ms ) timestamp>millis 1000 / ; inline
+
+: dm>timestamp ( d m -- timestamp )
+  [ julian-day-number>date <date> ] dip
+  60 /mod [ >>hour ] dip >>minute ; inline
+
+: c>t ( c -- timestamp ) [ d>> ] [ m>> ] bi dm>timestamp ; inline
+
+: some-fn ( c -- x ) c>t timestamp>sec "time" 2array 2map ;
+-----------------------------------------------------------------
+
+i defined `c>t` in terms of `dm>timestamp`, and `some-fn` in terms of `timestamp>sec` & `c>t`. true, in factor i must put the stack signature whenever i define a word, but that's little refactoring. to define such granulatiry in an applicative language is cumbersome:
+
+-----------------------------------------------------------------
+fn timestamp>sec(t) int { timestamp>millis(t)/1000 }
+#pragma inline timestamp>sec
+
+fn dm>timestamp(d,m) timestamp {
+  y,m,d=julian-day-number>date(d)
+  <date>()
+  60 /mod [ >>hour ] dip >>minute
+}
+#pragma inline dm>tmiestamp
+
+fn c>t(c) timestamp { [ d>> ] [ m>> ] bi dm>timestamp }
+#pragma inline c>t
+
+fn some-fn(c) x { c>t timestamp>sec "time" 2array 2map }
+-----------------------------------------------------------------
+
+notice that in the applicative version we must explicitly code that `julian-day-number>date` returns 3 data, and we must give those data nonce names just to use them in our computation, and their natural names shadow others in the namespace. the ability to return multiple data also gives us finer granularity over computation; we may retain more aspects of a computation and use them if we like; or, as is here, we may return multiple parts, reducing (un)wrapping; for the code in this example, someone using an applicative language would likely prefer to package the year, month, and date together into a timestamp object just to avoid returning multiple data! then the user of that fn would do
+
+---------
+y=t.year
+m=t.month
+d=t.day
+---------
+
+which is some severe bloat, pollutes the namespace, and is a pain to refactor.
+
+the stack is a very simple structure yet is very apt at describing programs (sequences of one-day data transforms). naming things is a very powerful tool, but is useful only relatively infrequently, and is crufty to use. namely, the one circumstance in which it is elegant and the stack is not, is nested, complex computations: when the computation refers to arbitrary elements of other structures at arbitrary nesting depth. another way to phrase this is "many irregularly overlapping contexts" where "context" means a continuation with a data and/or return stack, and/or namespace. the more irregular relations of data across structures, and the less symmetric your control flow, the better off you'd be to code applicatively i.e. the better off you'd be to refer to data by index, regardless of whether the index is a name or number), and being able to insert short-circuits at arbitrary places may be elegant.
+
+most computation is simple, and regular, so it's nicest to use simple, symmetric models such as a stack (which is like functional programming but simpler & more elegant). however, not all computation is, in which case you'll want less-constrained coding models, such as c, which has most permissive control flow and data manipulation.
+
+btw, what makes applicative code better is none of
+
+. having infix binary operators
+. inlining in-order function args
+
+what makes it better is merely that we store variables individually without regard to other variables i.e. that we use locals instead of on-stack, b/c being on stack means needing to maintain their existence/position in the stack as the stack is modified, whereas if a is bound to a fixed address (again, usually indexed/referred to by a symbol (i.e. a variable name)) then it retains its state unless something explicitly modifies _it_ per se. the advantage is that it exists regardless of context, which expresses itself in two ways: 1. it exists for all scopes; 2. the affairs of other data are independent. what makes this advantageous is that the data are freely available as we last left them.
+
+actually, this has nothing to do with being concatenative vs applicative. concatenativity does not imply referential transparency. thus we may have a purely concatenative program which has words that bind to variables which defines those variables as words which refer to the variables' values e.g.
+
+[source,factor]
+-----------------------------
+4 "i" set
+"i" inc
+"i" get ! puts 5 on the stack
+-----------------------------
+
+is a factor program and is concatenative, and still has all the advantages of concatenative code; only now it is context-sensitive, where the context is the values of the bound variables. this is semantically equivalent to passing these variables as arguments to the function and retaining them on the stack (if using a stack) throughout the computation as necessary.
+
 ''''''''
 
 .cool vocabs
