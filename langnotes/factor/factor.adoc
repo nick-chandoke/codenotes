@@ -7,6 +7,7 @@ notes by nicholas chandoke. currently undergoing significant revision.
 notes' new structure:
 
 . intro to factor: stack, cat, and discussing how factor programs generalize fns, and how purity is no longer applicable, since the code is not applicative.
+  .. i imagine that a common reason that people coming from app.prog. find factor difficult to read is that they're used to trying to hold a whole function or other block of code in their head at once; if they don't see it altogether, then they feel like they're blind. by contrast, cat.prog. is about hardly holding _any_ of the code in mind at a time; the whole point is that you don't need to care at all about anything before or after some small part of the program that you're considering, since they don't affect each other—yk, being _concatenative_ and all. so these app.prog.-minded people start at either the beginning of a word, or at the middle but then work their way backward just to trace the stack effect. that's madness!
 . how to code well in factor: combinators, quotations, currying, stack shuffling (retain [somewhere], discard, or shuffle; e.g. `pick` & `rot` both bring, of `x y z`, `x` to the top, but `pick` copies whereas `rot` moves), factoring, and code structure.
   .. currying is not always the most elegant, since it requires composing, which can be difficult, especially in nondeterministic loops through multiple sequences, namely when you must, inside a quotation passed to `map`, curry the current element then compose that `curried` with another quotation to be passed to an iterator such as `find`, all still inside that quotation passed to `map`. contrastingly, the stack is just the stack as the computation goes on; it's easy to shuffle it at any point in the computation.
   .. to retain something on the stack when a quotation will be called multiple times, then use `curry`, as is common in looping/iteration combinators like `loop`, `each`, `map`.
@@ -239,7 +240,7 @@ f(A,B){
 }
 --------------------------------------------------------------
 
-notice the nested scopes! i shadow `i`, use `L` & `i` in `g`, and `x` in the lambda passed to `findIntegerFrom`! this is why the factor code is so hairy. maybe i should have just written it in applicative style in factor by using locals. then again, the tricky part was just thinking about how best to code such a complex relation. also, this applicative code might not be perfectly accurate; i have no way to test it. seems about right, at least.
+notice the nested scopes! i shadow `i`, use `L` & `i` in `g`, and `x` in the lambda passed to `findIntegerFrom`! this is why the factor code is so hairy. maybe i should have just written it in applicative style in factor by using locals. then again, the tricky part was just thinking about how best to code such a complex relation. also, this applicative translation might not be perfectly accurate; i have no way to test it. seems about right, at least.
 
 another important note about this example: it demonstrates that, like such words as `length-operator`, it's common in factor to modify some items on the stack but leave the stack the same height and of mostly the same form; this style of programming is to take multiple arguments and return multiple, so that they are prepared for certain combinators such as `map`, but now the map traversal is modified. this is unheard of in non-stack languages. instead, what's common in applicative functional languages is a slew of combinators that take specific varieties of arguments (e.g. some take binary functions with or without some extra arguments that affect how the function executes, and there may be ternary variations or whatever other variations), so you have very many functions that are mostly the same, and hopefully one of them is just what you want; god forbid you need even the slightest variation, since then you'd have to define your own function! the stack is much more flexible since words/combinators hardly require the stack to be particularly constrained. building-up or modifying quotations is common practice in factor. very rarely do applicative languages have higher-order functions from functions to functions, and those that do exist are typically very much less flexible than corresponding factor versions.
 
@@ -287,7 +288,7 @@ m=t.month
 d=t.day
 ---------
 
-which is some severe bloat, pollutes the namespace, and is a pain to refactor.
+which is some severe bloat, pollutes the namespace, and is a pain to refactor. by the way, the stack makes default arguments easy: e.g. `<date>` is defined as `0 0 0 0 0 0 gmt-offset <duration> <timestamp>`; the first 3 zeroes represent the timestamp's hours, minutes, seconds; the next 3 are the duration's year, month, and day. `gmt-offset-duration` pushes hour, minute, & second for `<duration>`, which, like `timestamp`, takes 6 args: ymdhms.
 
 the stack is a very simple structure yet is very apt at describing programs (sequences of one-day data transforms). naming things is a very powerful tool, but is useful only relatively infrequently, and is crufty to use. namely, the one circumstance in which it is elegant and the stack is not, is nested, complex computations: when the computation refers to arbitrary elements of other structures at arbitrary nesting depth. another way to phrase this is "many irregularly overlapping contexts" where "context" means a continuation with a data and/or return stack, and/or namespace. the more irregular relations of data across structures, and the less symmetric your control flow, the better off you'd be to code applicatively i.e. the better off you'd be to refer to data by index, regardless of whether the index is a name or number), and being able to insert short-circuits at arbitrary places may be elegant.
 
@@ -310,6 +311,44 @@ actually, this has nothing to do with being concatenative vs applicative. concat
 -----------------------------
 
 is a factor program and is concatenative, and still has all the advantages of concatenative code; only now it is context-sensitive, where the context is the values of the bound variables. this is semantically equivalent to passing these variables as arguments to the function and retaining them on the stack (if using a stack) throughout the computation as necessary.
+
+NOTE: though _locals vs stack_ is unrelated to _concatenative vs applicative_, the stack is a concatenative structure—it supports a `concat` operation—and so it's a natural data structure to use to encode concatenative programs. generally a designer may base an evaluation model on any data structure and exploit its algebraic properties. for example, prolog is based on predicates/sets, which support the product/intersect operation. thus (referentially transparent) prolog programs are commutative intersections of predicates.
+
+it's all just a question of whether/how modifying one thing affects others, and whether you want it to (in that way).
+
+''''''''
+
+=== primitives
+
+`word` & `tuple` are the most general objects in factor. tuples are basically product types (ml-based langs e.g. haskell) or structs (c) or classes (oop langs). words are, as the docs say, "the fundamental unit of code"; a factor program is a sequence of words. the word which executes words, `(execute)`, is a primitve. macros (`MACRO:`) or syntax (`SYNTAX:`) are functions from words to words. words are most commonly functions defined by the `:` syntax, but may also be _symbols_—words which evaluate to themselves, just like symbols in lisp, except that the factor parser requires the programmer to explicitly declare words as symbols via the `SYMBOL:` syntax, rather than there being a literal symbol syntax—or classes, or maybe other things, too. words are not only functions in factor, though; it's just that they may be treated as functions, namely if their `def` attribute is set. run the following in the listener to observe the great amount of information stored in various words:
+
+[source,factor]
+----------------------------------------------------------------------
+USE: generalizations
+: print-word ( word -- )
+  { [ name>>          ] [ vocabulary>> ] [ def>>          ]
+    [ props>>         ] [ pic-def>>    ] [ pic-tail-def>> ]
+    [ sub-primitive>> ]
+  } cleave [ ... ] 7 napply ;
+
+\ fixnum+ print-word ! a primitive
+\ + print-word       ! a generic word
+\ reach              ! a simple, ordinary word
+\ word               ! a class (which implies that it's also a symbol)
+----------------------------------------------------------------------
+
+* if you look at the definiton for symbol, you see `PREDICATE: symbol < word [ def>> ] [ [ ] curry ] bi sequence= ;` which means that `symbol` is the subclass of `word` whose members have an empty definition.
+* classes are defined as `PREDICATE: class < word "class" word-prop ;` i.e. they're a subclass of word with a property called `"class"`.
+
+summary: _words_ are parsed things which may have definitions; if so, then they're functions with optional metadata; else they're symbol literals (with optional metadata). _classes_ are words that support oop. the classes' structures & relations—e.g. hierarchy, ad-hoc polymorphism (aka "interfaces" (java), "purely abstract classes" (c++), "type classes" (haskell)), class attributes—are implicitly handled by words such as `TUPLE:` & `GENERIC:`.
+
+=== oop
+
+see factor docs for:
+
+* `Class linearization`
+* `Class operations`
+* `Generic words and methods`
 
 ''''''''
 
@@ -338,7 +377,6 @@ to check-out:
 * factor.extra.file-to-directory
 * factor.extra.curses
 * factor.extra.did-you-mean
-* factor.extra.env NB. envars
 * factor.extra.geoip
 * factor.extra.geobytes
 * factor.extra.irc.client
@@ -557,7 +595,16 @@ being left-to-right is nice in that we can put comment initiators (`!`) anywhere
 
 .caveats and common errors
 
-* anytime that you use syntax to specify any mutable structure (most commonly vectors, string buffers, and hash tables), always use `clone` afterward! otherwise you risk multiple references to one object across your codebase when you really meant for the objects to be individual!
+anytime that you use syntax to specify any mutable structure (most commonly vectors, string buffers, and hash tables), always use `clone` afterward! otherwise you risk multiple references to one object across your codebase when you really meant for the objects to be individual! for example if you step-through the following code, you'll see that, because i didn't clone the string buffer, when i put a seemingly new one on the stack after pushing, then it's actually putting the same one on the stack:
+
+[source,factor]
+----------------------------------------------------------------
+[[ >12 0 6 ; 12 4 5 ; 2 5 3
+;2 19 8 ; 4 1 0  ; 4 0 1]]
+V{ } clone tuck SBUF" " -rot
+'[ B dup digit? [ suffix! ] [ [ _ push ] bi@ SBUF" " ] if ] each
+----------------------------------------------------------------
+
 * when using packed tuple arrays, you get "matching failed." you should use `{ } map-as` instead of `map`
 * setting a dynamic variable has no effect, or dynamic variable is `f` even though you just set it. check whether you're executing it within a namespace combinator e.g. `with-file-writer` is ultimately defined in terms of `with-variables`, so any setting within its quotation will not affect the namespace outside the quotation! for example, consider `SYMBOL: myVar "~/test.txt" ascii [ 0 myVar set [ myVar get dup even? [ myVar inc ] when ] with-my-db myVar get 5 + . ] with-file-writer` where `with-my-db` is defined as described in `db.tuples` document, _Tuple database tutorial_. execution throws an error: "No suitable arithmetic method. left: f; right: 5; generic: +" `myVar` was set only within the context of the inner namespace—the one of `with-my-db`. within the namespace of `with-file-writer`, it was still unset. more precisely, after ``with-my-db``'s quotation finished, `myVar` was set back to the value that it had had before that quotation was evaluated. indeed, even when we move `0 myVar set` to the outer quotation, "5" is written to the file, not "6", because the increment occurred only within the inner quotation! `myVar` is reset to 0 after that quotation finishes!
 * confounding `map` errors: `map` maps into the same type as the thing being mapped over. if you want to map into an array then use `{ } map-as`. this is especially common if you're trying to map over a string.
@@ -782,6 +829,7 @@ a _continuation_ is a point of execution. for example, in `3 4 5`, the continuat
 * _quotation's stack effect does not match call site_ is an inconsiderable runtime error displayed when a script finishes with a non-empty stack. even `MAIN:` is hard-coded to check against `( -- )`. either put `clear` at the end of your script or make your script have stack effect `( -- )`. this is probably the most idiotic thing i've seen factor do yet.
 * `save` saves the entire program state to a file. this is useful for scripts, since they're usually re-evaluated on each run. of course, for programs that do not need re-evaluation, it's best to use the ui deployment tool (`deploy-tool`) to make native, speedy executables.
 * command line args: `USE: command-line command-line get-global`. *arg0 (program name) is not included!*
+  ** it's a bit easier to get parameters from the environment than from the command line, as long as you know that it won't badly affect any subprocesses. this is convenient for storing default parameters, too. where `SYMBOLS` is a sequence of symbols that you want to set, the code is: `USE: env SYMBOLS [ dup name>> ] env [ at [ swap set ] [ drop ] if* ] curry compose each`. it can be easily modified to set in an assoc rather than setting dynamic variables.
 * envars: `USE: env`; then singleton `env` is an assoc
 
 see factor handbook > the language > vocabulary loader > vocabulary roots. you can get there by searching for `vocab-roots`.
@@ -1019,7 +1067,7 @@ case 1 is more specific than case 2; were case 2 earlier, it would match even if
 
 .tips
 
-* if `seq q map` is used as per usual, then `seq q each` pushes the results of the map to the stack rather than collecting them into a seq. sadly, this is a hack; it works only in the listener, which does not stack check thoroughly; `each` requires its quotation to have effect `... x -- ...`. therefore we must use `with-datastack` e.g. to perform a 4-ary fn `f: ( a b c d -- x )` on data from an assoc: `[ at ] curry { "a" "b" "c" "d" } swap map [ f ] with-datastack first`. you can instead use `firstn` in `sequences.generalizations`.
+* if `seq q map` is used as per usual, then `seq q each` pushes the results of the map to the stack rather than collecting them into a seq. sadly, this is a hack; it works only in the listener, which does not stack check thoroughly; `each` requires its quotation to have effect `( ... x -- ... )`. therefore we must use `with-datastack` e.g. to perform a 4-ary fn `f: ( a b c d -- x )` on data from an assoc: `[ at ] curry { "a" "b" "c" "d" } swap map [ f ] with-datastack first`. you can instead use `firstn` in `sequences.generalizations`.
 
 === good stack words
 
@@ -1092,8 +1140,6 @@ actually, though, this particular example is more elegantly expressed as:
 ----
 : all-eq? ( seq -- ? ) dup unclip-slice suffix = ; inline
 ----
-
-TODO: make a loop combinator that processes whatever `e`, which may conveniently be an input sequence as given by a combinator `seq>loop` of effect `( seq -- e )`, and: 1. if `SYMBOL: stop` is returned then the loop stops; 2. returning `f` will not push the element into the output sequence; 3. other values are pushed into the output seq. `seq>loop` will output `short` if empty. this general filter/map/stop loop pattern is practically universal! it can mutate state arbitrarily, accumulate from any state into a sequence, retaining or discarding elts. i should be able to have the argument function return multiple values, too, thus allowing it to return multiple values, and those can be inserted inline into the output seq. in fact, i should be able to have my accumulator be any structure that supports insertion, e.g. a splay tree.
 
 deep-each example: `{ { { 1 2 { 3 4 } 5 6 } { 7 8 } } } [ . ] deep-each` outputs:
 
@@ -1169,6 +1215,24 @@ SYMBOL: x      ! declare
 4 x set-global ! set
 x get-global   ! access
 ----
+
+it's good practice to define global data structures (precisely, pointer-referenced mutables) as constants rather than use dynamic scoping e.g. don't do
+
+[source,factor]
+------------------------------------
+SYMBOL: myVar
+produce-a-hashtable myVar set-global 
+------------------------------------
+
+because `myVar get-global` defaults to `f`, not an empty hash table; now you have two cases that effectively mean "empty." this is usually bad design. also, you have to use `get-global` often, when you don't need to do if you use constants instead:
+
+[source,factor]
+--------------------------------------
+CONSTANT: myVar H{ }
+myVar produce-a-hashtable assoc-union!
+--------------------------------------
+
+this enforces constant structure, e.g. that always `myVar hashtable?`.
 
 === locals
 
@@ -1628,6 +1692,8 @@ with-logging ! with-logging is needed to actually write to a log
 "myApp" log-path . ! where the log was written
 ----
 
+NOTE: use `path q with-log-root`, not `log-root path q with-variable`; the latter does not work, and the former has a specialized definition to accomodate multithreading.
+
 to disable logging temporarily,...huh, i thought there was some simple built-in functionality for that, such as setting off a dynamic variable. well, you can just replace `with-logging` by `log? get-global [ with-logging ] [ nip call ] if` after you've created the `log?` symbol.
 
 === reading tracebacks
@@ -2061,6 +2127,27 @@ arrays make the following regular, unpredicated maps easy: 1:1 (pointwise relati
 { { 5 1 } { 5 2 } { 5 3 } }
 ----
 
+=== retaining deep nesting
+
+[source,k]
+-------------------
+"cat"@(1 0 2;2 2 (0 0 0 1) 1)
+("act"
+ "tta")
+-------------------
+
+can be done in factor by using the `sequences.deep` vocab:
+
+[source,factor]
+---------------
+{ { 1 0 2 } { 2 2 1 } } "cat"
+'[ dup sequence? [ ] [ _ nth ] if ] deep-map
+---------------
+
+produces `{ { 97 99 116 } { 116 116 97 } }`.
+
+`deep-map` is a bit odd in that it uses `branch?` to decide whether to continue the traversal (namely based on whether it's given a sequence or not), but doesn't include sequences in its output. so the quotation preserves sequences as-is but otherwise indexes into "cat".
+
 === factor/j bilateral translation table
 
 this section firstmost describes array operations in factor, and secondarily compares factor to j's array model and array models generally, discussing the shortcomings of the array model and how to nicely code solutions in factor that array models do not elegantly permit. i'm using j as the array language of comparison because it's the only array language that i've used. in retrospect k would have been a better choice at least for its linked list structure instead of boxed arrays. likely it's comparably fast, has a smaller executable, and less-complex source code. any other array language, such as apl, k, elymas, uiua, is just as fine a substitute for j.
@@ -2165,7 +2252,8 @@ if the particulars above aren't sufficient, then here are some primitives and re
     *** `follow`/`produce` (general loop but accumulate values like a scan)
 * `math` vocab:
   ** `each-integer-from`
-  ** `find-integer-from`
+  ** `find-integer-from` (or `find-last-integer` if starting from the end)
+  ** `all-integers-from?`
 * `sequences.private` vocab:
   ** `sequence-operator`
 
@@ -3246,27 +3334,32 @@ docs are found at the following vocab pages after loading them:
 
 both implement the `template` interface of the `html.templates` vocab. chloe templates support conversion to responses via `<chloe-content>`. this being said, one can simply do `<fhtml> [ call-template* ] with-string-writer <html-content>`
 
-== websocket (client)
+== websockets
+
+TODO: see `handle-discord-websocket` in `programming/factor/extra/discord/discord.factor` for example ws client usage.
 
 websockets are made in the design of unix sockets; they're lightweight, full-duplex realtime communication. once established, the connection remains open and both client & server may send or receive any bytes at any time. the websocket protocol is extremely small & simple.
 
 though websockets are not http, `ws:` & `wss:` use ports 80 & 443 respectively, and link:https://en.wikipedia.org/wiki/WebSocket#Opening_handshake[http is used to establish websocket connections]; the websockt server responds with http code 101 ("switching protocols"). this is why factor's `http.websockets` vocab does not have any words for establishing nor managing connections.
 
-as usual in factor, there are no websockets handles to pass around; a connection is opened which sets `output-stream` & `input-stream`. in fact, the whole websockets vocabulary just `add-websocket-upgrade-headers ( request -- request )`, constants, and words for de/encoding bytes per the websockets protocol.
+as usual in factor, there are no websockets handles to pass around; a connection is opened which sets `output-stream` & `input-stream`. in fact, the whole websockets vocabulary is just `add-websocket-upgrade-headers ( request -- request )`, constants, and words for de/encoding bytes per the websockets protocol.
 
-=== usage
+=== ws client
 
-words on the right are defined in terms of those on the left:
+words on the right are defined in terms of those on the left. words that you should use are in bold:
 
-* `get-read-payload-length` > `read-payload` > `read-websocket` > `read-websocket-loop`
-* `send-websocket-bytes > ``send-websocket-text` > `send-[un]masked-message`
+* `get-read-payload-length` > `read-payload` > *`read-websocket`* > *`read-websocket-loop`*
+* `send-websocket-bytes` > `send-websocket-text` > *`send-masked-message`* & `send-unmasked-message`
 
-so generally you should use only `read-websocket[-loop]`, and inside its quotation, `send-unmasked-message`. `read-websocket-loop` loops until either you say to stop or the ws protocol or connection mandates stopping. in `read-websocket ( -- obj opcode loop? )`, `obj` is the payload.
+btw, the `final?` parameter of `send-websocket-bytes` seems to refer to whether the message is fragmented.
 
-NOTE: according to wikipedia, a client must mask all frames sent to the server, and the server must not mask any of its frames; so suppose that `send-unmasked-message` exists for implementing websocket servers.
+so *it seems that* generally you should use only `read-websocket[-loop]`, and inside its quotation, `send-masked-message`. `read-websocket-loop` loops until either you say to stop or the ws protocol or connection mandates stopping. in `read-websocket ( -- obj opcode loop? )`, `obj` is the payload.
 
-we've yet to turn a url into a context in which the input & output streams are set so that we can actually use these websocket words! enter the common `http.client` vocab, which already has builtin automatic support for websockets! observe:
+NOTE: according to wikipedia, a client must mask all frames sent to the server, and the server must not mask any of its frames; so i suppose that `send-unmasked-message` exists for implementing websocket servers.
 
+we've yet to turn a url into a context in which the input & output streams are set so that we can actually use these websocket words! enter the common `http.client` vocab, which already has builtin, automatic support for websockets! observe:
+
+[source,factor]
 --------------------------------------------------------------
 "wss://delayed.polygon.io/stocks" <get-request> ...
 T{ request
@@ -3319,7 +3412,7 @@ for ws, it executes as follows:
 . convert `BV{ }` into `B{ }`
 . execution halts at `content-encoding>>` b/c duplex streams don't support that.
 
-so clearly `http-request*` is inappropriate for ws, but `do-http-request` is still instrumental. if you carefully observe the definition of `do-http-request`, you'll see that the `( chunk -- )` quotation is not even used in the ws case (to be precise, when `upgrade-to-websocket?` returns `t`)! so naturally for ws we'll use `[ drop ] do-http-request`.
+so clearly `http-request*` is inappropriate for ws, but `do-http-request` is still instrumental. if you carefully observe the definition of `do-http-request`, you'll see that the `( chunk -- )` quotation is not even used in the ws case (to be precise, when `upgrade-to-websocket?` returns `t`), so naturally for ws we'll do `[ drop ] do-http-request` as a dummy quotation that still stack-checks.
 
 it pushes all into a byte vector then converts it into a decoded byte array. this implies that `chunk` is bytes. generally you must assume that chunk is not a fully parsable string, so you must incrementally parse & act on bytes as they come in. if your ws server sends json, then this is fine, since `read-json` blocks until enough input comes in to return a well-formed object.
 
@@ -3327,14 +3420,32 @@ TIP: if you want to read `do-http-request`'s code, then read its source code, no
 
 .example
 [source,factor]
------------------------------------------------
+----------------------------------------------------------
 USING: http.client http.websockets io.streams.duplex ;
-"wss://delayed.polygon.io/stocks" <get-request>
+"wss://my-endpoint.com/or/whatever" <get-request>
 [ drop ] do-http-request ! returns duplex stream
-! first bytes are 65533 (unicode unknown char) then 'I', then the actual message that i want
-[ read-json ! read-websocket
+[ binary decode-input ! (1)
+  binary encode-output
+  read-websocket      ! (2)
+  "idk some stuff" send-masked-message
+  ! (3)
+  [ [ [ . ] bi@ ] with-global ] ! print to stdout, not web socket
+  now 5 minutes time+ [ now <=> +gt+ = ] curry compose
+  read-websocket-loop
+  f t 8 t send-websocket-bytes ! formally close connection
 ] with-stream
------------------------------------------------
+----------------------------------------------------------
+
+. used in `read-response-body`, to, of course, read the http body, which may be arbitrary binary data. in `do-http-request`, the duplex stream is created via `<request-socket>`, which uses `ascii` for both input & output. ascii is just the binary encoding but, if it recieves a byte whose value is greater than 127, then it throws an error and/or replaces the byte with the unicode replacement character, code point 65533, which is ironic, seeing as that's a 2-byte value. by the way, `latin1` is basically the same as `ascii` but its threshold is 255, which is odd considering that that's the max byte value. see their implementations of `decode-char` for details.
+  .. likewise, we need to be able to send binary over websockets.
+. commonly, a websocket server will require authentication or provide metadata which you'll read via `read-websocket` then account for, before beginning the main streaming loop.
+. this simple loop just outputs teh object and opcode to a file and reads from the websocket for no more than 5 minutes.
+
+as it's currently written, `read-websocket-loop` executes the quotation that you pass regardless of whether `read-websocket` returns `t`, though only if it _and_ your quotation return `t` does it continue to loop. i'd've thought that it would execute your quotation only if `read-websocket` returned `t`. this leads to some odd patterns such as you needing to check the opcode even though `read-websocket` has kinda already handled it e.g. i must check whether a payload is of opcode 8 ("close connection") or not, so that i can handle the payload differently. however, because it's opcode 8, i know to not continue the loop, so naturally i'd handle that myself, but `read-websocket` has already guaranteed that the loop will stop here anyway! so the awkwardness is the redundant need for both `read-websocket` and my argument quotation to `read-websocket-loop` to `case` on the opcode. this being said, it's not too bad in practice because `read-websocket` reads all payloads (except maybe for opcode 9, "ping") into a utf8-encoded string, so the argument quotation to `read-websocket-loop` really only needs an `if` clause to check whether it's opcode 8 or not. btw i don't see how `read-websocket` handles closing correctly; i see some `be>`'s in it and `read-payload`, but no `utf8 decode`; the payload is, if present, supposed to be a 2-byte/be reason code, followed by a utf8-encoded string.
+
+== websocket (server)
+
+TODO
 
 == filesystem
 
@@ -3363,9 +3474,12 @@ concatenativity: stack programs—the sequence (composition) of subprograms (wor
 
 from the `math.statistics` module source code:
 
-quantile can be any n-tile. quartile is n = 4, percentile is n = 100
-a,b,c,d parameters, N - number of samples, q is quantile (1/2 for median, 1/4 for 1st quartile)
-<https://mathworld.wolfram.com/Quantile.html>
+[source,factor]
+-----------------------------------------------------------------------------------------------
+! quantile can be any n-tile. quartile is n = 4, percentile is n = 100
+! a,b,c,d parameters, N - number of samples, q is quantile (1/2 for median, 1/4 for 1st quartile)
+! <https://mathworld.wolfram.com/Quantile.html>
+-----------------------------------------------------------------------------------------------
 
 so the various 8 builtin quantile functions (notice that `quantile2` is missing!) all do the same thing, but are different implementations, giving slightly different values due to how they round, interpolate, or resolve real-valued indices. only `quantile1` & `quantile3` always return values from the input distribution.
 
@@ -3867,6 +3981,7 @@ you'll notice that i used neither of the `io.sockets` vocab's `send` nor `receiv
 
 == PRs
 
+* http2 client. link:https://www.rfc-editor.org/rfc/rfc9113.html[http/2] is a version of http that particularly handles what in http/1.1 is keep-alive connections. keep-alive is just plan sensible for rest api calls, especially for frequent calls.
 * make db.tuples' `do-each-tuple` row-polymorphic, thus enabling things like indexing rows
 * when loading a program, list all errors (namely unfound symbol errors) at once, and suggest import locations as the listener does, outputting an import string like when you try _running_ a program. my example is loading `.factor-rc`; i was told many times that a word was "found in the current vocabulary search path."
 * make a word to reload `.factor-rc` without restarting the listener (actually, i think that i encountered this already but forgot what the word is called)
@@ -3915,3 +4030,62 @@ dark-mode listener-window
 ---------------------------
 
 then, in the new window: evaluate `S_ get-global set-datastack`.
+
+=== bugs
+
+=== stack effect checking defects
+
+TODO: merge with cameron's note about bad stack inference
+
+`com-stack-effect` gives `( -- )` for this expression:
+
+[source,factor]
+--------------------------------------------
+[ drop [ drop ] each t ] read-websocket-loop
+--------------------------------------------
+
+however, add a couple objects before it...
+
+[source,factor]
+--------------------------------------------
+f t 6 ! 3 dummy elements
+[ drop [ drop ] each t ] read-websocket-loop
+--------------------------------------------
+
+and we get:
+
+-----------------------------------------------------------------------------------
+The input quotation to 'read-websocket-loop' doesn't match its expected effect
+Input                              Expected                Got
+[ 8 = ~quotation~ ~quotation~ if ] ( obj opcode -- loop? ) ( x x x x x -- x x x x )
+-----------------------------------------------------------------------------------
+
+poking around reveals that the "Got" effect is just the declared/expected `( x x -- x )` except that the in & out both have number of dummy elements extra.
+
+if i replace `[ drop ] each` by `drop` (which have the same stack effect, `( x -- )` then it works:
+
+[source,factor]
+-----------------------------------------
+t t f [ drop drop t ] read-websocket-loop
+-----------------------------------------
+
+in fact, if i take the `each`-y expression but replace `read-websocket-loop` by its definition, then the stack checking is fine:
+
+[source,factor]
+---------------------------------------------------------
+f t 6 ! 3 dummy elements
+[ drop [ drop ] each t ]
+[ [ read-websocket ] ] dip [ dip and ] curry compose loop
+---------------------------------------------------------
+
+correctly is said to have effect `( -- x x x )`. and indeed, if i redefine `read-websocket-loop` to have its most general stack effect, then it works:
+
+[source,factor]
+--------------------------------------------------------------------------------------------
+: rwsl ( ... q: ( ... obj opcode -- ... loop? ) -- ... )
+  [ [ read-websocket ] ] dip [ dip and ] curry compose loop ; inline
+
+f t 6 ! 3 dummy elements [ drop [ drop ] each t ] rwsl ! com-stack-effect gives ( -- x x x )
+--------------------------------------------------------------------------------------------
+
+i think that the lesson here is to always define combinators to have their most general supported stack effects, so that you can use other row-polymorphic combinators inside of them without getting incorrect stack check errors.

@@ -1,14 +1,107 @@
-= index-centric computing
+a general note: expectation of structure is doomed. we see this when people's simple life plans don't work-out, always due to unforseen events or that their plan worked but it wasn't as fulfilling as they'd expected. the same is as true in code as in life: adaptability is paramount. even fault-tolerant systems are just that: fault _tolerant_; they aren't to _avoid_ faults; they're to handle them elegantly and keep operating despite them. _design_ itself is a bad idea! go a step short of design: just the study of items (or subsystems) in systems. know how they work, so that you can use them _when you need them_. it is always a mistake to assume use of something before the very moment that it's found to be necessary.
+
+sets/predicates are essential for refactorability; for example, changing `push` to `push-all`, or needing to use an array where there was a singleton before, or needing to change array dimensions, all suck, if you're simply adding extra elements that can be in a set! k is actually pretty nearly there already, btw. also btw, the system can simply check for e.g. conditions that were on an atom but are now on a set; the system will spot atomic predicates on on sets, and inform the programmer that they must choose a subset to satisfy the predicate e.g. any (1), all (n), or all or any of some subset. note that "any" and "all" are distinct and complementary; any means "next()" and all means "next() until exhaustion".
+
+== lessons from other languages
+
+* picolisp demonstrates that linked lists can often be used efficiently b/c they're either short and so O(n)≈O(1) for small n, or are being traversed in order anyway
+* factor, sql, & prolog demonstrate that data can be neatly stored in one scope: the stack, tables or relations
+  ** apls do not domenstrate this; their lack of being able to nest scopes is often inelegant
+* sql demonstrates that indexed data can be both simultaneously efficiently & simply traversed by using some few declarative relational primitives, and that custom traversals usually don't need to be specified
+* sql & prolog demonstrate that one variable can elegantly refer to a set. apls aren't so elegant, since they impose restrictions on variables' shapes.
+* factor demonstrates that a mix of stack combinators & shuffle words and locals elegantly expresses relations among (few data or relations thereof)
+
+= index[ed set]-centric computing
 
 one troublesome aspect of apls is shape. all arrays have shape, and must conform to particular shapes for use in operations. sure, it's easy to create a new array of equal shape to another and populate it with a default value then start applying operations to it, but: 1. this is crufty and annoying to do often; 2. arrays cannot be infinite; 3. perhaps not in this case, but in some cases, as the shape changes, so must your code. were we only to specify relations, then the shapes would be implied, rather than us explicitly dealing with them. what's more, if our code is all relations/constraints anyway, then it's natural to specify some optimization constraints (e.g. x∈[0,1]) inline amongst the rest. the system would use such constraints to know the tersest encoding scheme that it can safely use. e.g. `(x<200,#x<16)` would satisfy `ceil(log2(max(x)))*#x<=128` allow it to use an avx (or w/e other vector) register.
 
-the "computational properties" system would be used for sigfig-centric arithmetic, too. reals can be stored as literals (e.g "π" which is considered like in a CAS), or fixed-point, or rationals whose num & denom are of given sizes in bits. i recommend fixed-point sigfigs b/c they are easy & apparent, and make sigfigs easy. you'd store a number and its number of sigfigs (up to 8 for efficiency).
+the "computational properties" system would be used for sigfig-centric arithmetic, too. reals can be stored as literals (e.g "π" which is considered like in a CAS), or fixed-point, or rationals whose num & denom are of given sizes in bits. i recommend fixed-point sigfigs b/c they are easy & apparent, and make sigfigs easy. you'd store a number and its number of sigfigs (up to 8 for efficiency). sigfigs would be appropriate for e.g. storing stock prices (for trading, rather than record-keeping, reasons); we don't care to store more than 4, sig figs; we don't care about any amount less than 10 cents once we're dealing with prices of $10 or more, since that's at most a negligible 1% difference. this "up to 1% error" is a proprety of 4 sigfigs, and so applies regardless of the value; it applies for $20k just as much as $1. furthermore, it permits the same binary encoding for all values: say a signed nibble for the decimal place (accomodates up to 10^±7^), and 14 bits for the 4 decimal digits. sadly, in this case, 18 bits is just shy of byte-alignment, but oh well. at least the encoding remains the same for all values of 4 sigfigs.
 
 some common reasons i've heard for why c is faster than other langs are manual memory management instead of garbage collection, or that there's no language runtime, or that it uses machine code instead of bytecode. these are all true, but they should be framed commonly: that the language forces few things between the machine and the programmer. c code makes it easy to have total control over the _computation_. most people only talk about _programs_—instruction sequences or relations that reduce to them—not the actual physical computations that occur. in c the fact of allocating memory is explicit in the code, and is thus just another instruction that the programmer specifies. this forces the programmer to be more considerate of where & how the data are stored, manipulated, & accessed, and naturally also gives the programmer control over all these aspects. giving the programmer this ability means giving responsibility & control, and thus power.
 
 rather than nested iterators, i want to iterate once over the cartesian product of indices, except generally not the full cartesian product; i may choose during the iteration to not try any further multidimensional indices matching a given predicate. this is the same as the prolog thing of having iteration naturally continue so long as next() returns non-NULL. this system should, when used for such a simple scheme, require no more computation than a loop in assembly: next() would plainly be, in x86, the duple ([cmp ecx len; jlt], inc ecx). we don't need an else; if a predicate fails, then of course we'll try other predicates, if any are left. and any predicate may modify the set of remaining predicates; this design is like a mix of a `for` loop and a `while` loop, but of course is generally represented by `if` & conditional jump. another concern is managing which data must be preserved vs may be overwritten/repurposed throughout computations. again, like in <align-seqs>, to be clear, this is for control flow only, unlike prolog which has a global fact db. my technique works in any language (incl. asm) and is for variably local control flow. it may be global, but there are no special affordances for that. this is meant to be as inline as a loop block.
 
+TIP: multidimensional rectangular arrays' index sets are given by cartesian products i.e. mixed radix numbers e.g. a 3×5×7 is {(i,j,k)|i∈[0,3),j∈[0,5),k∈[0,7)} i.e. i∈[0,<largest 3-digit base-3,5,7 number>).
+
+TIP: the "in" predicate is really intersection. rather than returning a boolean, it should return the input if found. really, then, this is `find`, or more generally, `find-integer-from`, since `a b q find-integer-from` is `find` (which is the same as intersection which is the same as inclusion after lifting the element into a singleton set) but on an interval i.e. after intersecting some set or slice with another slice `[a,b)`.
+
+specifying iteration as anything other than "next step" is a great design flaw. common examples are `for` loops, or especially iterative combinators without early exit, such as `reduce`, or words commonly implemented in terms thereof: `map` or `filter`. this immediately leads to antipatterns such as expressing "first non-negative" as `[ 0 >= ] filter first` which is inefficient. of course now you, the reader, say, "obviously they should use `find`!" but `find` is just a common combinator that happens to exist and fit this common, simple situation well. what if i want to search over two lists and perform `find`? a factor user might suggest `2 nfind`, but that still trims the input lists to be equal length. and what if i don't want pointwise traversal? what if my search space is irregular or modifies itself as it's iterated over? the variety of traversals is obviously so great that it cannot be represented elegantly by combination of any finite set of iterative combinators! what makes `next()` different is that _it is exactly iteration itself_. indeed, this reveals iteration to be no different from computation, just as a program is a sequence of instructions that execute, or a traversal is a search over some space. most generally it may be parallelized, thus being not a mere sequence, but generally a directed acyclic graph. the acyclic part is ironic, since one could earily argue that computations ubiquitously have cycles which we call "loops" but any cycle can be "unrolled" into a non-cycle, except infinite loops, which purposefully exist only in daemons. loops are noteworthy for their symmetry, but this thought is always observed when one imagines a simple loop, such as a `for` loop or even a `while`, but never does not imagine some various nested loops with complex state manipulation across the loops. at such point of complexity, one starts to call it "control flow" instead of "loops." so if "loops" are just some naive simplified representation of computation, then let's forget it and focus on the general problem, "control flow." it seems that hardly anyone has tried to actually identify the intrensic trouble in most elegantly expressing complex control flow, and have instead resorted to arbitrary pretty models such as functional programming and iterative combinators, or array programming, which are just as pretty as they are incapable of expressing complex control flow; they express it at the cost of being syntactically long, computationally redundant, and awkward—awkward because doing so requires you to identify the symmetries and asymmetries rather explicitly (the symmetries being expressed by loop combinators) but when the asymmetries are many, and are complex, then one feels dissatisfied by the loop combinators not living up to their promise of making the code look elegant. to be clear, loop combinators, like `map`, are good for expressing common, simple control flows that they are designed for, so they themselves are not bad, but rather they are insufficient to elegantly express arbitrary control flow, and a model that does so elegantly express obviates the need for such combinators. while it's good to know your code and the problem that it solves—and identifying a/symmetries is a part of that—there is no need to partition into a|symmetries; better is to specify a set of facts and let the traversal be ever implicit, like in prolog.
+
+NB. false/empty values are represent by a `next()` which returns immediately. if it will be considered algebraically, then it has obvious properties & algebraic values.
+
 the actual source code should read like english, and wrt symmetries, with w/o using the word "per" b/c ALL RELATIONS MUST BE IMPLICIT. especially, there are often multiple ways to express relations e.g. x per y or y per x being equivalent b/c it's just a cartesian product either way. e.g. "n-clumps of sessions, times of candles whose v or n accumulated since the session's start exceeds the prior 3 session's total v or n respectively."
+
+case studies for implicit iteration:
+
+* inner or outer join
+* asymmetric relations, especially those that change during iteration
+* combinations or permutations
+* matching the elegance of `: converge ( ... x q: ( ... x -- ... y ) -- ... y ) [ keep dupd = not ] curry loop ; inline`
+* enable a hashtable to retain insertion order. this is a stupidly simple operation: add an extra integer field, and modify insert to insert size() (evaluated before adding the key) along with the key. in black-box programming, this would need to be done by adding structure [read: "relation"] around an underlying hashtable that relates the underlying elements to this seq of integers. with white-box programming, there are no scopes, and...well, no black boxes! rather than subroutines, which are sequences of instructions, we use predicates, which are inherently non-hierarchical (though ofc they incidentally permit hierarchies by various traversals) and rather than support concatenation, support union, intersection, subtraction, etc. the problem is how to conveniently retain only certain relations through refactoring. catlangs make this trivial, and stack langs have good data sharing via the global state: the stack. (i suppose that stack langs w/row polymorphic word effects are arguably "gray-box", then.)
+* if n elts of a relation are have a particular attr be nil, then print those items, then prompt the user to enter a list of values; validate that there n values and that all are valid, then set each of the ith attr to the ith user-provided input.
+* parsers, which are the sensible, powerful stateful combination of find & replace or otherwise just any general computation on sequences. primitives are slice, find substr, and concat. snip is defined in terms of slice. insertion at idx n is defined as snip[i:i] then 3append; this obviously generalizes to replacement: snip[i:j] then 3append. removal, like insert, changes length; therefore, as replacement, it's defined as "replace snip[i:j] by the empty seq". is defined this same, and so can be naturally expressed as "replacing. there should be 2 separate functions, insert and replace, where the former changes the length and the latter does not. substr considerations generalize to subseqs, which generalize to permutations which generalize to indices some of which may appear multiple times.
+  ** anything that changes seq length is just as well done for many elements as for one. only replacement does not change length, and should be done via the primitive `set-nth`, which is either done in a `for` loop or not.
+  ** subseq operations commonly do such stateful things as generalizing "replace first occurrence" to "replace all", which is just "replace first" but done iteratively until exhaustion, where each iteration has a state: the index whence to start searching.
+  ** i still really like the "append under rotate" idiom, though this probably isn't appropriate for the model that i'll use
+  ** it should be just as easy to replace the nth occurrence by the nth element of some other sequence.
+* deep nesting e.g. `(activity-spike)` below
+
+[source,factor]
+----------------------------------------------------------------------------------------------------
+: (activity-spike) ( cs -- masks f )
+  [ d>> ] group-by
+  [ second-unsafe [ s>> ] group-by ] map ! V{ V{ { AM V{ c ... } } ... } }
+  [ 4 <iota>
+    [ tuck of [ [ [ v>> ] map-sum ] [ [ n>> ] map-sum ] bi 2array 2array ] [ f 2array ] if*
+    ] cartesian-map ! V{ V{ { AM V{ ?{ Σv Σn } } } ... } }. ? here means "or f"
+  ] keep 3 [ <clumps> ] [ tail-slice ] bi-curry bi* ! 2map over days[i-k:i-1] & days[i] for k-slices
+  ! q passed to map over sessions: ( session# clump current-day -- ? )
+  [ [ overd at
+      [ spin [ of ] curry map
+        dup [ empty? ] any? ! is this session in all of the clump's days or not?
+        [ 2drop f ]
+        [ unzip [ mean 3/2 * ] bi@ [ swapd [ > ] 2bi@ or ] 2curry
+          [ [ v>> ] [ n>> ] bi swapd [ + ] 2bi@ 2dup ] prepose [ 0 0 ] 2dip find 3nip
+        ] if
+      ] [ 2drop f ] if*
+    ] 2curry 4 <iota> swap map
+  ] 2map V{ } concat-as sift! [ c>t ] map! f ;
+----------------------------------------------------------------------------------------------------
+
+* replace all numbers in a string by a unary fn of each. solution in factor:
+
+[source,factor]
+-----------------------------------------------------------------------------
+USING: unicode math.parser ;
+: decrement-numbers ( s -- s' )
+  SBUF" " clone tuck SBUF" " clone -rot
+  '[ dup digit?
+     [ suffix! ]
+     [ [ [ f ] [ string>number -1 + >dec ] if-empty _ [ push-all ] keep ] dip
+       swap push SBUF" " clone ] if ] each
+  append! >string ;
+-----------------------------------------------------------------------------
+
+* empty sbuf occurs only once, so having empty checking in a loop is not ideal
+* creating a new string buffer is dump; the current should be retained & cleared. this would be easy to code in applicatively.
+
+applicative version:
+
+[source,factor]
+---------------------------------------------------------------------------
+USING: unicode math.parser ;
+: decrement-numbers ( s -- s' )
+  [let SBUF" " dup [ clone ] bi@ :> ( acc b )
+    [| x | x digit?
+      [ x b push ]
+      [ b [ string>number -1 + >dec acc push-all 0 b shorten ] unless-empty
+        x acc push ] if ] each
+  acc b append! >string ]
+---------------------------------------------------------------------------
+
+notice that the applicative version is, surprisingly to me, actually not terser! it's less symmetric, too! i'm able to apply effects (io) more selectively, which means that my conditional branches differ more than in the stackier version wherein i push `f` then `push-all`. the terseness and refactorability of stacky code is not only due to being tacit, but also due to being more symmetric! this "forced symmetry" is basically to keep all branches the same length (measurable by stack height, or, in functional langs, taking a fixed-arity fn param) or otherwise, more generally, require equality of some attribute(s) across multiple choices of data (where the data may be executable, quoted programs or branches (`if` in factor accepts two quoted program args, but `if` in haskell accepts two clauses of inline source code)). *in other words, it is to pad all choices to be the largest of their shapes.* this is how "spaghetti code" is avoided. of course, usually the padding element is the empty element e.g. returning `false`, `0`, `""`, etc in a functional language, or in a stack lang, pushing `f` to the stack as a dummy return value, as seen in e.g. factor's `find`, which returns either `idx elt` or `f f`. the aforementioned "choice padding" (or "alignment" is an appropriate term) is clearly seen as the presence of redundant information—here namely that `idx` nand `elt` <=> `idx` nor `elt` . expressing all branches by the same shape obviously makes factoring easy. sometimes this seems to be an inconvenience that we'd rather do without, e.g. factor's `loop` requiring its arg quot to preserve stack height. one might say that `loop` is inadequate at expressing what a recursive function can, where the recursive fn can return more outputs than it takes inputs, but simply return them only in base cases, and in the recursive branches not even return them; we'd either implicitly discard or preserve them by their inclusion in the recursive call. it is easier to do that, but we should appreciate that `loop` bluntly reveals such asymmetries. we may think of `loop` as a tiling of rectangles, and more general recursive functions as tesselations of less-regular shapes.
+
+also, when writing in applicative style, it's easy to forget to account for certain data, whereas usually in stack code if you forget to account for data, then it's just still sitting on the stack, yet to be consumed, which appears as a stack checker error; thus stack code is more suggestive in development. the lack of constraint among of local variables is freeing, but completely not suggestive. the lack of constraint means that any code runs, so the errors found in debugging applicative code will be much more frequently run-time errors than compile-time.
 
 characteristics:
 
@@ -67,12 +160,12 @@ if empty, returns the exact same input seq
 this code is actually pretty simple, but this syntax is visually unapparent;
 were it represented graphically like in quartz composer, its definition would be clear.
 in k this is simply {&~=':f x}, which reads 100% literally: "(indices) where f(x) changes."
+
 * k's primitives are natural, so i don't need to add 0 nor (#x)-1; and i don't need to account for x being empty, because i don't have to break x into first & rest, because ': handles that already. this compounds b/c i must apply q to both first and rest.
 * i also have to implement where and each-pair myself, though this is done very implicitly by my simple use of each-index and using the stack, and storing the current f(x) as the new prior. then i must drop it afterward.
+
 tl;dr: not natural primitives, and compounding complexity in explicitly coding it as a single traversal, instead of composing ideas then having the single traversal be computed of them.
-granted, i could just do the omst literal translation of k into factor:
-[ map [ = not ] 2 clump-map [ 1 + and ] map-index sift 0 prefix ] curry [ length 1 - ] bi suffix
-but this isn't as efficient. granted, perhaps k actually doesn't do nearly as much optimizing as i'd think, in which case it's just briefer factor with better primitives, and no row-polymorphic stack ops. granted, this is factor, not forth, and i'm running on x86, not a 320MHz risc-v Soc evalution cpu w/16kb data sram, so such optimization is a waste, despite being a good theoretical exercise to develop an ideal stack language. still, said language would be declarative and all would be defined in terms of relations. that solution would be...well, firstly we note that it's necessarily a computation of a sequence rather than a set i.e. indices are implicit in the sequence order. next we consider predicates, starting with what we want: 0,{i|f(x[i])<>f(i[i-1])},#x-1. using i-1 as an index for x implies the domain of i: [1..#x). in this ideal language, we are done. however, unless we somehow cleverly memoize, this computes f 2n-1 times. see the two examples below. the system would need to use induction to infer that it can compute f only n times and store only the prior f(x). how would this generalize to storing multiple data? well, actually it'd be easier, though perhaps more limited, to just have a rule for clumps; obviously per-element computations need to be computed only once per element, so for n-clumps, use a ring buffer for the prior n-1 elts then apply f(x) to the nth elt.
+granted, i could just do the most literal translation of k into factor—`[ map [ = not ] 2 clump-map [ 1 + and ] map-index sift 0 prefix ] curry [ length 1 - ] bi suffix`—but this isn't as efficient. granted, perhaps k actually doesn't do nearly as much optimizing as i'd think, in which case it's just briefer factor with better primitives, and no row-polymorphic stack ops. granted, this is factor, not forth, and i'm running on x86, not a 320MHz risc-v Soc evalution cpu w/16kb data sram, so such optimization is a waste, despite being a good theoretical exercise to develop an ideal stack language. still, said language would be declarative and all would be defined in terms of relations. that solution would be...well, firstly we note that it's necessarily a computation of a sequence rather than a set i.e. indices are implicit in the sequence order. next we consider predicates, starting with what we want: 0,{i|f(x[i])<>f(i[i-1])},#x-1. using i-1 as an index for x implies the domain of i: [1..#x). in this ideal language, we are done. however, unless we somehow cleverly memoize, this computes f 2n-1 times. see the two examples below. the system would need to use induction to infer that it can compute f only n times and store only the prior f(x). how would this generalize to storing multiple data? well, actually it'd be easier, though perhaps more limited, to just have a rule for clumps; obviously per-element computations need to be computed only once per element, so for n-clumps, use a ring buffer for the prior n-1 elts then apply f(x) to the nth elt.
 
 : changes ( seq init-vec-len q: ( elt -- prop ) -- idxs )
   pick empty?
@@ -116,3 +209,64 @@ it's the same definition except that there's a `map` after `dupd`, and there's n
 that one stock problem: "given a seq [(time,val1,val2)], partition into days, then partition each day into hours, then, for each hour, find the first time, if any, that that hour's cumulative val1 or val2 was at least 3 times the average val1 or val2 of the 3 prior days."
 
 * that i must be particular about which array i pass to `find` (as opposed to which arrays i curry into some traversals within find's quotation) is a total pain. i must do it b/c find returns an object from the array that it traverses over.
+
+== stack stuff
+
+stack programs' execution is beautifully simple, which makes debugging very simple, nice, easy. granted, having watches on registers is just as clear as watching the stack. the system would know which registers it's tracking, much like how any system would be able to show all the variables per (nested) scope and their values. why they don't do that—why one must _add_ watches on variables—i don't know, but it's a bit of a pain to have to do so.
+
+if i do stack stuff, ofc it doesn't actually need to use a stack. it can be a virtual stack; all that makes a stack is...well, actually nothing! stack langs aren't stacks! they're just tacit buffers! i mean, it's stack-like that evalutation occurs from the top, but we can `ndip`, which is to evaluate _not_ on the top. the stack is merely ordered, in-scope data. shuffle words merely permute the stack. we can easily have a virtual stack of max 8 elements that uses 8 general-purpose registers. i don't even need a return register if i use the shuffle definitions given by allisio in mlatu below. one central design that i won't compromise on even 1mm ever: everything is virtual & algebraic, never literal—so nothing like `compose` not actually composing but instead wrapping data together into a tuple whose class method for `call` just calls one item then the next.
+
+=== mlatu
+
+it's a term rewriting system. i think that sucks because "term" isn't "number"; it's not specific enough. however, it does invite some questions for me to answer:
+
+. which operations are not of numbers? are there any? i must consider this to enable the language to account for even non-numeric values. consider that apls are entirely sequences of numbers/codepoints. this obviously means that anything else is not needed _in apl_, but we know that apl does not handle io or perhaps other special resources.
+. my system is algebraic. for numbers, the algebra is understood. but what algebras can i use for arbitrary values? term rewriting systems exactly deal with arbitrary values (symbols i.e. terms), so i should consider such a calculus, provided that i may need to account for non-numbers.
+  .. while considering algebras, ensure that you don't get distracted by them; remember that all is seqs or maps. everything else is just unnecessary semantics there-atop which may represent a real idea, but which may be expressed more exactly/plainly directly by the actual underlying info i.e. seqs/sets. all crufty semantics are just concepts (basically notations) to represent relations (of particular subsets.) remember that a common synonym for "relate" is "group" (though relation is usually meant to totally preserve structure, whereas grouping not always is), and relations are expanded (e.g. (a,[b,c]) expands to [(a,b),(a,c)], or are duplicated, or are removed (such as in filter, which is just group/partition but discards (at least) one of the subsets). many languages make the mistake of structuring data as distinct objects; this has the consequence of being treated specially, which means that for each unique type, one must define words that work with that type. ofc that'd be too limiting, so type structures such as ad-hoc polymorphism are created so that certain operations can work for multiple types. other "semantic" structures are created to cope with the limitation imposed by distinct types. the natural solution is to use the only necessary type—relation (which may have an attribute whose order is used for sequencing, or may not be present in which case the relation (n attrs) generalizes an assoc (2 attrs), which generalizes a set (1 attr))—in which case one expresses relations merely by index (which may be any symbol including a lexiographic name or number). aside from relation are actual computations—namely arithmetic—which can be expressed as relations, too. rather than creating data structures, we have _relation templates_: notations that express relations e.g. "pointwise" which could be used to define e.g. a dot product. there's no reason to create a vector class then define an insteance method called "dot". and as anyone who's used sql knows, pointwise is join on equality, which is an efficient operation if the join expression is an indexed value.
+. which calculi work for distributed or multithreaded systems? it'd be nice to have the language naturally work for such systems, too. referential transparency might be considerable here. for example, if my language is not only concatenative, then what other evaluation strategies does it permit? referentially transparent concatenative programs may be broken at arbitrary points, each computed in parallel, then their results stuck together into a new concatenative program, which may then be evalutated (although this is probably not quite true and probably has many caveats).
+. term rewriting is obviously reductionist. most langs are. even prolog is implemented ultimately by assembly, which is...reductionist, right? so perhaps the "logical vs reductionist" dichotomy that i supposed is actually nonsense, and that "computing" is a better lens. we have data in registers and on the stack and in memory or whatever, and we do stuff with it, and that stuff either replaces the data or keeps it, and then our programs are just traversals, and efficient traversals are chosen for given circumstances. there's nothing more to say. these are the basic, unavoidable facts of the computers that i'm writing for.
+
+of course, all these questions will foremost regard the architecture, which i'll assume to primarily be risc-v, though it'd be little effort to make it work on x86, arm, or any risc or cisc.
+
+mlatu has 6 primitives:
+
+[options="header"]
+|====================
+| mlatu | factor
+| `+`   | `dup`
+| `-`   | `drop`
+| `>`   | `[ ] curry`
+| `~`   | `swap`
+| `<`   | `call`
+| `,`   | `compose`
+|====================
+
+ofc many convenient shuffle words may be defined in terms of these, though i'm unsure yet how universal this primitve set is. certainly keep & dip are important primitives, which leverage a return stack, which mlatu seems to lack. this is likely a worthless consideration since mlatu is made to be referentially transparent and a term rewriting system, which sounds more like a theoretical thing rather than something practical and efficient, tailored for computers.
+
+.common words defined in mlatu, given by allisio
+[source,mlatu]
+----------------------------------------------------------------------
+nip: swap drop ;
+2nip: nip nip ;
+dip: swap quote compose call ;
+2dip: swap `dip dip
+swapd: `swap dip ;
+over: swap dup swapd ;
+2dup: over over ;
+curry: `quote dip compose ;
+2quote: quote curry ;
+rot: 2quote swap `call dip ;
+rotd: `rot dip ;
+roll: rotd swap ;
+pick: 2quote over `call dip ;
+reach: `pick dip swap ;
+uncurry: dup () `call dip uncurry' ; // same as uncons
+uncurry': 2dup curry reach over = (drop `nip dip) (2nip uncurry') if ;
+conj: quote compose ;
+map: () map' ;
+map': pick () = `2nip (`uncurry 2dip roll pick call conj map')
+----------------------------------------------------------------------
+
+== TODO
+
+* how to minimalistically express `p q ?` in computations without redundant computation. e.g. in a loop i don't want to check a condition that doesn't vary with the loop; i prefer to, before the loop, conditionally determine, at runtime, a loop quotation.

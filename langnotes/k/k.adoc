@@ -1816,6 +1816,16 @@ replace `x` by `y` where `p(x)`:: `x+y*px`
 choice:: `choices@f[x]` e.g. `("sell";"buy";stay)@sgn` where `sgn:((x>0)-x<0}`
 boolean choice:: `:[0=y;x;y]` is better expressed as `y+x*0=y`. read `*` as "coproduct" (AND/intersection) and `+` as coproduct (OR/union)
 
+this works only if `x` is a mask. for the general case, you'd need amend e.g.
+
+[source,k]
+----------------------------------------
+{@[x;&~^"aeiou"?x;:;"*"]}"serindipitous"
+"s*r*nd*p*t**s"
+----------------------------------------
+
+amend could be implemented as a vector operation if it would accept a mask instead of a list of integer indices. as it is, `@[x;&f x;g;y]` can be expressed as `((g[x;y])*~m)+x*m:f x`.
+
 using (multi)linear algebra to express computations is very good when applicable.
 
 one of apls' greatest properties is that they rely greatly on arithmetic to determine selection vectors, rather than relying on higher-order functions & predicates, which are inefficient, inflexible, and must be defined. no one will ever design any system as perfect as arithmetic. when programs/logic are encoded as matrices, then _programs_ are enabled all their power: empty elements, broadcasting, boolean algebra / set union, negation, intersection.
@@ -1835,23 +1845,24 @@ don't be too hasty to use `&:`:
 ( 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1
   0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1)
 
-/ sequence A & B, preferring B when both occur
+/ "A or B" generalized to "which of A or B, given that B implies A"
 A|2*B
 0 0 0 1 0 2 0 1 0 0 0 2 0 0 0 1 0 2 0 1 0 0 0 2
 
-/ sequence A & B with full information retention,
-/ in a way that generally works for any number of
-/ sequences. good for serializing.
+/ "which all of {A,B}". works for any number of sequences
+/ good for serializing
 A(2/,)'B
 0 0 0 2 0 1 0 2 0 0 0 3 0 0 0 2 0 1 0 2 0 0 0 3
 
-/ decode back to input seqs
+/ separate back to input seqs
 2\0 0 0 2 0 1 0 2 0 0 0 3 0 0 0 2 0 1 0 2 0 0 0 3
 (0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1 0 0 0 1
  0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1)
 ----------
 
-of course this is obviously much easier than trying to sequence (3 7 11 15 19 23) & (5 11 17 23), especially while retaining which of the indices are of A vs B.
+masks elegantly represent index sets. they enable one to do much more than mere set intersection. they're more efficient, too; the expression for ordered-ascending intersection is `{?{x@<x}x^x^y}` for integers, but merely `&/(&/#'(A;B))#'(A;B)` for masks, which is actually really sucky, but only because we have to trim both sequences to their min length, which should be a primitive in k. namely the primitive should combine vectors in a way that makes their result rectangular by either trimming or padding with a given element.
+
+TIP: `{@[(1+|/x)#0;x;:;1]}` converts a set of integer indices into a mask.
 
 ===== shapes & encodings
 
