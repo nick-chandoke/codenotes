@@ -1,50 +1,14 @@
-== read this summary before reading any other notes
+== it's code notes!
 
-progress has moved quickly, and how splendidly so, yet so notes are mixes of outdated and recent wisdom, and have greatly redundant content; reading through them all is imprudent. instead, here's a summary so that you know what's important; after reading that you may glance through some notes.
+and can you believe it! wow! so they are notes: unprofessional, only somewhat organized, often judgemental, and probably unfairly so sometimes. i might get ahead of myself sometimes, and certainly many of the notes are "ranty". not a tutorial, nor a book. i put them here in hopes that you'll find good information here. i will eventually, and i would were all of my needs satisfied, make them into a polished, computable book, and create a repository for a computing device that makes coding ideal. i also want to write a "tour of programming" document discussing where i began as a programmer and all that i've learned and considered. it'll basically be discussing why each programming paradigm fails and why only a natural, messy "paradigm" works ideally, much akin to discussing why we need fractals or a new mathematics to discuss turbulence, as euclidean concepts are only approximations, naïve simplicities that are as easy as they are incapable.
 
-=== summary of leading wisdom (as of oct 31 2022)
+NOTE: `just-use-lists.adoc` is deprecated. it was to favor sexps over structs, which is correct, but inferior to relations/predicates, which are necessarily the least constrained structure.
 
-.topics
+[TODO]
+* stateful servers, not "alloc-do-free" aka _reductionist_, or link:https://www.youtube.com/watch?v=8Ab3ArE8W3s["dead"] programs. they should be modifiable & debuggable as they run, never crashing, but halting then returning execution to an earlier point. being a server naturally generalizes to the erlang model. using predicates (like prolog) makes this easy. prolog progarms are queryable db's. "reductionist" programs are defined by a structure to traverse (ast or stack) *and* the traversal is predefined. ast langs are depth-first traversals of structures rooted (for the stack, _rooting_ means that the stack has a fixed initial state, namely empty) at main, after any top-level statements (e.g. definitions of constants or functions) have been processed.
+  ** *in a reductionist model, unbound variables assume the empty value (usually denoted `f` or `nil`, supposed to correspond to ∅ or ⊥), whereas in the logical model, they assume the set of everything.*
 
-* reductionism vs universalism [done]
-* encodings [done]
-* languages as traversals over structure [wip]
-* the nonsense & truth of metaprogrammability [stub?]
-* stateful servers, not "alloc-do-free" (reductionist) programs [stub?]
-  ** related: programs should be modifiable & debuggable as they run, never crashing, but halting then returning execution to an earlier point. being a server naturally generalizes to the erlang model.
-* virtualization
-
-.wisdom one-liners
-
-* avoid constraints that aren't directly implied by the target program spec
-  ** avoid names unless used to identify singleton objects. 
-  ** use sets instead of sequences unless data's order is useful information. sequences relate elements by proximity or by some function of index & value.
-  ** stack is preferable over applicative, but relational or logical is preferable over stack. relational is a set whereas stack is a sequence, so stack is more constrained. applicative is more constrained than stack b/c it distinguishes between inputs & outputs e.g. `/mod + *` in an app/funclang is horrible. also the stack model is tacit, eschewing arbitrary symbols.
-* avoid _explicit_ recursion. don't nest structure, though recursive notation as syntactic sugar is fine.
-* don't scope ever, for the love of god don't do it. please.
-
-`just-use-lists.adoc` is deprecated. it was to favor sexps over structs, which is correct, but inferior to relations, which are less constrained than lists. if extra constraint is desired, then programmer-specified predicates should _imply_ it rather than the programmer try to calculate & specify the structure themselves.
-
-==== reductionism vs universalism
-
-_expounded in `declarative-stack-func-models.adoc`._
-
-i'm studying 3 models in two categories:
-
-* reductionist
-  ** applicative
-  ** stack
-  ** declarative (not necessarily)
-* implicative
-  ** logical (a superset of declarative)
-
-.definitions
-
-_reductionist_ means that a program reduces input to output. declarative programs are constraint solvers; they don't partition data into inputs & outputs. these programs are collections of predicates [facts]. effectively whatever is constrained to a datum literal is an input, and the output is the least-constrained solution space that meets the set of constraints that define the program, which may be optionally intersected with a "query" constraint. the query is not special and no different from the rest of the program which it queries. it's just another constraint. the term exists because it's common for a set of facts to be kept alone as a set of knowledge, upon which many queries can be predicated.
-
-the reason that applicative & stack are necessarily reductionist is that they're defined by a structure to traverse (ast or stack) *and* the traversal is predefined: both β-reductions of the current continuation at the bottom level of tree or top of stack. ast langs are depth-first traversals of structures rooted (for the stack, _rooting_ means that the stack is guaranteed empty there) at main, after top-level statements have been processed.
-
-*in a reductionist model, unbound variables assume the empty value (usually denoted `f` or `nil`, supposed to correspond to ∅ or ⊥), whereas in the logical model, they assume the set of everything.*
+*update, may 9 2025*: the rest of the document is idk some stuff that i wrote before. looks like some more ranting on declarative vs reductionist models. uhhhhh w/e; i'll consider it later.
 
 .interpretations
 
