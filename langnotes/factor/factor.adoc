@@ -4,6 +4,8 @@ notes by nicholas chandoke. currently undergoing significant revision.
 
 .REVISION
 
+TODO: add section about how coming to factor from scheme/haskell was awful, but from j was good. factor's combination of virtual sequences, mixins, row-polymorphic looping combinators, and mutation is unique, allowing one to do things that they cannot do nearly so elegantly in c, haskell, scheme, or j.
+
 notes' new structure:
 
 . intro to factor: stack, cat, and discussing how factor programs generalize fns, and how purity is no longer applicable, since the code is not applicative.
@@ -18,6 +20,8 @@ notes' new structure:
 . vocab reference
 . caveats
 . tuning: using numbers, bytes, avoiding: reflective objects, pp, and certain vocabs like peg, if you can. otherwise you'll have to deal with longer compilation times and (much) larger executables. a good deal of effective tuning technique is to use the array paradigm in factor, which is easily accomplished by virtual sequences.
+
+a lot of working with the stack is not imagining the stack, tracking items in order. rather, it's reading concatenative code as relations e.g. "dup" to mean "retain original below" or "keep" to mean "retain original atop". you should read stack programs' code just as sequences of transforms littered with (ordered by frequency of occurrence) retentions, permutation, or removals, which we collectively call "shuffle words".
 
 factor's fried quotations used to use local namespaces and dictionaries (like `[let` &al locals still do), but at some point the fried quotations became converted into proper programs. idk how it does it, but i know that the algorithm would basically be:
 
@@ -364,6 +368,7 @@ see the factor docs for "Networking".
 
 to check-out:
 
+* timers
 * jamshred. good, simple example of an opengl game. requires (before starting factor) libalut (arch package `freealut`)
 * factor.extra.gamelib.demos
 * factor.extra.game
@@ -425,44 +430,6 @@ SYNTAX: ?:
 useful words:
 
 * `cleave>array` in `combinators.smart`
-
-`find` & `map-find` are short-circuiting versions of `each` and `map`:
-
-[source,factor]
-----
-{ 2 4 6 7 1 3 } [ dup even?             [ . f ] [ drop t ] if ]     find ! prints even numbers then leaves 3 7 on the stack
-{ 2 4 6 7 1 3 } [ [ 10 * ] [ even? ] bi [ . f ] [ ]        if ] map-find ! prints 10 * even numbers then leaves 70 7 on the stack
-----
-
-`q map-find swap` is a bit more convenient than `find over q [ ] if` but i'm surprised that someone bothered to write it, given what little it offers beyond `find`. i mean `find` already allows one to loop through a sequence, supporting short-circuiting and side effects, and `map-find` still returns only one result, unlike `map`, which returns many. a much more useful definition for something that i would personally call "map-find" is:
-
-[source,factor]
-----
-: map-filter-until ( stop: ( elt -- ? ) q: ( x -- ?y ) seq -- seq )
-  [ length <vector> dup [ push ] curry [ when* f ] curry -rotd compose [ if ] curry
-    [ drop t ] swap curry compose [ dup ] prepose
-  ] keep swap find 2drop ; inline
-[ 1 = ] [ dup even? [ 10 * ] [ drop f ] if ] { 2 4 7 6 1 3 } map-filter-until . ! prints V{ 20 40 60 }
-----
-
-or even better:
-
-[source,factor]
-----
-: map-filter-until ( ... stop: ( ... elt -- ... ? ) q: ( ... x -- ... ?y ) seq -- ... seq )
-  [ [ keep swap ] curry ] 2dip
-  ! the following line is unmodified
-  [ length <vector> dup [ push ] curry [ when* f ] curry -rotd compose [ if ] curry
-    ! the next line is the same but lacks [ dup ] prepose
-    [ drop t ] swap curry compose
-  ] keep swap rot [ find 2drop ] dip ; inline
-! the following example is the same but instead of exiting at 1, it exits after the 3rd iteration.
-0 [ drop dup 3 > ] [ [ 1 + ] dip dup even? [ 10 * ] [ drop f ] if ] { 2 4 7 6 1 3 } map-filter-until . ! prints V{ 20 40 60 } and leaves 4 on the stack
-----
-
-this exploits `find` as `until` but with an implicit exit condition: when we reach a sequence's end.
-
-`each-integer` is a general sequence iteration combinator, but does not support short-circiuting.
 
 from the factor faq's:
 
@@ -595,7 +562,7 @@ being left-to-right is nice in that we can put comment initiators (`!`) anywhere
 
 .caveats and common errors
 
-anytime that you use syntax to specify any mutable structure (most commonly vectors, string buffers, and hash tables), always use `clone` afterward! otherwise you risk multiple references to one object across your codebase when you really meant for the objects to be individual! for example if you step-through the following code, you'll see that, because i didn't clone the string buffer, when i put a seemingly new one on the stack after pushing, then it's actually putting the same one on the stack:
+know when to use `clone` after syntax that represents a mutable structure (e.g. vectors, string buffers, and hash tables) consider the following code:
 
 [source,factor]
 ----------------------------------------------------------------
@@ -604,6 +571,10 @@ anytime that you use syntax to specify any mutable structure (most commonly vect
 V{ } clone tuck SBUF" " -rot
 '[ B dup digit? [ suffix! ] [ [ _ push ] bi@ SBUF" " ] if ] each
 ----------------------------------------------------------------
+
+i forgot to put `clone` after the `SBUF" "` inside the `each`. i'd meant to push the string buffer and current character to the vector, replacing the prior string buffer with a new one. however, because i didn't put `clone`, the same string buffer is pushed! what happens is that syntax `SBUF" "` creates a new string buffer object at parse time; then that object is curried into the quotation; then the quotation is executed on each iteration of `each`, though we only ever actually use the string buffer after the first one (the one before `-rot`) is pushed into the vector, since it's only then, in that `if` branch, that the `SBUF" "` within `each` is pushed to the stack. when i use `SBUF" " clone`, then still the same string buffer object is used on each iteration, but it's forever empty because i clone it before any mutations are done, and of course all mutations are done to the clone rather than the original. the first `SBUF" "` syntax literal is unrelated to the second. each literal creates a new, unique object; just be aware whether that object is part of a quotation, since that's the same as the object being being curried into the quotation, which means that it's the same object for all invocations of the quotation.
+
+thus `V{ } [ ... ] curry` is fine—no need for `clone`.
 
 * when using packed tuple arrays, you get "matching failed." you should use `{ } map-as` instead of `map`
 * setting a dynamic variable has no effect, or dynamic variable is `f` even though you just set it. check whether you're executing it within a namespace combinator e.g. `with-file-writer` is ultimately defined in terms of `with-variables`, so any setting within its quotation will not affect the namespace outside the quotation! for example, consider `SYMBOL: myVar "~/test.txt" ascii [ 0 myVar set [ myVar get dup even? [ myVar inc ] when ] with-my-db myVar get 5 + . ] with-file-writer` where `with-my-db` is defined as described in `db.tuples` document, _Tuple database tutorial_. execution throws an error: "No suitable arithmetic method. left: f; right: 5; generic: +" `myVar` was set only within the context of the inner namespace—the one of `with-my-db`. within the namespace of `with-file-writer`, it was still unset. more precisely, after ``with-my-db``'s quotation finished, `myVar` was set back to the value that it had had before that quotation was evaluated. indeed, even when we move `0 myVar set` to the outer quotation, "5" is written to the file, not "6", because the increment occurred only within the inner quotation! `myVar` is reset to 0 after that quotation finishes!
@@ -1227,10 +1198,10 @@ produce-a-hashtable myVar set-global
 because `myVar get-global` defaults to `f`, not an empty hash table; now you have two cases that effectively mean "empty." this is usually bad design. also, you have to use `get-global` often, when you don't need to do if you use constants instead:
 
 [source,factor]
---------------------------------------
+-----------------------------------------------------------
 CONSTANT: myVar H{ }
-myVar produce-a-hashtable assoc-union!
---------------------------------------
+myVar [ clear-assoc ] keep produce-a-hashtable assoc-union!
+-----------------------------------------------------------
 
 this enforces constant structure, e.g. that always `myVar hashtable?`.
 
@@ -1322,14 +1293,24 @@ generally one may make a `process` tuple then modify its properties then run it.
 .read a process into a string
 
 [source,factor]
-----
+---------------------------------------------
+USING: io.launcher ;
+{ "echo" "hello, there!" } process-contents .
+---------------------------------------------
+
+`<process-reader>` (used by `process-contents`) starts a process asynchronously (via `run-detached`) and returns a stream, which may be partially read from whenever. compare with `[ read-contents ] with-process-reader* 2drop`, which allows you to do stuff with the process object and exit status, but *waits for the process to finish*. also note that `<process-reader>` launches the process. btw, `with-process-reade*` generalizes to `with-process-stream*`, which binds both the input & output streams. see the following examples.
+
+[source,factor]
+-----------------------------------------
 USING: io io.launcher io.encodings.utf8 ;
-{ "echo" "hello, there!" } utf8 <process-reader> stream-contents .
-----
+<process>
+{ "/usr/bin/date" } >>command
+utf8 [ readln ] with-process-stream*
+-----------------------------------------
 
 .stdin & stdout redirection
 
-pass in stdin and output to a file:
+pass a string to a subproccess's stdin, and redirect its stdout to a file:
 
 [source,factor]
 ----------------------------------------------------------------
@@ -1337,9 +1318,15 @@ pass in stdin and output to a file:
 ascii [ "this output is in a file!" print ] with-process-writer*
 ----------------------------------------------------------------
 
-use `with-process-writer*` (no asterisk) if you don't need the process object nor its status.
+use `with-process-writer` (no asterisk) if you don't need the process object nor its status.
 
-pass in stdin and output to a string in factor:
+NOTE: `with-process-writer*` is (at least effectively) just `with-process-stream*` but without binding `input-stream`.
+
+in unpredictable, asynchronous cases, you may want to set the `process`'s `timeout` attribute. note, however, that if a timeout is met, then the process is killed, then a `process-was-killed` error is thrown! if you want to simply wait some time before checking the exit status, then i suppose that you must quote some call to `with-process-stream*` then pass it to `with-timeout` (or use `with-timeout` inside the quotation).
+
+i don't understand why `with-process-stream*` returns the process object in addition to the status, since the process is guaranteed to be terminated by the time that `with-process-stream*` returns, which would seemingly make the process object useless. indeed, both `wait-for-process` and `(wait-for-process)` return only the exit status. similarly, i don't know why either of these two words can be run any number of times on a process.
+
+pass in stdin, and output to a string:
 
 [source,factor]
 ------------------------------------------------------
@@ -1353,24 +1340,51 @@ you can replace `cat` by a curses program e.g. `w3m` and see that curses program
 
 .example: invoking k from factor
 [source,factor]
--------------------------------------------------------------
+-------------------------------------------------------------------
 <process> { "/home/nic/.local/bin/k" } >>command
-ascii [ "`0:`j@3+!9" print flush readln ] with-process-stream
-json> ...
--------------------------------------------------------------
+ascii [ "`0:`j@3+!9" print flush readln ] with-process-stream json>
+-------------------------------------------------------------------
 
 pushes `{ 3 4 5 6 7 8 9 10 11 }` to the stack.
 
 NOTE: `binary` encoding does not work with `with-process-writer` nor `with-file-writer`! it gives some odd error: `element-size` does not define a method for the <such-and-such> class (class depends on what you're writing) dispatching on <item of that class>.
 
-which waits for the process to finish (returning `cancel-operation` if the process takes longer than its `timeout` attribute) and returns the process object and its exit status. look at the definition of `with-process-writer*` for details.
+.check that process didn't immediately crash
 
-* `run-detached` truly runs a separate bg proc, so that you never need to use `nohup`
-* `obj run-process` is the simple synchronous execution of a cmdline string or array of strings.
-* `stream-contents` replaces the process on the stack with its output.
-* though `echo` supports `-e` to not output trailing newline, remember that we can trim trailing newline by `[ CHAR: \n = ] trim-tail`
+sometimes you can't be confident that your command line is correct or that the desired executables exist at the paths that you specify. in these cases, you may want to check for this almost immediately, namely if you expect that the proccess runs in the background and communicates with factor asynchronously.
 
-TODO: how to stream one process's output as input to another process, or stream to stdout? the trouble is that `<process-reader>` returns an input stream, but `write` takes only binary data or a string. do i need to read n bytes at a time from the input stream then `[stream-]write` that?
+[source,factor]
+------------------------------------------------------------------------------------------
+! invalid executable path means immediate crash, so status is 255 (on arch linux at least)
+{ "/usr/bin/soleep" "5" } run-detached 1 seconds sleep status>>
+
+! when status>> is executed, process is running; status is f
+{ "/usr/bin/sleep" "5" } run-detached 1 seconds sleep status>>
+
+! when status>> is executed, process had exited with exit code 0, so status is 0
+{ "/usr/bin/sleep" "1" } run-detached 5 seconds sleep status>>
+------------------------------------------------------------------------------------------
+
+thus `status>> not` tells whether the process is still running.
+
+things can get a little nuanced. in the following example, we expect the process to run for much more than 2 seconds, but if it instead immediately crashes, then we print its stderr contents then throw a factor error.
+
+[source,factor]
+-------------------------------------------------------------------------------------------
+USING: io.launcher.private ;
+<process> { "/usr/bin/sudo" "./althttpsd" [ ... ] } >>command
++stdout+ >>stderr ascii (process-reader)
+2 seconds sleep dup process-running? [ 2drop ] [ swap stream-contents . process-failed ] if
+-------------------------------------------------------------------------------------------
+
+* i don't think that `(process-reader)` deserves to be private.
+* `process-running?` kept returning true when i sleept only 1 second when i made the server crash (ok, i didn't make it crash; i just misspelled the path to the server executable)
+* this demonstrates that we can read from a process after it terminates
+* if you put an invalid path for the first element of the command, then `process-running?` returns `t`, on linux, at least.
+
+''''
+
+TIP: to stream one process's output as input to another process, use `run-pipeline` of the `io.pipes` vocab.
 
 .exec
 
@@ -1643,8 +1657,6 @@ one trick is to push some values before a breakpoint, then drop them sometime la
 * if using a higher order fn, mimic it by running its argument at the top level e.g. if `[ f ] each` isn't working, test `f` with the arguments that you expect
   ** if `each`, `map`, `reduce`, or any other traversal over a sequence, is failing, then the easiest way & most direct way to debug it is to stick a `1 head` after the input sequence.
 * check the stack signature (ctrl+i)
-* when testing code that mutates structures, use `clone`, so that each test starts from the correct initial structure! e.g. do `H ( -- h ) H{ { 0 HS{ } } { 2 HS{ } } } ;` to define initial hashmap, then in all of your tests, do `H clone words ...`. `clone` makes a shallow copy.
-  ** depending on your code, you may want `clone` for production execution anyway!
 
 consider the following code which *incorrectly* tries to implement j's key (`/.`) (it accumulates into a hash set instead of a vector):
 
@@ -2233,6 +2245,7 @@ many of these traversals are in factor's `sequences.extras` vocab:
 * `extract!`: the inverse of `reject!`: retain subseq of elts matching a predicate
 * `find-all`: `filter` but retains the associated indices
 * `find-pred`: (a -> b) -> (b -> Bool) -> Maybe (b,a,Index)
+* `map-find` is in `sequences`. it applies a computation to each element; if its result is non-falsy, then it, along with its input, are returned e.g. `{ 4 6 5 2 } [ [ 1 + even? ] keep 2 * and ] map-find` returns `10 5`. it's convenient when the computation is expensive or cannot be run twice. for referentially transparent computations, `q map-find` is equivalent to `q find swap q [ ] if`
 * `interleaved`
 * `longest-subseq`
 * `loop>sequence` (like k's collecting "while")
@@ -3941,22 +3954,22 @@ i prefer link:https://justine.lol/braille/[bd aka braille dump] for hex dumping 
 000000c8
 ------------------------------------------------------------------------------
 
-i note this so that you won't be confused like i was when i saw so few bytes but `wc -c` said 201 like i'd expected.
-
 == sockets
 
 .server
 [source,factor]
 --------------------------------------------------------------------
 USING: io.sockets io.encodings.ascii io.streams.duplex destructors ;
-"127.0.0.1" 3000 <inet4> ascii <server> dup ! (1)
-accept drop
-[ readln                                    ! (2)
-  "hello to you!" print                     ! (3)
-] with-stream                               ! (4)
-print                                       ! (5)
-dispose                                     ! (6)
+"127.0.0.1" 3000 <inet4> ascii <server> ! (1)
+[ accept drop
+  [ readln                              ! (2)
+    "hello to you!" print               ! (3)
+  ] with-stream                         ! (4)
+  print                                 ! (5)
+] with-disposal                         ! (6)
 --------------------------------------------------------------------
+
+now run `netcat localhost 3000` in a terminal shell and type "hello" or something, then press return.
 
 . see ``<server>``'s documentation about choosing & specifying host descriptions
 . read message from client (here, netcat)
