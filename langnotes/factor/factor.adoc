@@ -2,12 +2,45 @@
 notes by nicholas chandoke. currently undergoing significant revision.
 :toc:
 
+== is factor right for you?
+
+it's the best lang that i've yet found. it's very simple, terse, readable, refactorable, and comes with tons of functionality. its only fault is that it's bulky: its codebase, its executable size, and the executable sizes of compiled factor programs, and that it's infeasably slow to use as an interpreted language. factor, k—and maybe somehow, picolisp—are the only languages that i'd consider using. sadly, rare are code systems that are all of functional, simple, unconstrained, terse (syntax), and efficient. maybe dyalog apl or some commercial forths satisfy all these, but they're proprietary, which goes against "unconstrained."
+
+pro's:
+
+* hackable to the hilt
+  ** primitives are _really_ primitive.
+  ** definitions marked as "private" are just as accessable as any non-private ones; only they're _marked_ as private, as a _hint_—not a _restriction_—to the programmer
+* mostly all the capability anyone could ask for
+* dead-simple semantics. b/c syntax is homoiconic, syntax is also dead-simple.
+  ** all tokens are whitespace-separated so selecting arbitrary subprograms is easy. quoted programs (a generalization of lambdas and macros [lisp]) are delimited by brakets, still, which makes program organization clear. this is more significant than you may think; in practice, the code being so clean is quite less stressful than using an applicative language. there is a latent burden that creeps in and that applicative programmers become used to. the required whitespace does make the code less terse, but easier to read and less stressful. i prefer it over j. i desire some mix of the two, but i haven't imagined how that could work.
+  ** no order of operations, so no need for parentheses. the only nested expressions are quoted programs or nested data structure literals.
+* concatenative: refactorable, easy to debug b/c vm's design is simple: just 2 stacks and a sequence of hashtables (the sequence corresponding to scope nesting).
+* awesome debugger ("the walker")
+* documentation & source code browsing system: navigable, thorough, offline, and dynamically populated, like in emacs: loading your code automatically makes it searchable in the browser just like any other library.
+* dynamic. though lisp-like macros which evaluate before runtime are available, factor effectively uses quote & eval _instead_ of lambdas. therefore there's rarely a need for macros in factor. factor is so data-oriented that a programmer practically never desires custom syntaxes. indeed, factor macros are more _needed_ when manipulating a number of stack data where the number is given at parse time.
+* get as close or far from your target hardware as you want. you can inline assembly, use simd, or not. ffi for python or c/dlls is easy, too.
+
+con's:
+
+* comes with libraries that you likely won't use; factor's codebase is bulky, so: cloning takes a bit longer, maybe building factor takes longer, and the codebase isn't as easy to navigate nor grok. for example, it comes with a _magic: the gathering_ vocab!
+* can be hard to find libraries needed for the graphical install
+* building factor takes a lot of cpu time
+* using factor to compile factor programs can take a bit of time
+* unpredictable executable size for your factor programs. various vocabs demand certain compilation options (namely higher "run levels"), which can drastically affect the executable size (e.g. using peg (packrat parser) takes a 2MB to 272MB), and which you cannot know in advance; practically, you must use (a lot of) trial & error to determine a vocab's required options—and the required options can change if the vocab is updated e.g. in a new factor release!
+* like many vm's (lua, haskell, v8 js), factor uses "green" threads / coroutines, not os threads.
+* vocabs _must_ be defined by a particular directory structure: they must be named `<name>/<name>.factor`; to load that vocab, you cannot specify the filepath; instead, <name> must be a subdirectory of a directory that you've registered with factor's vocab loader via the `add-vocab-root` word.
+* in development, factor is like lisp: it's dynamic, hackable, flexible, and gives immediate feedback in its version of a repl, called the "listener". however, to run factor, you practically must compile your program; factor is far too slow to use as an interpreted language (namely b/c loading vocabs takes a long time)
+
+fixed-arity fns isn't an issue. it's just as well to have a function by one name that takes k args and another that takes n args, as it is to have one fn that takes either k or n args. you can simply name your factor fns by the prolog convention e.g. a word called `log/1` that takes 1 argument and does the natural log, and `log/2` which accepts a base. it's still shorter than having parenthesis everywhere for all fn calls.
+
 .REVISION
 
 TODO: add section about how coming to factor from scheme/haskell was awful, but from j was good. factor's combination of virtual sequences, mixins, row-polymorphic looping combinators, and mutation is unique, allowing one to do things that they cannot do nearly so elegantly in c, haskell, scheme, or j.
 
 notes' new structure:
 
+. overview of factor as a code system
 . intro to factor: stack, cat, and discussing how factor programs generalize fns, and how purity is no longer applicable, since the code is not applicative.
   .. i imagine that a common reason that people coming from app.prog. find factor difficult to read is that they're used to trying to hold a whole function or other block of code in their head at once; if they don't see it altogether, then they feel like they're blind. by contrast, cat.prog. is about hardly holding _any_ of the code in mind at a time; the whole point is that you don't need to care at all about anything before or after some small part of the program that you're considering, since they don't affect each other—yk, being _concatenative_ and all. so these app.prog.-minded people start at either the beginning of a word, or at the middle but then work their way backward just to trace the stack effect. that's madness!
 . how to code well in factor: combinators, quotations, currying, stack shuffling (retain [somewhere], discard, or shuffle; e.g. `pick` & `rot` both bring, of `x y z`, `x` to the top, but `pick` copies whereas `rot` moves), factoring, and code structure.
@@ -17,8 +50,8 @@ notes' new structure:
   .. to leave something on the stack as a return value, then depending on the data flow, you'll use either `dup` (copy atop), `tuck` (copy below), or `[ ... ] keep` (copy on top with fn of stack). `over` is equivalent to `swap tuck`, btw. your proficiency in shuffling the stack will show itself in your ability to notice such relations, by thinking in terms of datum position on the stack and duplication.
   .. to apply a symmetry to multiple data on the stack, use "cleave", "spread", or `apply` combinators e.g. `2bi`. `tri*`, or `bi@`.
   .. otherwise sometimes you'll want to use general shuffle words. don't worry about making it beautiful; as you code, over time you'll naturally begin to notice more elegant ways to manage the stacks
-. vocab reference
-. caveats
+. vocab reference (useful stuff, eliding unnecessary things, as most things are)
+. common troubles & solutions
 . tuning: using numbers, bytes, avoiding: reflective objects, pp, and certain vocabs like peg, if you can. otherwise you'll have to deal with longer compilation times and (much) larger executables. a good deal of effective tuning technique is to use the array paradigm in factor, which is easily accomplished by virtual sequences.
 
 a lot of working with the stack is not imagining the stack, tracking items in order. rather, it's reading concatenative code as relations e.g. "dup" to mean "retain original below" or "keep" to mean "retain original atop". you should read stack programs' code just as sequences of transforms littered with (ordered by frequency of occurrence) retentions, permutation, or removals, which we collectively call "shuffle words".
@@ -320,7 +353,25 @@ NOTE: though _locals vs stack_ is unrelated to _concatenative vs applicative_, t
 
 it's all just a question of whether/how modifying one thing affects others, and whether you want it to (in that way).
 
-''''''''
+.more "thinking stack" verbiage
+
+firstly, note that anyone coming to a cat/tacit lang from an applicative lang is going to try to reason about catlang programming in terms of applangs, which is failure. it's inevitable and to be overcome in time, but overcome one must in order to actually program cats well. anyway, to mentally assign a name or label to data on the stack, and think about how its stack position changes, is bad; a good catter does not much monitor the stack; instead, they think about what sequences of operations they want. at each step, they must know what the input is, and so there's some stack tracking, but it's local stack tracking; they ever care only about part of the stack. this reflects cats themselves: arbitrary subcats don't affect others! certainly there is still some considerable stack consideration, such as when using `tri*`, `over`, or `rot`. it's still not much, though; rarely is complex shuffling done, and rarely does one ever care about more than 3 items on the stack. you'll know that you've become true to habitually thinking in cat/stack-way when everything seems like currying to you; when you see `swap 10 + *` as "2 things on stack. add 10 to 1 then multiply them", and it should be immediately obvious that you could instead do `[ 10 + ] dip *`, or if you wanted to leave an item on the stack, then `over 10 + *` because you know `over` to be equivalent to "swap but leave one." thinking in factor _feels_ very easy once you unlearn other perceptions of programming. stack programming is very natural to humans! that it reads left to right, is simple, and pretty with little syntax, is quite obvious to anyone who hasn't thought of "what code should look like." link:https://codeberg.org/ngn/k/src/branch/master/j.c[whitney-style c code] is 18% parenthesis! isn't it amazing that nearly 1/5 of the tersest c is just needless syntax? that's before we even consider the bloat due to variable names, type declarations, or other what-have-you.
+
+pay attention to these facts! they reduce the complexity of the programming & language model, which makes easier and more efficient: reasoning about how to code programs, refactoring, coding it in the first place, debugging. boilerplate is rare and can be easily avoided by defining a macro in a few words.
+
+it's been suggested that the stack is not suitable for some coding; comomnly the quadratic formula is suggested. however, i defeat that argument here:
+
+[source,factor]
+------------------------------------------------
+: solve-quadratic ( a b c -- x1 x2 )
+  [ neg ] dip rot
+  [ -4 * * over sq + sqrt [ + ] [ - ] 2bi ] keep
+  2 * [ / ] curry bi@ ;
+------------------------------------------------
+
+i consider this code more elegant than applicative versions. coming-up with the code wasn't a struggle; in fact, it was quite simple & plain: just identify that there are some computations with `f(b)`, `g(b,c,a)`, then `a`, so naturally we want b on the bottom, `c` & `a` in the middle, and `a` on top.
+
+of course, the solutions that you see on link:https://rosettacode.org/wiki/Roots_of_a_quadratic_function#Factor[rosetta code] are a bit more complex because they have special consideration for numerical precision.
 
 === primitives
 
@@ -346,7 +397,9 @@ USE: generalizations
 
 summary: _words_ are parsed things which may have definitions; if so, then they're functions with optional metadata; else they're symbol literals (with optional metadata). _classes_ are words that support oop. the classes' structures & relations—e.g. hierarchy, ad-hoc polymorphism (aka "interfaces" (java), "purely abstract classes" (c++), "type classes" (haskell)), class attributes—are implicitly handled by words such as `TUPLE:` & `GENERIC:`.
 
-=== oop
+you can look through the factor codebase—especially in `extras/`—to find example factor programs.
+
+=== oop [stub]
 
 see factor docs for:
 
@@ -354,82 +407,12 @@ see factor docs for:
 * `Class operations`
 * `Generic words and methods`
 
-''''''''
+== generally useful vocabs
 
-.cool vocabs
-
-NOTE: many of these—namely those starting with "factor.extra"—don't export documentation; but you can read their source code at `<factor install dir>/extra/...` and some have a `MAIN:`.
-
-* those having the "algorithms" tag
-  ** lcs
-* `furnace`, for coding web servers
-
-see the factor docs for "Networking".
-
-to check-out:
-
-* timers
-* jamshred. good, simple example of an opengl game. requires (before starting factor) libalut (arch package `freealut`)
-* factor.extra.gamelib.demos
-* factor.extra.game
-* factor.extra.gpu.demos.raytrace
-* factor.extra.gpu.render
-* factor.extra.audio.loader
-* factor.extra.audio.engine
-* factor.extra.rosetta-code
-* factor.extra.spider
-* factor.extra.directory-to-file
-* factor.extra.file-to-directory
-* factor.extra.curses
-* factor.extra.did-you-mean
-* factor.extra.geoip
-* factor.extra.geobytes
-* factor.extra.irc.client
-* factor.extra.logic.*
-* factor.extra.machine-learning.*
-* factor.extra.math.*
-* factor.extra.money
-* factor.extra.taxes.usa[.*]
-* factor.extra.modern.*
-  ** modern.slices might be useful for procedural relations among sequences, i guess?
-* factor.extra.multisets
-* factor.extra.opengl
-* factor.extra.successor
-* factor.extra.tensors
-* factor.extra.terminal[.*]
-* factor.extra.terminfo
-* factor.extra.tetris
-* factor.extra.text-to-pdf
-* factor.extra.twitter
-* factor.extra.webapps.
-  ** blogs
-  ** calculator
-  ** fjsc
-  ** todo
-  ** wee-url
-  ** wiki
-* factor.extra.websites.concatenative
-* factor.extra.namespaces.extra
-* factor.extra.echo-server NB. almost works. does not respond to browser (tested with firefox) until the factor process is closed. uses HTTP/0.9, as told my cURL.
-* io.streams.*
-* the `leaks.` word
-* io.servers # threaded tcp/ip
-
-SYNTAX: ?:
-    [ scan-new-word parse-definition ] with-definition
-    dup infer define-declared ;
-
-* `math.functions` includes common functions like `^` (exponentiation), logarithms, and trigonometric functions.
-  ** *you should completely familiarize yourself with this vocab*
+* `math`, `math.functions` includes common functions like `^` (exponentiation), logarithms, and trigonometric functions.
 * `math.intervals` and `math.vectors` are useful, too
   ** try to use `math.vectors.simd` wherever possible! in fact, it's the best way to use bit vectors, too, since it actually is proper vector operations on numbers, for large bases (e.g. `uchar-16` is vector ops for 16-length vectors each of whose values are 0..255). this is overkill for mere bitwise operations since there's no simd type for a bit vector, so you'd just use `math.bitwise` & `math.bits` (which are surprisingly accomodating). i have no idea why factor has each of bit arrays & vectors as their own structures, let alone whose elements are _booleans_ instead of numbers; don't use them; i see no advantage to them, and converting between boolean sequences and integers is a hassle!
 * rational numbers (abbreviated as "ratios") are always used in factor for division unless floats are explicitly specified. their syntax as `a/b` or `a+b/c` is also supported e.g. `1+1/2 5 *` gives `7+1/2`.
-
-* `$[ ... ]` for static eval
-
-useful words:
-
-* `cleave>array` in `combinators.smart`
 
 from the factor faq's:
 
@@ -437,128 +420,37 @@ from the factor faq's:
 * if you need two different vocabs that define synonyms but want to use only one vocab's word, then put it after the other in `USING:`. otherwise use qualified imports: `QUALIFIED: v` to load vocab `v` s.t. its words are accessible as `v:word`.
 * ffi: 1. ensure that your shared object is compiled for the same architecture that factor was (most commonly 32- vs 64-bit). also, for alien code, `add-library` first. alien supports C's name mangling but not C++'s.
 
-== factor good
+== introduction to stack machines
 
-firstly, note that anyone coming to a cat/tacit lang from an applicative lang is going to try to reason about catlang programming in terms of applangs, which is failure. it's inevitable and to be overcome in time, but overcome it must be in order for one to actually program cats well. anyway, to mentally assign a name or label to data on the stack, and think about how its stack position changes, is bad; a good catter does not much monitor the stack; instead, they think about what sequences of operations they want. at each step, they must know what the input is, and so there's some stack tracking, but it's local stack tracking; they ever care only about part of the stack. this reflects cats themselves: arbitrary subcats don't affect others! certainly there is still some considerable stack consideration, such as when using `tri*`, `over`, or `rot`. it's still not much, though; rarely is complex shuffling done, and rarely does one ever care about more than 3 items on the stack. you'll know that you've become true to habitually thinking in cat/stack-way when everything seems like currying to you; when you see `swap 10 + *` as "2 things on stack. add 10 to 1 then multiply them", and it should be immediately obvious that you could instead do `[ 10 + ] dip *`, or if you wanted to leave an item on the stack, then `over 10 + *` because you know `over` to be equivalent to "swap but leave one." thinking in factor _feels_ very easy once you unlearn other perceptions of programming. stack programming is very natural to humans! that it reads left to right, is simple, and pretty with little syntax, is quite obvious to anyone who hasn't thought of "what code should look like." link:https://codeberg.org/ngn/k/src/branch/master/j.c[whitney-style c code] is 18% parenthesis! isn't it amazing that nearly 1/5 of the tersest c is just needless syntax? that's before we even consider the bloat due to variable names, type declarations, or other what-have-you.
+like lisp, factor's general/free model hardly suggests any idiomatic style. factor should be thought of as lisp except with a different model for relating data i.e. functions' inputs & outputs:
 
-basically it's like scheme but better. its semantics are like c but the language model is a nicer-yet-equivalent version of the λ calculus; see _the mathematical foundations of joy_. its type & object system is most like clojure, i think; i'm not quite familiar.
-
-* excellent documentation. doc browser is excellently designed, and enables exploring code definitions very fluidly, and it's dynamic, showing current runtime values and docs for vocabs as they're loaded
-  ** allows you to persistently write the listener environment, too! see the word `save` in the `Images` help document. the stack isn't saved, so you'll need to set a dynamic variable to its value then restore it later.
-* because its standard library is so large, and factor has very few primitives (easily found by searching for words with the `PRIMITIVE` declaration), and all words' definitions are easily viewed, factor has a library of easily-understood codes that you can transcode [into another lang].
-* hackable. things declared private are only so _declared_; code cannot actually be inaccessible.
-* simple model: the vm is just 2 stacks and a hashtable.
-* syntax
-  ** all tokens are whitespace-separated so selecting arbitrary subprograms is easy. quoted programs (a generalization of lambdas and macros [lisp]) are delimited by brakets, still, which makes program organization clear. this is more significant than you may think; in practice, the code being so clean is quite less stressful than using an applicative language. there is a latent burden that creeps in and that applicative programmers become used to. the required whitespace does make the code less terse, but easier to read and less stressful. i prefer it over j. i desire some mix of the two, but i haven't imagined how that could work.
-  ** no order of operations, so no need for parentheses. the only nested expressions are quoted programs.
-  ** homoiconic syntax. b/c the model is simple, this means that's there's practically _no_ syntax (except eDSLs), and the syntax describes the program exactly
-* dynamic. because programs are first class objects (just sequences whose execution the compiler can optimize), there's hardly a need for metaprogramming. regardless, macros are available.
-  ** whereas lispers usually use macros and call that metaprogramming, factor does the equivalent of quoting sexps & calling `eval` all over the place during or before runtime. simply pushing something to the stack is effectively inserting into an sexp, and `drop`, `nip`, etc are akin to removing elts from the sexp. data "officially" become quoted when you use `curry`. however, currying only delimits programs for deferred execution; it does not change how the program is modified before/during execution. the lack of distinction between "before" and "during" is granted to factor by the fact that the entire program is only its data, which is stored on the data stack. whereas an ast must be traversed, a stack's "traversal" is moot; words are executed, and so the stack simply undergoes mutation in-place until the program terminates.
-  ** makes dsls easy, especially since it comes with a peg parser.
-* (TODO: confirm) compiled factor programs are pretty small (if you don't use vocabs that require higher runlevels) and fast. certainly not as fast as a forth, rust, v, fortran, go (probably). but for all that factor affords, its efficiency is excellent!
-* get as close or far from your target hardware as you want. you can inline assembly, use simd, or not. ffi for python or c/dlls is easy, too.
-
-pay attention to these facts! they reduce the complexity of the programming & language model, which makes easier and more efficient: reasoning about how to code programs, refactoring, coding it in the first place, debugging. boilerplate is rare and can be easily avoided by defining a macro in a few words.
-
-=== factor not good
-
-* you want a small codebase or small executables. factor is straight-up large. it comes with packages that have _no_ business being included, instead of being separate code that you may find in a separate repository on github. examples include a _magic: the gathering_ vocab. i think i've said enough! regardless of how efficient or fast your compiled binaries run, they are still large, if you consider tens of megabytes large. i really dislike inefficient code, but the expansive capability that factor comes with, and its walker (debug tool) and interactive documentation and support for dynamicism are amazing. therefore, for large projects at least, it's my goto language. i may forgo it in lieu of a collection of specialized languages/tools, or perhaps use a forth that interfaces with c/++ well, using those libraries and never looking at their code,...but c sucks, too, even insofar as compiling it and using shared objects! guess that leaves rust, go, and maybe fortran?
-* you want multithreading. there is yet no multithreading in factor. it has coroutines, but cannot use true parallelism. it's too bulky to use the picolisp strategy of simply spawning multiple pl os threads.
-* you want a solver, e.g. prolog or stm
-* enormous set of included libraries (good b/c much functionality, bad b/c bloated)
-* unlike arturo/rebol, there are no optional parameters. e.g. constructing http requests is much less flexible.
-
-TODO: can i use the elegance of a stacklang with a non-reductive system like prolog? term-rewriting catlangs are common, but reductive. stacklangs have an implicit, reductive model of traversing the stack. are term-rewriting catlangs implicitly, necessarily reductive?
-
-it's been suggested that the stack is not suitable for some coding; comomnly the quadratic formula is suggested. however, i defeat that argument here:
-
-[source,factor]
-------------------------------------------------
-: solve-quadratic ( a b c -- x1 x2 )
-  [ neg ] dip rot
-  [ -4 * * over sq + sqrt [ + ] [ - ] 2bi ] keep
-  2 * [ / ] curry bi@ ;
-------------------------------------------------
-
-i consider this code more elegant than applicative versions. coming-up with the code wasn't a struggle; in fact, it was quite simple & plain: just identify that there are some computations with `f(b)`, `g(b,c,a)`, then `a`, so naturally we want b on the bottom, `c` & `a` in the middle, and `a` on top.
-
-of course, the solutions that you see on link:https://rosettacode.org/wiki/Roots_of_a_quadratic_function#Factor[rosetta code] are a bit more complex because they have special consideration for numerical precision.
-
-=== factor ugly
-
-* vocabs _must_ be defined by a particular directory structure: they must be named `<name>/<name>.factor`; to load that vocab, you cannot specify the filepath; instead, you must <name> must be a subdirectory of a directory that you've registered with factor's vocab loader via the `add-vocab-root` word.
-* as mentioned above, if you use some particular vocabs, then you must compile with a higher runlevel, which can take a 2MB executable to a 272MB executable!
-  ** the runlevel (and other compiler options) needed to compile any given vocab are unknown, undocumented, and not something that you can discover without reading their source code or shotgunning compiler options & recompiling, which takes very much time, and is liable to change across versions of factor.
-* interpreted factor takes so long to load vocabs that it's infeasable to use it. this is before we even consider the difference in speed or efficiency between interpreted & compiled factor code.
-
-== introduction
-
-tl;dr: use prolog if you want implict & complex control flow. use factor if your control flow is simple. factor for dataflow, prolog for _solving_ constrained systems.
-
-factor is hardly a language; it's homoiconic just like prolog and lisp; as such, there is no _language_; there's only data and a repl; the repl has a hardcoded traversal & evaluation model for its input data. thus its input data are implicitly programs exactly because they're evaluatable as such by parsers (here, interpreters).
-
-such a general/free models hardly suggest any idiomatic style. indeed, one can make whatever model they wish by making even whatever syntax they desire via metaprogramming. factor is, like lisp and unlike prolog, reductionist & functional but, like any system, at least prolog can be implemented in it. factor should be thought of as lisp except with a different model for relating functions' inputs & outputs:
-
-* in lisp, inputs are specified inline, thus nesting expressions in an ast. in factor we order them linearly, often in advance of when they'll be evaluated. in lisp the evaluation is a depth-first traversal of a tree, whereas in factor it's a loop of fn application until the stack is empty; in factor the program is eaten-up whereas it's traversed in lisp.
-* a funny thing about stack langs is that the stack relates all of its elements, whereas functions' arguments are distinct. we see this in functional combinators vs stack effect combinators such as `2tri`, which does not associate each of 3 functions with each of two inputs—the sequence [(f,x,y), (g,x,y), (h,x,y)]—then evaluate each triple of that sequence; instead, it performs stack effects `f`, `g`, & `h` in a given order, which means that the effect of the earlier-executed ones can affect the inputs of the latter-executed ones. this is very much a frequent hassle when using `if`, `cond`. the equivalent in scheme would be an effectful predicate, e.g. using `set!`. one can argue that this is more capable because it enables relating clauses, but that's often not what we want. as much as ever, separation & complection should be specified explicitly & elegantly by relations, where relations are implicitly entailed by terms being present across predicates.
-* whenever a computation is to be performed once but its output passed to multiple locations, lisp requires binding clauses, and factor requires `dup`.
-  ** btw, in prolog, rather than binding clauses, variables are related implicitly by their presence in predicates which are intersected with others. *this shows intersection as essentially the same as relation itself, and relation the same as application or composition. e.g. we see (a,b;c;d;e) as `map a [b,c,d,e]` because it's `a` intersected with a disjoint union; `a` is related to each element of the disjoint union. this shows disjoint union as a set of distinct elements. `AND` is application & merging whereas `OR` maintains distinctness/separation. all code generally is merely "these distinct" vs "these together!"* i suggest the prolog notation of `,` for "together" and `;` for "apart." and have fns partially applied b/c that can only make things easier. when a fn is loaded with args, it either has a deterministic arity at which point it evaluates (if we're using a reductionist model); or if its evaluation must be made explicit, then relate it to a special primitive that exists expressly to force the fn to eval. i don't think this is practically possible in a stack model, though.
-* in factor, because it evaluates in the order which it reads—left to right—functions must be quoted in order to not be immediately evaluated. in a lang such as uiua, where evaluation is from the right but parsing is from the left, and perhaps enabled by a lack of metaprogrammability, function arguments do not need to be quoted; when parsing from the left, when a higher-order function is encountered, its stack effect (fn signature) tells how many of the following stack items should be interpreted as functions and not immediately evaluated.
-
-NOTE: lisp is the de facto applicative functional notation, and factor is nearly the de facto stack functional notation (technically the _Joy_ proglang is the de facto). there are many varieties of each lisp and forth, and to some lesser extent, prolog.
-
-.actual evaluation
-
-there's a certain amount of trouble in any design—except maybe prolog; that's yet to be known. the only solution to this is a parser/dsl paradigm: to have a plethora of evaluation models and syntaxes which all share the same underlying model. the reason that prolog may be necessarily ideal is that its model—facts expressed as relations & constraints of free vars—is exactly the general substance of meaning itself. the only trouble then is that general systems, by definition, have little information encoded in them; this means that _we_ must specify information rather than it being tacit. this being said, metaprogrammable models are suited for creating such dsls. languages that can modify themselves dynamically (during runtime) are most free. commonly lisp cannot do this; picolisp is the only one that i know of that supports it. forth, maybe factor, and prolog support it.
-
-the good news is that we can impose models, such as the array model, which does not affect the basic case e.g. `1+2` is `3` regardless of whether the array model is imposed or not. yet things that would otherwise be nonsense (uninterperable) are interpreted sensibly by it e.g. `1 2 3 + 4` produces `5 6 7`. we can freely union additional orthogonal parsers (orthogonal meaning here that each parser's parsing expressions do not overlap) without worry about changing the interpretation (meaning) of our code. we're also free to install new non-orthogonal models and compute the overlap then choose the order in which sets of overlapping rules are tried, and we can run it on code to identify which subsets of our code's meaning may change by installing the new parser. obviously <installing a new parser whose rules are tried only after the prior parser's overlapping rule fails> will affect only if the original parser fails, which may or may not be expected in your code, depending on how you wrote it.
+* a neat property of stack machines is that the stack relates all of its elements, whereas functions' arguments are distinct. we see this in functional combinators vs stack effect combinators such as `2tri`, which does not associate each of 3 functions with each of two inputs—the sequence [(f,x,y), (g,x,y), (h,x,y)]—then evaluate each triple of that sequence; instead, it performs stack effects `f`, `g`, & `h` in a given order, which means that the effect of the earlier-executed ones can affect the inputs of the latter-executed ones.
+* whenever a computation is to be performed once but its output passed to multiple functions, lisp requires a binding clause. in factor we'd use `dup` or `keep`, or a combinator that uses either, such as `bi`.
 
 link:https://toml.io/en/v1.0.0#array-of-tables[toml's array of tables syntax] is like stack langs whereas JSON is like applicative languages. in stack langs we accumulate programs imperatively then eventually execute them. applicative languages specify large program segments as _one_ complex (and deeply nested!) structure of data relations. stack programs are not nested. stack is a 1-dimensional data structure, whereas (abstract syntax) trees are two dimensional and irregular. granted, asts can be built of stack programs, too. the tradeoff is that one must maintain awareness of the stack's state at a given point in time but the syntax is nice (which makes refactoring nice), whereas applangs display the whole program all at once, which...gives the whole picture at once, but it's still complex! imperatively building programs allows us to go one step at a time. *showing the whole program at once does not make it easy to trace through.* also the mere fact of syntax being more complex is a burden. it's one usually taken for granted, but there's no reason for that.
 
-''''
+== compilation & deployment
 
-* check-out vocabs: `models`, `ui`
+embeds the factor vm into the executable; no external runtime is needed to run a compiled factor program. to compile: in the listener, evaluate `"your-vocab-here" deploy-tool`. your vocabulary does not need to be already loaded. when compilation finishes, a file browser or terminal is opened to the directory where the compiled binary was left, namely in the directory in which factor is installed/cloned.
 
-== deployment/compilation
+=== some words' required deploy options that i know of
 
-why? for speed, encapsulation (single dynamically-linked binary), or code hiding. the produced binary executable may seem large, but given that it doesn't require factor to run, it's relatively good, both b/c it's convenient for the user (they don't have to download yet another runtime just to run someone else's [your] code) and because factor itself (as a downloaded snapshot or installed by a package manager) is hundreds of megabytes.
+failing to use sufficient run levels or deployment options will cause your program to fep-out, declaring that it's crashed and that such crash is a bug.
 
-. vocabulary does not need to be already loaded
-. in the listener, evaluate `"name" deploy-tool`. a graphical dialog appears. i use sway, and i had to goto a blank workspace in order for the dialog to display properly. the dialog appeared instantaneously but was painted over by firefox.
-. click "deploy" and the compliation will begin
-. when compilation finishes, a terminal is opened to the directory where the compiled binary was left. for me, that's in factor's install directory, `~/factor/`.
-
-=== functions and the deploy options that they require
-
-* if one deploys a program which uses `printf` or `.` with compilation level less than 3, then the program feps-out, declaring that it's crashed and that such crash is a bug.
-  ** actually, scratch that; even this `printf` trick still fails seemingly exactly the same!
-* `mirrors` requires level 5+. `all-slots` also requires level 5+, so you can't use tuple inspection words to make your own version that does not require such a high level. however, `tuple-slots` does not require anything above level 1, so if you hardcode tuple slot names then you can effectively use mirrors at run level 1.
-* `peg` requires level 6 plus retain all word properties and definitions. it used to only require lvl 5. idk how much worse 6 is as far as binary sizes. ...but i have a program here that's 76MiB, and it hardly does shit. the program itself is computationally simple; it could be done in a handful of lines of C. if only factor's peg could be built at run level 1, it'd be only 29MiB, which is still way the fuck too large for what the program does. compare it to link:https://dev.ronware.org/p/reva/wiki?name=Manual[reva forth], whose binary is 30k, or link:https://codeberg.org/ngn/k[ngn/k] whose binary is 272k. these two are powerful programs! for any binary to be even 1MiB is *ridiculous*! when i load the program, i see the following are loaded, though hopefully it's at least some weird thing where they're loaded but not included at all in the compiled binary: regex, calendar, websockets, prettyprint, things of the `help` vocab including ui & fonts, openssl...so what the hell? the program can be expressed in a line of sed! in fact, here it is:
-
-[source,factor]
-----
-USING: io kernel peg sequences sequences.extras io.encodings.utf8 io.launcher sequences.generalizations strings unicode util ;
-IN: pacfmt
-
-: parse-yay ( yay-pkg-descs -- html-str )
-  [ 32 = not ] satisfy repeat1 [ >string ] action
-  [ 10 = not ] satisfy repeat1 [ >lower "installed" subseq-index >boolean ] action
-  "\n" token hide
-  [ " \t\n" member? ] satisfy repeat1 hide [ 10 = not ] satisfy repeat1 [ >string ] action
-  "\n" token optional hide
-  6 narray seq repeat0 parse [ first3 [ [ >upper ] [ ] if ] dip [ "td" (wt) ] bi@ append "tr" (wt) ] map-concat "packages" f wrap-html ;
-
-: main ( -- ) read-contents [ parse-yay "w3m" utf8 [ write ] with-process-writer ] [ "empty stdin was given. exiting." print ] if* ; MAIN: main
-----
+[options="header"]
+|==============================================================================================================================================================================================================
+| vocab / word(s)                          | run level / options
+| `prettyprint` vocab (including `printf`) | compilation level 3+
+| `mirrors` and `all-slots`                | level 5+. however, `tuple-slots` does not require anything above level 1, so if you hardcode tuple slot names then you can effectively use mirrors at run level 1.
+| `peg`                                    | level 6 plus retain all word properties and definitions. it used to only require lvl 5.
+|==============================================================================================================================================================================================================
 
 == usability
-
-being left-to-right is nice in that we can put comment initiators (`!`) anywhere in our code in order to halt the computation early.
 
 .dynamic evaluation
 
 * if you define word A in terms of word B then redefine A, then B's definition is implicitly changed.
-* `with-datastack` is like lisp's `apply`
+* `with-datastack` is like scheme's `apply`, except that it returns an array
 
 .caveats and common errors
 
@@ -602,18 +494,6 @@ inference branching:
 you may be baffled to find that `[ sum ] sort-by` works but `[ 0 [ + ] reduce ] sort-by` gives an inference branch error, citing that the quotation's effect is now `( x x x -- x x x )` instead of `( x -- x )`. the trouble is caused by the ellipses in `reduce`'s declared stack effect. similar issues arise with using `map` instead of `reduce`. so just use `call(`, i suppose.
 
 .run-time computed values
-
-TODO: investigate how the `flushable` word affects run-time computability
-
-TODO: figure this one out:
-
-----------------------------------------------------------------------------------------
-[ "SPY" now-utc 1 months time- 1 day aggregates [ t>> [ YYYY-MM-DD ] with-string-writer ] map! DAILIES_DIR directory-files diff ] dip ! somehow, putting this after the computed quotation then doing swap each gives a "cannot call run-time computed value" error, but using dip does not?!
-[ in? ] curry [ first-unsafe ] prepose [ filter! [ first-unsafe ] sort-by ] curry
-[ "/v2/aggs/grouped/locale/us/market/stocks/" prepend f (poly) "results" of
-  [ [ "T" of ] [ f json>c ] bi 2array ] map! ] prepose
-[ [ DAILIES_DIR prepend-path [ fwobj ] curry ] bi when* ] curry
-----------------------------------------------------------------------------------------
 
 first check that you did `prepose`, not `prepend`. `prepend` is for sequences in general; `prepose` is considered specially for quotations by the compiler. `prepose` works where `prepend` gives the "cannot apply such-and-such to run time computed values" error.
 
@@ -672,46 +552,18 @@ MACRO: reduce-collect ( ..a seq q: ( ..a e -- ..a ?collectval ) -- ..a collectio
 
 moving on, i found that `SOMESET get-global >hash-set [ in? ] curry map-filter` gave the "cannot apply 'call' to a run-time computed value" error but removing `>hash-set` solved that error.
 
-.conditional combinator problems (this section probably needs revision or elimination)
+=== handling conditionality
 
-* `p q when`: consume `p` and if `p` then `call` `q` else `drop` `q`. `p` is not passed to `q`; `when*` makes that so.
-  ** `unless` is the same but with `p not`
-  ** though these cannot leave new data on the stack, they can affect the stack by mutating things on the stack e.g. `dup empty? [ dup 0 swap [ 1 + ] change-nth ] unless` to increment the 1st element of a non-empty sequence.
-* `unless*` has a different stack effect than the others; the others leave the stack how it was; they can be used only for programs of effect ( -- ) or ( x -- ) for `when*`. `unless*` leaves a new datum atop the stack. this is because it retains [dups] the predicate before checking its falsity. `a [ b ] unless*` means `a b or` but short-circuiting and accepts quotations rather than single values, or, more generally, `a b unless*` means `a b or` where `b` has effect `( -- x )` i.e. produces a value e.g. `x y [ dup ] unless*` leaves `x y` if `y` else `x x`
+* primarily use the primitvies `if`, `if*` (akin to `maybe` with `<|>` in haskell), `and`, & `or`. i promise that if you use these alone, you'll go far.
+* some words should be used just for their brevity e.g. `if-empty`, and `when` (though only 2 characters shorter than its definition, `[ ] if`). "unless" is longer than its definition, so...unless you think it's more readable, i see no use for it.
+  ** `when*` is simple & useful, too; it's just `when` but its quotation acts on the predicate also. 
+* forget other conditionality combinators such as `or?`, `unless*`, `smart-if*`, `?if`, etc; you don't need them and they're difficult to understand.
 
-there's nothing like ``Maybe``'s `fmap`. should there be? `: fmapMaybe ( ..a q: ( ..a x -- x ) -- y ) [ f ] if* ; inline`. would you ever want to preserve the `f`? certainly you may want to perform a mutation on the top of the stack if it's not `f`, and you may want to do that for multiple conditions. however, given that `fmap` leaves `f` if it starts with `f`, then one mutation occurring implies that the rest must also occur, and so they all can be combined into one mutation. therefore a more sensible word is one that operates on the stack unless its top is `f`, in which case the `f` is dropped: `[ ] if*`. however, this fails because the branches have different stack effects. `[ f ] if*` balances them, and is the definition of `fmapMaybe`. so it appears that we should have `fmapMaybe`. one must now choose between `fmapMaybe` and `when` depending on the stack effect. it'd be nice to have one word that drops a `f` value and one that consumes it and any other things. for example, the fact that we must code like the following is annoying:
+in general, avoid combinators except `keep`. use combinators only for their brevity; never try to _reason_ in terms of combinators. by their very definitons, they're specific templates for specific, though often-common, circumstances. they aren't primitives, so they can't accomodate all circumstances.
 
-[source,factor]
-----
-[ . ] [ ] if*
-[ . . ] [ drop ] if*
-[ . . . ] [ drop drop ] if*
-----
-
-`smart-if*` does not help because it relies on the predicate consuming a certain number of values, which cannot be done if the quotation has effect `( ..a x -- ? )`; in that case youd need `ndup` & `ndrop`, but in that case you may as well use `if` directly.
-
-* stack effect problem for `when` (or `unless`): strange as it seems from looking at `when`'s definition, `P T when` is not equal to `P T [ drop ] if`. to understand: note, in `when`'s definition, that `[ drop ]` and `[ call ]` operate on the same object: `when`'s quotation! `when*` is the conveniently terser word for `t [ drop ] if*`. however, i've found myself most commonly doing `dup pred true [ drop ] if`, which discards the predicate but retains the subject of the predicate for use in the true clause. there is no builtin combinator for that. consider the following versions of it:
-
-[source,factor]
-----
-:: with-if ( pred: ( x -- ? ) true-prog def -- y ) dup pred call true-prog [ drop def ] if ; inline
-
-! PROG                                  ! OUTVAL     ! STYLE
-4 dup even? [ 1 swap / ] [ drop 10 ] if ! 80         ! if pred(x) then f(x) else defval
-1 [ even? ] [ 1 swap / ] 10 with-if     ! 10         ! shortened by 4 characters by with-if
-0 [ even? ] [ 1 swap / ] [ 4 * ] tri ?  ! error: 1/0 ! tri & ?
-4 dup even? [ 1 swap / ] [ 4 * ] if     ! 1/4        ! plain ol' if
-----
-
-* `smart-if*` can sometimes be useful
-* the plain form is best. they're all pretty much the same number of characters, and the plain form makes specifying a default value as easy as a false-branch function, including `[ drop ]`. whatever the case, the false branch's stack effect must equal the true's.
-* the `tri` form executes both branches, which can be problematic, and is inefficient
-* `with-if` saves us from typing `dup` & `drop` each once, but definitely returns a constant in the false case rather than a function on, and isn't appreciably shorter
-* even `?if` uses the condition's output, not the subject of the condition, in the true branch.
-
-i guess that the expected idiom for `if*`, `when*`, `?if`, &c is `keep and` e.g. `obj [ pred ] keep and [ fn ] [ else ] if*`. that's not really better than `obj dup pred [ fn ] [ drop else ] if`. they're equivalent, though, so if you find yourself using `if*` &c, then use `keep and`.
-
-the lesson is that `if` is the primitive selective evaluator and is perfectly simple and free, and it's not worth the time trying to find something nicer than plain `if`, except some obvious ones like `if-empty`. i'm unsure for stack machines, and especially specifically for factor's implementation, how `bi ?`'s speed compares with `if`'s. i imagine that naïve code is optimized well in any stack language, and especially in factor, which is designed to be fast. i'm not worrying about the efficiency of things like an `if` inside a `loop`. if you're so concerned about speed, and you can put a fixed size to your data, then use `math.vectors`, whose ops are auto-optimized to simd when possible; or use a gpu or array primitives implemented in factor.
+* whereas `if*` applies a computation to a non-false or uses an alternative value, `keep and` is like guards in haskell: if tests the value; if it passes the test, then it remains, else it becomes false.
+* `myDefaultValue or` is a common idiom
+* remember that "if p then a else b" is equivalent to `p and a or b". 
 
 == design
 
@@ -3458,25 +3310,11 @@ as it's currently written, `read-websocket-loop` executes the quotation that you
 
 == websocket (server)
 
-TODO
+TODO: implement
 
 == filesystem
 
 vocab `io.files.info` provides word `file-info` which returns a `file-info-tuple` tuple (yes, it has "tuple" in the name) which has attributes: `type`, `size`, `permissions`, `created`, `modified`, and `accessed`, and `size-on-disk`, if that's ever useful.
-
-== stack machines and assembly
-
-in assembly we've registers, the stack, the heap, and opcodes. execution is sequential and may involve jumps. a common issue in assembly is that computations are defined in terms of other computations, or that computations are large enough that we must use a register for multiple unrelated purposes; and to do so without losing information, we must put that information into a buffer for recall later. for example, for x86, i may `add` which sets `eax`, and i may want to use that value later and still add some other values; i must store the result of the first add somewhere. i may put it on the stack, or in an otherwise unused register, such as a general purpose one. opcodes take their args from certain registers. functions, as invoked by `call`, take their arguments from the stack. unlike the registers, each of which may store a value, the stack may store any number of values (up to hw, ofc.) registers are powerful (because of their speed as used by opcodes) but stacks are flexible.
-
-this issue of needing the registers for multiple unrelated purposes while preserving data is the same as scoping, generally a concern of programming languages. the stack is the solution in assembly. stack machines use the stack for all computations so that we don't have to decide when to use the stack or not. the stack does not have scoping concerns, but instead requires the stack to be manipulated to keep its elements in proper order.
-
-a stack program is homoiconic: a sequence of _words_ pushed to the stack. words are un/quoted (sequences of) symbols, or datum literals. words are executed when encountered, or pushed as literals if quoted. 
-
-subprograms are common in stack machines. quoted programs are just literal word sequences but may be evaluated later.
-
-the de facto elegant turing-complete set of 6 stack primitives is: `eval`, `quote`; `drop`, `dup`; `compose`, `swap`. there is the basis {`cake`,`k`}, which i haven't looked at; see von thun's paper.
-
-concatenativity: stack programs—the sequence (composition) of subprograms (word sequences)—is associative; a program can be split at arbitrary points, and each of those subprograms evaluated, then their results replacing where they were in the original sequence, and that sequence, when evaluated, produces one result. this enables parallelism exceedingly well!
 
 == statistics
 
