@@ -2,9 +2,13 @@
 notes by nicholas chandoke. currently undergoing significant revision.
 :toc:
 
-== is factor right for you?
+== factor vs other programming languages / code systems
 
-it's the best lang that i've yet found. it's very simple, terse, readable, refactorable, and comes with tons of functionality. its only fault is that it's bulky: its codebase, its executable size, and the executable sizes of compiled factor programs, and that it's infeasably slow to use as an interpreted language. factor, k—and maybe somehow, picolisp—are the only languages that i'd consider using. sadly, rare are code systems that are all of functional, simple, unconstrained, terse (syntax), and efficient. maybe dyalog apl or some commercial forths satisfy all these, but they're proprietary, which goes against "unconstrained."
+probably. factor is best b/c it minimizes any stuff that gets between you and code, and maximizes access & ease of understanding the code; and its code is simple, so there's minimal distance between the abstract thought and its code representation, and code is easy to refactor, which makes it a highly-interactive system, which means detailed, easy, immediate feedback and hackabilty. i've found it so for small scripts to polished, robust, end-user products. it's like coding elisp in emacs (rather, a usable variant of it, e.g. spacemacs) except that it doesn't malfunction each time that you sneeze or that a glacier falls off the antarctic ice shelf. oh, and without the parentheses.
+
+so yeah, very simple, terse, readable, efficient, refactorable, hackable, and comes with tons of functionality. in fact, its only shortcoming is that the executable sizes of compiled factor programs can be absurdly large (hundreds of megabytes) (also the factor binary itself (including the required `factor.image` file) is large: 130M). i would say that it being infeasably slow to use as an interpreted language is a shortcoming, but it is not: factor code is best compiled, which produces a fast executable that anyone can run. the need to compile it (and the compilation time needed) are no more undesirable than needing to have an end-user install a program just to run yours.
+
+this being said, if you want to use factor for many small personal scripts, then...perhaps i'll fork picolisp then make it concatenative and have good error messages and debugging tools or something ^^; i know of no good scripting language. dyalog apl is prorietary, so bleh. j & k have sucky os interfaces. ...maybe link:https://dt.plumbing/user-guide/lang/stdlib.html[dt]? i don't remember why i disliked it...i'll need to reconsider.
 
 pro's:
 
@@ -13,17 +17,29 @@ pro's:
   ** definitions marked as "private" are just as accessable as any non-private ones; only they're _marked_ as private, as a _hint_—not a _restriction_—to the programmer
 * mostly all the capability anyone could ask for
 * dead-simple semantics. b/c syntax is homoiconic, syntax is also dead-simple.
-  ** all tokens are whitespace-separated so selecting arbitrary subprograms is easy. quoted programs (a generalization of lambdas and macros [lisp]) are delimited by brakets, still, which makes program organization clear. this is more significant than you may think; in practice, the code being so clean is quite less stressful than using an applicative language. there is a latent burden that creeps in and that applicative programmers become used to. the required whitespace does make the code less terse, but easier to read and less stressful. i prefer it over j. i desire some mix of the two, but i haven't imagined how that could work.
   ** no order of operations, so no need for parentheses. the only nested expressions are quoted programs or nested data structure literals.
-* concatenative: refactorable, easy to debug b/c vm's design is simple: just 2 stacks and a sequence of hashtables (the sequence corresponding to scope nesting).
+* syntax: all tokens are whitespace-separated so considering arbitrary subprograms is easy. this is more significant than you may think; in practice, the code being so clean is quite less stressful than using an applicative language. there is a latent burden that creeps in and that applicative programmers become used to. the required whitespace does make the code less terse, but easier to read and less stressful. i prefer it over apls.
+* concatenative (TODO: make this word a link to description of concatenativity in a more-general code note document. lookin' for those notes i took that one day on a walk): refactorable, easy to debug b/c vm's design is simple: just 2 stacks and a sequence of hashtables (the sequence corresponding to scope nesting).
+  ** incremental
+  ** stack
+    *** [actually a property of any linear computation sequence, so applies to ] the one global state. such a simple model is a degenerative case of functional vs stateful/mutative.
+    *** no scope—just position in the stack.
+    *** multi-valued functions act exactly as single-valued ones. all programs are function composition.
+      **** factor also supports both lexically and dynamically scoped symbols
 * awesome debugger ("the walker")
 * documentation & source code browsing system: navigable, thorough, offline, and dynamically populated, like in emacs: loading your code automatically makes it searchable in the browser just like any other library.
 * dynamic. though lisp-like macros which evaluate before runtime are available, factor effectively uses quote & eval _instead_ of lambdas. therefore there's rarely a need for macros in factor. factor is so data-oriented that a programmer practically never desires custom syntaxes. indeed, factor macros are more _needed_ when manipulating a number of stack data where the number is given at parse time.
-* get as close or far from your target hardware as you want. you can inline assembly, use simd, or not. ffi for python or c/dlls is easy, too.
+* virtual sequences make sequence operations efficient
+* code as high-level or low-level as you like. factor feels truly unique, like a blend of c and scheme. idk, maybe that's what common lisp is like.
+  ** code is compiled on the fly into highly optimized single static assignment (SSA IR). such a simple lang supports extreme optimization.
+    *** use `optimized.` (instead of `.`) to see optimization details of some code
+* ffi can call c, fortran, obj-c, python, js, lua, and c++. ffi is dead-simple (or, for c, about as close to that as possible): just declare the library and its function, then you can use it like normal factor function. apparently c ffi is complicated, so there are probably many edge cases for when c ffi is difficult regardless of the ffi system.
+* actually does oop so well that i usually forget that it's oopy. feels like nothing more than adts & type classes, but with shorter syntax.
+* as in haskell, functions are semantically (and thus syntactically) the same as data literals i.e. there would be no distinct `mySymbol` and `mySymbol()` like there would be in python, or `mySymbol` vs `(mySymbol)` in lisps.
 
 con's:
 
-* comes with libraries that you likely won't use; factor's codebase is bulky, so: cloning takes a bit longer, maybe building factor takes longer, and the codebase isn't as easy to navigate nor grok. for example, it comes with a _magic: the gathering_ vocab!
+* factor's codebase has libraries that you likely won't use, and very many functions, so discerning which are truly useful is difficult, and might significantly lengthen factor's build time.
 * can be hard to find libraries needed for the graphical install
 * building factor takes a lot of cpu time
 * using factor to compile factor programs can take a bit of time
@@ -33,6 +49,37 @@ con's:
 * in development, factor is like lisp: it's dynamic, hackable, flexible, and gives immediate feedback in its version of a repl, called the "listener". however, to run factor, you practically must compile your program; factor is far too slow to use as an interpreted language (namely b/c loading vocabs takes a long time)
 
 fixed-arity fns isn't an issue. it's just as well to have a function by one name that takes k args and another that takes n args, as it is to have one fn that takes either k or n args. you can simply name your factor fns by the prolog convention e.g. a word called `log/1` that takes 1 argument and does the natural log, and `log/2` which accepts a base. it's still shorter than having parenthesis everywhere for all fn calls.
+
+=== vs picolisp
+
+factor & pil are equally simple, dynamic, and support purity & mutation, and both are extremely efficient (though i've yet to contest them). lambdas are equally easy in both. factor's concatenativity and pil's applicativity is the big difference, and is what makes factor the clear winner. though lists are stacks and pil has `apply`, pil (or other lisps) can be a stack machine only if every function can choose how many data to take from the stack. some take a certain number (either common words, which is a fixed positive integer, or combinators, whose arities are ultimately functions of their parameter functions' arities) or are, like `loop`, variable (these classes can be phrased as static vs dynamic arities.) if we can calculate/get that, then a simple fexpr would make pil into a stack lang. yet factor's parameterization of words is slightly nicer than pil's parameterization of data: pil asymmetrically considers nullary functions & data differently, which means that parameterizing a datum is non-trivial.
+
+NOTE: i've yet to consider pil's universal dynamic binding, and how it can use various kinds of symbols
+
+* factor's state is usually stored on the stack, and pil's in appropriate variables. however, both can use stacks or variables easily.
+* both langs use loop primitives instead of manual recursion (usually)
+* pil hasn't generics; instead, _everything_ is lists.
+* macros are first-class in both factor and pil
+
+factor is easier to learn than pil, namely because:
+
+* pil's documentation isn't nearly as easy to navigate
+* the pil repl isn't nearly as helpful as factor's
+* pil is far more likely to unceremoniously produce unexpected behavior instead of halting with a helpful error, as factor usually does.
+* pil's handling of symbols (internal, transient, &c) is uncommon and complex or not obvious, nor easily explained, at least by the official docs
+
+.pil's advantages over factor
+
+* seems smaller (comes with fewer primitives)
+* is simpler; again, _everything_ is only lists & `eval`, and the vm is amazingly simple & efficient
+* not more dynamic, but dynamic & hacky behaviors are easier in pil
+* is terser (variable names)
+
+it doesn't really matter which of factor or pil you use, but factor is easier to learn and use, comes with a large set of libraries, runs on both windows and *nix, and supports writing guis, so you should probably use factor, though pico is probably worth learning.
+
+=== implementation
+
+* the `tools.deploy` vocab allows compiling to native executables which neither require factor to be installed on host nor expose source code!
 
 .REVISION
 
@@ -565,66 +612,7 @@ in general, avoid combinators except `keep`. use combinators only for their brev
 * `myDefaultValue or` is a common idiom
 * remember that "if p then a else b" is equivalent to `p and a or b". 
 
-== design
-
-=== language
-
-"language?" ...data with an evaluation model is more like it.
-
-* designed for metaprogrammability, simplicity, and flexibility/dynamicism, like elisp but better because the facilities available to the user are the exact same as are used to implement the factor language
-* all factor metaprogramming is compile-time
-* constrained design is generally bad (viz here using the stack—a quite constrained data structure). however, constraint is useful when we don't need to go outside the constraints anyway. in this way factor provides a simple model (stack) for the common cases but allows a simple arg-binding syntax for when that's more elegant.
-  ** the stack's simplicity allows extremely efficient program optimization and execution strategies
-  ** effectively implicit composition of arbitrary-arity functions
-  ** stack based (also called _concatenative_) languages are usually superior to functional ones. factor's support for globals, mutable objects, and local binds make factor clearly a good language, certainly strictly better than any functional language
-  ** there are no "void" words. ( ..a ... -- ..a ) is effectively void, but the "return value" is still `..a`, thus allowing composition of functions like `[ 1 + ] dup print [ 2/ ]`. no applicative language supports putting `print` or any other void function in a composition chain!
-* not an array lang. lang features plurality. however, at least it uses virtual sequences, i.e. functions from index to element—especially _cords_, vseqs that appear as a concatenation but have O(1) concat
-* stack
-  ** neither functional nor stateful
-  ** no scope. just position in the stack.
-* macros are quotation monomorphisms, and their parameters must "known as constants" by the stack checker, though their values may be only dynamically known
-  ** `inline` combinators may be partially applied to macros in one context so long as its parameters are appropriately compile-time e.g. `: length-case ( seq cases -- ) over length swap case ; inline`
-* _functors_ are like macros but more powerful...? idk how they differ.
-* lang is a core written in factor with a vm written in c++. factor began on the jvm, being used as a scripting lang for a larger java program.
-* ffi can call c, fortran, and obj-c, and additional libs enable ffi w/js, lua, and c++. the ffi is easy (at least for c): just type the function e.g. `FUNCTION: SSL* SSL_new ( SSL_CTX* ctx ) ;`
-* supports binary data well, viz as byte arrays, structs (`classes.struct` vocab), simd vectors, and _specialized arrays_ (unboxed/packed) and tuple arrays. this should make factor a good lang for hacking binaries. by the optimizing compiler, operations on tehse binary structures can approach c's speed. un/boxing is implicit.
-* the _destructors_ lib supports deterministic cleanup/finalization of {see §5) external resources (e.g. file handle, network connection). this contrasts the usual gc model.
-* syntax macros are called _parsing words_. these words are evaluated at parse time and may perform arbitrary computations. the `syntax` vocabulary contains many.
-* extremely good [syntax] macros!
-  ** backslash is needed to refer to a fn without execution e.g. `\ drop` pushes `drop`; `drop` alone would execute it. `\ drop` is different from `[ drop ]`. idk why, aside from being slightly briefer, one would use `\` instead of quotation.
-  ** quotations are sequences
-  ** the following are is implemented as factor macros, so they're expanded before runtime: named local binds, square and curly brackets, quote marks, and colon for fndefs. (meta-circular)
-* like lisp, factor is a data-based lang. however, factor [stack] is simple enough that we can easily examine the whole program state in the debugger!
-  ** debugging steps through ops and shows the stack at each op
-* can pass around macros like any other data; unlike in lisp, macros are first-class data. truly all of factor's linguistic objects are symmetrical about computability; they're all data & transforms thereof.
-* good, _flexible_ (somewhat implicit by generic words, mixin classes & instances) oop support (like cl)
-  ** this is how we do ad-hoc relations. this makes encoding ad-hoc polymorphism easy, so we can have haskell-like concision but without haskell's restrictions.
-    *** programs are often prolog-like: small facts (except here fns) that are used like a vocabulary; more code re-use than big, specialized chunks of code.
-* code is compiled on the fly into highly optimized single static assignment (SSA IR). such a simple lang supports extreme optimization.
-  ** use `optimized.` (instead of `.`) to see optimization details of some code
-* extremely good ide: simple, debugger/stepper, inline docs (all local), quickly see everywhere that any word is used, and any word's definition
-* uses arrays with pseudo-indexing (i->a) e.g. `<reversed>`
-* comes with memoization library
-* λ syntax is `::`
-* good unicode support
-* supports dynamic scope!
-* postfix; read left to right, e.g. `2 even? [ "OK" ] [ "Cosmic rays detected" ] if` means `2|2 ? "OK" : "Cosmic ..."`
-  ** pipeline [unix cmd pipe] design
-* like haskell, data are just nullary functions
-  ** all syntactic objects are simply called _words_
-* excepting row-polymorphic combinators and macros, all words must accept and output a fixed number of words
-* latently typed w/dynamic checking, static stack effect checking. duck typed oop/generics.
-* modules are called _vocabularies_
-  ** for maximum flexibility & interactivity, even private identifiers are usable in greater contexts if explicitly referenced
-  ** like java public classes, each vocabulary must be defined in a file of the same name
-* factor is oop, but all methods are generic; no class "owns" methods; instead, everything is interfaces [java] / purely abstract classes [c++] / type classes [haskell] and instances. instance lookup is dynamic.
-* identifiers can be marked as private, but this is a suggestion, not enforced linguistically
-
-=== implementation
-
-* the `tools.deploy` vocab allows compiling to native executables which neither require factor to be installed on host nor expose source code!
-
-=== continuations
+== continuations
 
 a _continuation_ is a point of execution. for example, in `3 4 5`, the continuation begins before 3. after 3 is evaluated, then the continuation is at 4. the continuation is the cursor in a program (a sequence of words); it's a position to execute from. see <<_factor/j_bilateral_translation_table>> for a simple example.
 
@@ -719,33 +707,6 @@ NOTE: _ciif_ := "code in input field"
 .concurrency & parallelism
 
 see vocab `threads`, vocabs tagged with `concurrency`. parallelism words are in `concurrency.combinators`.
-
-=== vs picolisp
-
-factor & pil are equally simple, dynamic, and support purity & mutation, and both are extremely efficient (though i've yet to contest them). lambdas are equally easy in both. factor's concatenativity and pil's applicativity is the big difference, and is what makes factor the clear winner. though lists are stacks and pil has `apply`, pil (or other lisps) can be a stack machine only if every function can choose how many data to take from the stack. some take a certain number (either common words, which is a fixed positive integer, or combinators, whose arities are ultimately functions of their parameter functions' arities) or are, like `loop`, variable (these classes can be phrased as static vs dynamic arities.) if we can calculate/get that, then a simple fexpr would make pil into a stack lang. yet factor's parameterization of words is slightly nicer than pil's parameterization of data: pil asymmetrically considers nullary functions & data differently, which means that parameterizing a datum is non-trivial.
-
-NOTE: i've yet to consider pil's universal dynamic binding, and how it can use various kinds of symbols
-
-* factor's state is usually stored on the stack, and pil's in appropriate variables. however, both can use stacks or variables easily.
-* both langs use loop primitives instead of manual recursion (usually)
-* pil hasn't generics; instead, _everything_ is lists.
-* macros are first-class in both factor and pil
-
-factor is easier to learn than pil, namely because:
-
-* pil's documentation isn't nearly as easy to navigate
-* the pil repl isn't nearly as helpful as factor's
-* pil is far more likely to unceremoniously produce unexpected behavior instead of halting with a helpful error, as factor usually does.
-* pil's handling of symbols (internal, transient, &c) is uncommon and complex or not obvious, nor easily explained, at least by the official docs
-
-.pil's advantages over factor
-
-* seems smaller (comes with fewer primitives)
-* is simpler; again, _everything_ is only lists & `eval`, and the vm is amazingly simple & efficient
-* not more dynamic, but dynamic & hacky behaviors are easier in pil
-* is terser (variable names)
-
-it doesn't really matter which of factor or pil you use, but factor is easier to learn and use, comes with a large set of libraries, runs on both windows and *nix, and supports writing guis, so you should probably use factor, though pico is probably worth learning.
 
 == special builtins
 
@@ -3765,6 +3726,8 @@ think of the integer argument passed to `seek-absolute` as "skip this number of 
 
 ==== inspecting binary files
 
+this isn't a factor-specific section, but it accomodates the other sections on working with binary in factor. it's good to have external tools to double-check your binary files whenever you doubt that your factor code is working correctly.
+
 i prefer link:https://justine.lol/braille/[bd aka braille dump] for hex dumping (until i write my own), or hexyl if i want to print only part of a file. like other hex dumpers, bd.com _squeezes_ its output: it puts asterisks to abbreviate series of duplicate lines (most commonly when each of the lines is all zeroes). maybe this started with hexdump(1) or something earlier. in this example, i write 201 bytes of zeroes.
 
 .`"newfile.txt" binary [ 200 seek-absolute seek-output B{ 0 } write ] with-file-writer`
@@ -3830,10 +3793,10 @@ to be a client, sending messages to a server:
 
 you'll notice that i used neither of the `io.sockets` vocab's `send` nor `receive`. i have no idea what they are used for.
 
-== PRs
+== feature ideas to implement personally, or perhaps with...your?...collaboration, dear reader~? :3c
 
+* make a `SECRET:` syntax that is like `CONSTANT:` for strings but stores the value in a way that obscures it from the standard `strings(1)` unix program. ideally, when the vm starts, it'll overwrite the encoded string by its decoded version of the same length, keeping the same location in memory. if it's non-cryptographic (or effectively so by using a fixed symmetric cipher key) then i suppose that a dedicated hacker might decompile the factor binary, then identify the places where strings would be stored even if as a seq of obscured bytes, then just reverse the encoding algorithm,...but that would take some effort, and, at least currently and somewhat sadly, with factor being unpopular, unlikely someone would take time to release such a hack.
 * http2 client. link:https://www.rfc-editor.org/rfc/rfc9113.html[http/2] is a version of http that particularly handles what in http/1.1 is keep-alive connections. keep-alive is just plan sensible for rest api calls, especially for frequent calls.
-* make db.tuples' `do-each-tuple` row-polymorphic, thus enabling things like indexing rows
 * when loading a program, list all errors (namely unfound symbol errors) at once, and suggest import locations as the listener does, outputting an import string like when you try _running_ a program. my example is loading `.factor-rc`; i was told many times that a word was "found in the current vocabulary search path."
 * make a word to reload `.factor-rc` without restarting the listener (actually, i think that i encountered this already but forgot what the word is called)
 
@@ -3888,6 +3851,14 @@ then, in the new window: evaluate `S_ get-global set-datastack`.
 
 TODO: merge with cameron's note about bad stack inference
 
+given this dated definition for `read-websocket-loop`:
+
+[source,factor]
+----------------------------------------------------------
+: read-websocket-loop ( quot: ( obj opcode -- loop? ) -- )
+    '[ read-websocket _ dip and ] loop ; inline
+----------------------------------------------------------
+
 `com-stack-effect` gives `( -- )` for this expression:
 
 [source,factor]
@@ -3913,7 +3884,7 @@ Input                              Expected                Got
 
 poking around reveals that the "Got" effect is just the declared/expected `( x x -- x )` except that the in & out both have number of dummy elements extra.
 
-if i replace `[ drop ] each` by `drop` (which have the same stack effect, `( x -- )` then it works:
+if i replace `[ drop ] each` by `drop` which have the same stack effect, `( x -- )`, then it works:
 
 [source,factor]
 -----------------------------------------
@@ -3939,4 +3910,8 @@ correctly is said to have effect `( -- x x x )`. and indeed, if i redefine `read
 f t 6 ! 3 dummy elements [ drop [ drop ] each t ] rwsl ! com-stack-effect gives ( -- x x x )
 --------------------------------------------------------------------------------------------
 
-i think that the lesson here is to always define combinators to have their most general supported stack effects, so that you can use other row-polymorphic combinators inside of them without getting incorrect stack check errors.
+always specify combinators stack effects as their most general, row-polymorphic forms (if applicable), so that you can use other row-polymorphic combinators inside of them without getting incorrect stack check errors. note that the stack check errors can occur even when it's insensible; namely i guess that that case is when one of the combinators is recursive & inline.
+
+another stack checking defect:
+
+`"" <get-request> [ drop ] do-http-request [ ] with-stream` works fine but if we re-express by changing argument order and using swap—`[ ] "" <get-request> [ drop ] do-http-request swap with-stream`—then we get the "call/run-time computed" error. if we use `dip` instead of `swap`, then there's no error: `[ ] [ "" <get-request> [ drop ] do-http-request ] dip with-stream`. this seems to be due to the combination of `do-http-request` being inline recursive and with-stream using continuations (and being inline). i guess this b/c `"" ascii [ ] "" <get-request> [ drop ] do-http-request swap with-file-writer` (or file reader) errors but `"" ascii [ ] "" <get-request> [ drop ] do-http-request swap 0 "" with-variable` works, and the difference between `with-input-stream` and `with-variable` is `with-disposal`, which uses continuation words.
