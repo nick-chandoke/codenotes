@@ -1843,8 +1843,7 @@ see "HTTP client post data" in the factor docs. summary: may be `f`, bytes are s
 
 on that note, a few things about the `post-data` tuple:
 
-* `content-encoding` iirc isn't used
-* TODO: `data` might be the POST body, and `params` the url params
+* `content-encoding` isn't used yet anywhere in the factor codebase. do not confuse with the `content-encoding` slot of a `response` object, which is used in many places.
 * despite what docs say, `data` (of `post-data`) cannot be a string in that it cannot be a `string` object; however, encoded bytes works e.g. `"mystring" ascii encode "text/text" f post-data boa`. again, note that `content-encoding` is `f`. it could be `123456` and no one would care. `data` is the post *body*.
 
 the request's `data` slot may be any object that implements generic word `>post-data`.
@@ -1854,8 +1853,6 @@ the request's `data` slot may be any object that implements generic word `>post-
 TIP: words like `append-path` *do not return pathnames!* they return strings, which can be converted to `pathname` objects by the word `<pathname>`.
 
 if `params` is not `f` then it is sent alone, regardless of `data`.
-
-NOTE: the docs currently list `post-data` as a slot of but it's actually just `data`
 
 however, apparently bytes just don't work, and strings are not url-encoded. see the following example.
 
@@ -1954,7 +1951,7 @@ before i show an example server, i'll explain the ways that you can code _respon
   .. i haven't yet imagined a scenario in which you'd want to define your own class and implementation. if you do, then know that `call-responder*`'s `path` argument is given as an array e.g. path "/hi/there" is given as `{ "hi" "there" }`.
 . the `response` class has obvious fields. `body` is the interesting part, since it's the actual payload. `body` may be a string, or anything else that implements `call-template*` (of the `html-templates` vocab).
   .. the implementing class that i find most interesting is `callable`. its effect must be `( -- )` because the callable should print the response to `output-stream`. this is my preferred form, since it's so general and has smaller code and runtime complexities/costs than collecting into, then outputting, a string.
-. despite the names, `<html-content>` and `<text-content>` both accept a body, which is directly put into the `response` object, which means that the body may be an object of any class that implements `call-template*`.
+. `<html-content>` & `<text-content>` both accept a body, which is directly put into the `response` object, which means that the body may be an object of any class that implements `call-template*`.
 . the global `development?` variable controls whether to respond with either a trace or a code 500 if your responder has an error
 
 .example: server with pages at /headers and /query
