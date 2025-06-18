@@ -1,0 +1,1179 @@
+= universal coding
+nicholas chandoke
+:toc:
+
+a simple system of coding anything that can be efficiently implemented in any code system from risc assembly to swift. it's basically a wip offshoot discussion about how to most-nearly use my ideal, up-and-coming language/paradigm in any given language.
+
+this is the culmunation of all my coding study:
+
+. starting out with coding by learning java
+. opening my eyes to how short, simple, and flexible programs could be with lua
+. seeking a mathematical language, and finding it in haskell, where i learned to structure my code and got away from syntax
+. freeing myself from types by moving to lisps [practically, scheme]
+. freeing myself further by discarding both syntax forms and _actual syntax_ (code which is not treated like data), instead coding as much by data alone as possible, using the fewest functions and variables as possible—namely using only lists for all relations
+  .. apls were ideal for data-centric, little-syntax computing, which i later discarded in favor of concatenative languages [practically, factor] which are similar but offer very many advantages
+. developing "just use lists" into its core form: digitstrings (sequence of numbers)
+
+NOTE: i prefer the term _string_ over _sequence_ because it's more specific and thus more literal; when you allocate a block of memory, it's continuous like a string, whereas (sub)sequence generalizes string to be non-contiguous, except that if you consider the subsequence alone, without regard to its origin string/sequence, then it's just a string i.e. a contiguous sequence. formally i define a string as an indexed set all of whose indices are successors to another, except the leading element.
+
+now my study is about maximizing tacitity:
+
+[options="header"]
+| tacit info   | as (nearly) found in
+| args         | factor, dyalog apl, j, bqn
+| control flow | prolog
+
+i'm high on the exploitation of numbers and their common uses as indices, but i've yet to complete my studies on strings and solving for programs given constraints, especially when those constrains are non-numerical as in term-rewriting systems which form groups (namely that they have inverse operations and thus, like sometimes in prolog, support reversing computation).
+
+== relational and array factor
+
+basically:
+
+. reason in terms of arrays if data are related by indices
+. reason in terms of general relations if data are related not by indices
+
+data types of choice:
+
+* interval sets. used for BETWEEN and specific varieties `<` & `=`.
+* string buffers (`SBUF""`). they're mutable, growable strings.
+* vectors. they're mutable, growable arrays.
+* (avl) (generally binary search) trees. they're mutable, ordered, assocs, supporting O(1) min & max, fast range selection, and O(nlog(n)) element selection.
+  ** linked assocs wrap an assoc and support retrieval of items in insertion order via `>alist`.
+* hash maps. use when your keys' order isn't concerned. they've O(1) amoratized lookup—quite a bit better than trees.
+* shaped arrays? i suppose they should be used for (multi)linear algebra, but if such computations are many or large, then they should be done through a more efficient mechanism such as a gpu-compatible library anyway, likely accessed in factor via c ffi.
+  ** the `tensors` vocab is like shaped arrays but their only multidimensional operations are multiplication & transposition; elemntwise elementary & modular arithmetic, and of course reshaping, are also supported. why to use them: well, they use simd.... the `tensors.demos.private` vocab defines `gradient-descent`, `compute-cost`, and `normalize`, so i suppose that tensors are especially suited or intended for neural network training; contrast with shaped arrays which are like j/apl arrays.
+* the following are special purpose or _especially_ efficient—like "embedded systems" efficient. this being said, idk if factor itself (vm+core+basis) is efficient enough to be used in embedded systems anyway.
+  ** arrays
+  ** bit & byte arrays. used to pass binary data between factor & c.
+  ** _specialized arrays_ & vectors. these can be passed to c fns that take `float*`, `int[<n>]`, &c
+    *** the following c types are supported: `char` `float` `int` `long` `uchar` `uint` `uintptr_t` `void*`
+    *** the memory of these (and perhaps other types) can be manually managed. see _manual memory management_ in the factor docs.
+  ** strings? are they more efficient than string buffers? probably, since they're more limited in functionality.
+
+TODO: see:
+* sets.extras
+* splitting.extras
+* stream.extras
+* string-server
+
+``assocs.extras``'s `assoc-merge` is akin to an outer join. i think that joins generally rely on two things: 1. keeping indexes (sorted data); 2. longest common subsequence algorithms, such as the following:
+
+[source,factor]
+----
+! map through keys, replacing each by itself or itself with its corresponding value.
+! KV's key sequence must be a subsequence of K, and all the keys should be unique.
+! can be generalized easily from lookup to join.
+:: lookup-map ( {k} {{k,v}} kname vname -- {{k}/{k,v}} )
+  {k} {{k,v}} swap 0 -rot
+  [ [ [ ?nth ] 2keep rot ] dip swap ! i KV k ?kv
+    [ [ first = ] 2keep rot
+      [ nip kname vname 2array swap H{ } zip-as [ 1 + ] 2dip ]
+      [ drop kname associate ]
+      if ]
+    [ kname associate ] if*
+  ] { } map-as 2nip ;
+----
+
+otherwise, if we're using hash tables, then inner join can be done like the following wip does: mapping through the shorter of two assocs, looking-up in the other assoc:
+
+[source,factor]
+----
+H{ { "cat" 6 } { "bat" 7 } }
+H{ { "merry" 10 } { "bat" 12 } }
+[ + ] ! operation to apply to keys found of both assocs
+[ 2dup [ assoc-size ] bi@ < ] dip ! iterate over the shorter of the two assocs, setting the longer assoc
+pick swap [ change-at ] 2curry
+[ [ at ] curry ] dip
+[ [ drop ] if* ] curry compose [ over ] prepose 
+assoc-each
+----
+
+again, though, join is really a harmful idea. it's an arbitrary & over-constraining thought. just intersect predicates. remember what a join is: a relation of keys, and another of values. here i use _keys_ to refer to the attributes entailed in the join, and the _values_ to be all other attributes of the entailed relations. the key relation relates rows. the value is an (output) expression per row. in either a logical or reductive model, you should have an efficient join algorithm. keeping data _indexed_ is essential for that. an index is a sorted map i.e. a tree such as avl, b+,  b, t, from sorted value to rowid/pk. then you access the property vectors at that id. after indexes, _ranges_ are essential for efficient lookup/join. if you want to intersect relation on an attribute, then, well, ok there it's best to iterate through the shorter of the two since it's only those values, if it's an inner join. for an outer join you're considering everything, so you must iterate over both anyway. left or right joins explicitly mandate over which to iterate.
+
+TODO: compare π-calculus, dataflow, relational, and frp models. compare erlang to what the `concurrency.messaging` vocab enables.
+
+.important concepts
+. a _relation_ [rel alg] is a set of relations [mathematics] of attributes with a single attribute designated as a _primary key_, thus transitively associating attributes by primary key equality (in sql parlance, "joining the attributes `using` the primary key"). note: to discuss a single _attribute_, is to discuss a set of values, indexed by primary key. i'll use _element_ to refer to an element of a set. for example, in the standand mathematical expression `f(x,y)`, `x` & `y` are attributes but refer to their entire domains. an example of transient relation of multiple values via primary key equality: `{first:{{ 0 "chuck" } { 1 "richard" } { 2 "joe" }} last:{{ 0 "moore" } { 1 "stallman" } { 2 "armstrong" }}}` relates first & last names; the primary key is the first field, an integer. note that arrays can be generalized to associative lists whose keys are indices (natural numbers), or strings, or any value. because relations are more general than arrays—1. natural number indexes to anything permitting order or equality, and 2. that removing elements from an attribute dictionary does not affect the attribute's relation to other attributes which it does for arrays—they're better, excepting where arrays' constraints can be exploited for speed e.g. in calculations done by a gpu. hash maps require only uniqueness. search trees require ordering. storing attributes separately reduces complexity. for example, we can filter one attribute without caring about other attributes;  after one attribute is filtered, it's (inner-) joined with another `using` the primary key. even if we delete an attribute, there's no problem: then it just won't be in the join; or if we're doing an outer join, then its value will be `null`. for example, if i delete first name at primary key `1` ("joe") then when i join first & last names using primary key, i'll still get `0 "chuck" "moore"; 1 "richard" "stallman"`. another variety of deletion is to merely set the attribute value to `null`. to delete a whole row, just delete the primary key value for a given row, since without it, the relation cannot exist. (a relational system would delete all values if the programmer instructed to delete the primary key for a given element.)
+  .. inner join is intersection. outer join is "corresponding element or empty." they're very closely related conceptually and mathematically. indeed, interesction is just an optimized version of `[ at ] curry map sift` whereas left/right join is `[ at ] curry map`. idk how to do an efficient full join. fortunately full join is rarely needed; i've still not encountered a use for it.
+  .. all relations have primary keys. if not defined, then they assume one that corresponds to the insertion order.
+  .. this model sees that the smallest unit of information in the relational model is a 2-attribute relation from primary key to value. being that that's a unit, what makes attributes of one relation and not another is that attributes join on a common primary key. however! this is no different from joining on a primary key from another table: there's no difference between joining attributes of a common relation on primary key vs joining across relations on primary key vs joining an attribute's INDEX with a primary key! it's all just intersecting maps keys, regardless of whether the map is to or from any relation's primary key! thus this model of having only attributes eliminates having multiple tables! instead of relations [tables], we've only attributes! in other words, we only join attributes, not tables! granted, one can have an attribute of multiple values, and this can be stored as a separate attribute again joined on primary key, but if you're always going to join them together anyway, then you may as well store them in a common structure i.e. as a single value in a k/v avl tree store. this assumes that you'll naturally also always run predicates (and create indexes) on the whole collection of associated values.
+  .. TODO: is there a reason to identify 1:1 maps (relations) differently from 1:n maps (joins)? i can express a 1:1 relation `{ { a x } { b x } }` as a 1:n relation: `{ a b } join { x }`. even 1:n generalizes to m:n, which is obviously the most general.
+. because we're using trees, queries on ranges are efficient. they're quite common, too. we can create pseudo-attributes, called _indexes_ that are treemaps from values to primary keys. for example, i can create an index on the first letter of the first name, so that when i search for things where the first letter of the first name is between 'a' & 'f', that can be done in O(nlog(n)) time.
+  .. because attributes are commonly joined on primary key, they're treemaps from primary key to value. if the attribute(s) are part of a query filter, then we must index them for O(nlog(n)) lookup.
+  .. `a=v` is the same as a∈[v,v]
+  .. `a<v` is the same as a∈(-inf,v)
+  .. b/c we're using trees, we have O(1) min & max
+  .. b/c values are not generally unique, indexes are maps from value to many primary keys.
+
+so the basic procedure is to:
+
+. define attribute treemaps. you may define them as part of a relation e.g. `H{ { "attr1" ~treemap~ } { "attr2" ~treemap~ } ... }`, or you may define them by `CONSTANT:` and name them e.g. `rel1.attr` and `rel2.attr` if the same attribute appears in multiple relations where its primary keys are not equal in both relations. rather than specify relations in code, it's freeer to specify them in documentation then have them implicitly belong to common relation(s) in code simply by their treemap keys (which we may call "primary keys") correspond.
+. you may define a word to make defining indexes more convenient. the word would take the name of an attribute then create a new name: that attribute's name with an "IDX" suffix. of course if you're naming attributes in an assoc as strings then just `"IDX" suffix`; if you're using words, then do that followed by `create-word-in` then create an index of the attribute then associate it with the identifier by putting it with the identifier in an assoc, or use `define-constant`.
+. to find attributes corresponding to a given value:
+  .. if you don't have the primary key(s), then look them up in this attribute's v->k assoc.
+  .. with the primary key, look up desired attributes at the primary key in their k->v assocs.
+. to join on a predicate of a value `a` (which may be an attribute or a function thereof) in one table with the value `b` of another, where the predicate is always "greater or less than or equal to, or within a range":
+  .. if a treemap from `a` to `b` or `b` to `a` exists:
+    ... note that `A join B on a <R> b` is equivalent to `A join B on b <R-complement> a`, so if i want to join on e.g. `a<b` then i can rephrase taht as `b>=a` then efficiently compute the join by the method in codeblock _join<_ below.
+      .... looking-up in trees is not the only variety of lookup that we may desire! lookup in a suffix array is also useful and similar to `a<b`. indeed, we may also define our own types and `<=>` for them.
+  .. if any of the values is not indexed:
+
+.join<
+[source,factor]
+----
+! A join B on a<b
+: join< ( A B -- joined ) ! precond: A is ordered ascending. each of A & B is `values` of their pk->val assocs
+  dupd [ I. ] [ swap tail-slice ] bi-curry compose map zip ; inline
+----
+
+test:
+
+----
+{ 10 12 34 56 87 500 }
+{ 2 3 6 10 12 18 24 36 42 83 91 102 }
+join< [ >array ] map-values .
+----
+
+prints
+
+----
+{
+    { 10 { 10 12 18 24 36 42 83 91 102 } }
+    { 12 { 12 18 24 36 42 83 91 102 } }
+    { 34 { 36 42 83 91 102 } }
+    { 56 { 83 91 102 } }
+    { 87 { 91 102 } }
+    { 500 { } }
+}
+----
+
+although factor comes with binary search, `insert-nth` uses `append` and so copies part of the input vector which is slow. avl trees are good (though apparently not as good as t-trees) for in-memory operations. besides, the `trees` functionality is excellent and perfectly suited to queries. it is of course advisable to use sqlite if you need persistence, multi-agency, acid, or if you must work with a large amount of data at once. see the `db.tuples` vocab.
+
+deletion of an element: remove it from all attributes of a relation, and amend entailed indexes to not have the primary key in its cod. if removing the pk from the cod results in an empty cod, then delete that whole assoc entry.
+
+whereas sql uses `expr as name`, prolog uses `name is expr(bind1,bind2,...)`. i want prolog's style b/c it's terser and more natural.
+
+.contextual programming
+
+each quoted program in factor has a context. the same is true for lexical closures in applicative languages. data should be coupled with subprograms in which they're used i.e. data should be in the smallest scope possible. this is especially true in stack langs b/c more data in scope means more data on the stack which means more to manage, because unlike in applicative languages, variables are related to each other by position; in a stack, they're sequential access, not direct access. usually sequential access is worse design than direct access; however, reductionist programs tend to be expressions of subprograms and variants of programs, which stacks express well (assuming that quoted programs can be put on the stack as data, and support currying, composition, and evaluation).
+
+i should really exploit the quotation-traversal pattern e.g. `map` is a traversal parameterized by a quotation. the quotation evaluates within a particular _context_. contexts are easy in factor because everything in factor is contextual; the context is the stack. however, factor also has dynamically scoped variables: `SYMBOL:` & `get`. in sql "map" is called "select" and within the selection clause's context, the "from" clause's table's set of attribute names are bound [available]. you refer to all rows by referring to attributes independent of "set vs element". contextual programming is decomplected and thus tacit; the expression is separated from the context. this is a beautiful way to code. what's more: a good programming model enables us to freely intersect and union contexts. when contexts are sets/predicates [prolog] of attributes then union & intersection are obviously defined. when the context is a stack, then union & intersection don't obviously/immediately apply. one variety of union for a stack context is `bi` (generally `cleave`) which unions two (or any number of) programs and evaluates them in order, leaving their outputs in that order on the stack. there is no escaping the essential ordered nature of the stack. it can be helpful or not depending on how we want to relate subprograms.
+
+''''
+
+* `x(I,X),y(I,Y),R=X+Y` in prolog is `select X+Y from x join y using (I)` in sql. the prolog one is terser, more uniform, and more obvious. rather than doing a cartesian product per se, i `reduce` the sequence of predicates into one predicate then evaluate it by looking through indexes! furthermore, prolog derives a set from a predicate, which makes virtual sets natural! outer joins mean, "for a given set, find corresponding elements of other sets." outer joins are naturally expressed by the predicate: `r1(I,A),r2(I,B);r1(I,A),r2(NULL)`. sql expresses "there's no corresponding element" (usually seen as `at` returning `f`) as "the corresponding element is null," which is fine; and if a corresponding element is null then implicitly its primary key is null, and all of the attributes at the null primary key are defaults, commonly all null.
+
+.relational system design from first principles
+
+all things can be virtualized by having, rather than data structure lookups necessarily, virtual things by quotations. quotations can wrap lookups in data structures if arbitrary data must be stored. virtual structures can be represented by tuples or assocs or w/e, and we may define functions on these e.g. OR, AND, IMPLIES. (implication is a good way to refine (shrink) the computation or search space! for example, i may specify the property "monotonic" of a thing to remove a `sort` which would otherwise be present, since it's generally needed.) where sql breaks-down is in answering the question, "why define operations on data structures, given that we're already specifying queries, and given that our data obey arbitrary relations? why not just specify the relations and derive symbols' values?" indeed, this shows that sql, despite being "declarative" is not _as_ declarative as prolog! programs are generally specified by _facts_, not data! to be constrained by some arbitrary set of primitives (namely sql's, vs the necessary set of primitives * & +) is downright, straight-up foolishness. sql's separation of data & expressions is unnecessary asymmetry, too.
+
+what makes my methods more sql-like than prolog like is that i'm using lookup rather than unification. this being said, if i have double lookup and inverses, then i can navigate queries however i like, making it effectively prolog, right? prolog's model is inherently flat: each time that all of n symbols have values, they're all returned, and that's one point in an n-dimensional subspace.
+
+in prolog the following 3 ops are done simultaneously: 1. identify data; 2. intersect; 3. identify corresponding element e.g. mapping a thing to a computation thereof; this being said, we'd not express this as a virtual sequence, but instead as a function in the selection expression e.g. just having attribute `x` then doing `select x,x+2 from ...` which in factor will be `[ dup 2 + ]` or something; i'ven't decided how to structure computations relative to selected data points. in rel(A,B,C),r2(B,D), f(B,D,A,R) we see that 1. all points in (A,B,C) share a primary key value—a constraint implied by them being of a common relation; 2. B's value in rel equals B's value in r2 i.e. we select all b∈B in rel then, for each unique b, lookup b and its corresponding D in r2; 3. D is implied by B, since D was otherwise free.
+
+this is expressed as: `{ A B C } rel { B D } r2 AND [ B D A f ]`. NOTICE THAT LOOKING-UP IN A TABLE AND EVOKING A FN ARE THE SAME! i can say that r2 is a relation, or that r2(B,D) is a fn that looks-up B and returns D. i can just as well say that D looks-up B, since in both cases i'm identifying a subset of each then intersecting them by primary key: if i select both unconstrained, then that's the intersection of all primary keys with itself which returns itself, and if i predicate only one then i'm intersecting all pks with that subset's, which returns the subset, and finally if i select subsets of both then obviously their intersection will not contain more elements than either. *so all i'm doing is* selecting subsets of each attribute then intersecting them on primary key, then applying an operation to them altogether and/or in part (since i'll want to incrementally build-up programs e.g. by selecting D then currying it with [ + ]), then group and sort (efficient b/c each group is still associated with the primary keys, and we can use the primary keys to index into the INDEX to sort by). then rel(A,B,C). i can start from the left, identify an A, then corresponding B, then corresponding C, and this is fine; this is the cartesian product. i can skip any A, B, or C that fail a predicate. also, when i identify A, B, and C, then i identify the corresponding D, too! the thing is that i want efficiency, so i'll be using sets and intersection then, as needed, lookup. i'll be using treesets rather than just rules. i'll still use rules that have bodies, too!
+
+* see "sorting by multiple keys" in factor docs.
+* remember that i can use `rename-at` to do like sql's `as`.
+
+to join on anything other than primary key, just evaluate expressions then determine which primary keys they map to, then join.
+
+`where` predicates are generally of the form "expr in range." where `expr` is an attribute or a function of it or multiple; either way, `expr` can be INDEXed *for a given single relation.* of course the primary keys are not related among separate relations! *this is the defining property of a "relation": that each of the attributes can be joined on primary key.* anyway, an INDEX is just a map from a value to a key. or, heck—how about a range of values to a key? sure! indeed, the sqlite docs describe exactly how INDEXes work: an INDEX on a value is a sorted map from value to primary key; after the primary key is looked-up, it's used to index into the table, where it's a primary key. it acknowledges that it must do two binary searches per query, but that that's still much faster than a single full table scan.
+
+given two INDEXes, we can look-up values then get the corresponding primary keys, then intersect those sets, then look those up in the original table! we see intersect here as being the implementation of AND: `indexedattr1=val1 AND indexedattr2=val2`. the way that multi-column INDEXes are done by sqlite: the leftmost column is the INDEX's primary key and the rest of the rows are used to "break ties" i.e. to resolve collisions [hash tables]. if we were using sequences then a multi-attribute INDEX would be sorted by those keys in order. since we're using hash tables, though...<TODO>. a multi-attribue INDEX just does one binary search in order to get the table's primary key! also, a multi-attribute INDEX(a,b,c,...) can be used to find any prefixes, too—here the sets {a,b} and {a}. a _covering index_ is one that features all of a relation's attributes; the relation itself is never consulted. thus the covering index achieves by sorting attributes and thus being able to binary search, at least by its primary key.
+
+NOTE: for a multidimensional INDEX, sqlite stores each attribute in sorted order! thus if we've INDEX(a,b) and we `select x from t where a=v order by b` then no sorting is done; we simply retrieve the matching `a`. note that this works only if we use equality, not an interval, since ``b``'s are sorted only per `a`. consider sub-map of INDEX(person,exes) `HS{ "kat" { "billy" "tom" "zack" } "kathryn" { "larry" "moe" } }`; i must sort if i `select exes from t where person between "kat" and "kathryn"`.
+
+NOTE: each group of intersected predicates, for which an INDEX exists, corresponds to a contiguous chunk of that index. the number of disjoint predicates is the number of lookups into the corresponding INDEXes.
+
+NOTE: always take each INDEX as far as it can go; for every `where` clause that you ultimately use in your program, at least one of its entailed attributes should be INDEXed! sqlite's "Query Planning" documentation's example has an index on (fruit,state), but the query has `order by fruit,price`; thus for each group of fruit, a sort is done. this is better than one sort of it all. for an index on (a,b,c), `where a=val and b in (1,2,3)`, index by a then linear filter on `b`.
+
+NOTE: i won't rewrite x=a OR x=b ... into x in (a,b). i expect the programmer to always try using x∈range or x∈set patterns whenever possible. i can use factor's type system (`range?`) to check if i can use ranges rather than merely sets. note that ranges are sets, too, so i cannot use `set?`; i must use `range?`. not yet sure if `interval-sets` can be useful.
+
+btw, it's possible to optimize on matching against sequences by storing them in a trie.
+
+a good engine should not support both AND and intersect as separate operations! this being said, we'd still want a result expression list b/c we don't want all symbols to be in the output expression. in prolog this is done by either ignoring symbols or by eliding them from the head of a clause, or putting them in the head arguments e.g. `reverse(A,B)` has B as the output and any effectively local symbol (e.g. an `X is f(A,B)`) inside the body is not in the head, and so not "returned." the sql query `select a,b,c from t where a>b and not c` would be `t(A,B,C),A>B,not(C)` in prolog. a _view_ (a named query) of it `create view v(a,b,c) as select [...]` would be `v(A,B,C):-[...]` in prolog. this shows queries being like goals which generalize lambdas; therefore sql queries are lambdas. they don't generalize lambdas because they're reductions: the sql symbols are mere symbols of data literals rather than logical, computable, semantic objects. to name the lambda and thus make it a "function" is to make a query a view or rule.
+
+each OR'd predicate's attribute set is ordered then looked-up in an INDEX (ordered to canonicalize it in order to find a corresponding index e.g. `b=4 and a=5` would look-up in the `(a,b)` INDEX) then folded into a union of primary keys, then those primary keys are looked-up in the relation: basically `[ _find-INDEX ] [ union! ] map-reduce _lookup-in-relation` which is applied to the sequence of things OR'd together e.g. the expression `b=4 or a=5 and c<4 or c<2 and name.first CHAR: t =` becomes an input to the reduction: `{ { b a } { c } { name.first } }`. we'd define the `name.first` INDEX as an assoc whose keys are `[name first]`, which is really to add it as an attribute (still by the name `name.first`) to whichever relation contains `name`. obviously not everything will be INDEXed, but this is how we INDEX general expressions. *if any unINDEXed attribute is used in a predicate that is OR'd with others, then we must do a full table scan, and thus we'll do it only once, ignoring any indexing!* we use INDEXes only if _all_ OR'd parts are INDEXed! again, in summary: `"OR" split harvest [ [ CHAR: space = ] trim ] map dup [ hasINDEX ] all? [ <somehow do like get each then union all but more efficient> ] [ fullTableScan ] if lookupInRelation`. earlier i said "basically"; that basic version does not handle: 1. what if no INDEX exists for the predicate (yes, manual table lookup, but...well, ok, actually that's pretty simple: we just do _corresponding-INDEX relation or` except delayed until the end, i think, to reduce redundant computation. oh, also that doesn't work b/c INDEXes go from value to primary keys whereas applying a predicate to a relation is a linear search); 2. converting all predicates to ranges e.g. `b<a` becomes `b a [-inf,b)`; 3. actually reifying predicate's attributes to values in order to look-up in the INDEX. also, if `a` is INDEXed but `f(a)` isn't, and `f(a)` is in a predicate, then we straight-up don't have an INDEX for it, and must do a full table scan, UNLESS we know that `f(a)` is monotonic!
+
+all INDEXed filter clauses are ultimately of intervals [a,b]; to lookup by interval, just use `subtree>alist[]` of the `trees` vocab!
+
+i can use INDEXes to sort, too, since the avl tree is already sorted, i can traverse it in order, where the traversal is merely getting `at` a primary key from the relation. this is O(nlog(n)), just like sorting is, except that it does not require extra storage like sorting does. it also allows us to use the same logic for filtered selection and indexing. sorting by a covering index is O(n). most importantly, we should recognize that sorting & filtering are basically the same mechanism!
+
+NOTE: `filter` is predication. whereas sql filters a definite set into a subset, prolog derives, from a predicate, a corresponding set. we see this in that, for sets, `intersect` is defined in terms of `filter`, and that for ``bit-set``s, it's defined in terms of `bitand`, and that in prolog, it's the `,` operator. TODO: does using prolog's scheme save me from organizing my data and needing to reason about queries?
+
+filter each attribute by predicates of only that variable; then, for predicates of two variables, join them then apply predicate. then for those of three vars ...
+
+left or right outer join: `: right ( ? ) flip left ; inline`. left: ∀a∈A ∃ b⊆B. rather than flattening into a table, i can associate with each `a` b as a data structure, and i can partition those `b` into those that match or not a join predicate. there's never a need to flatten, though i may do that as a final step. simply: when i refer to `b` as an attribute name, it really refers to `a.b` ∀a. these "compressed relations" are more appropriate than their expanded counterparts. what technically will happen is that b will be suffixed into a, and a separate table...will be made to store the primary keys of a & b? and then as i join more relations in, that table will be updated to have `(a,b,c,...)` where each of `b,c,...` is a collection but `a`, being the first of a left join, is an atom? a full join would see `a` also being a collection. maybe i should just use `<product-sequence>`. considerations: efficiency, elegance, naturality.
+
+* assocs are binary; they support natural joins. note that even two single-attribute tables support inner join with no predicate, or with a predicate other than `=`. `=` is mootly supported in this case. otherwise even full outer joins can be used. joins express cartesian product, which we know commonly as A×B, but literally it's `{f(a,b)|a∈A,b∈B,p(a,b)}`, generalized to `{f(a,...)|a...∈A...,p(a,...)}`.
+* generall relations are graphs. of one attribute, we may relate elements to others; and we may relate any elements of any attribute to any elements of any other attributes. these relations are *predicates*, since predicates generalize equality. assocs are sets of keys & values related 1:1.
+* in sql a single-attribute table is hardly useful. it cannot be joined! such joins are no more useful than filtering then unioning.
+
+parts of a sql query in order of evaluation:
+
+. join (relate attributes). remember that there are many varieties: [natural] [outer:<left|right|full>]|inner. natural affects output column space and mandates no `on` nor `using`. inner is default and includes only rows that meet the predicate. outer has nulls where the predicate fails.
+  .. outer joins are equivalent to inner joins if no predicate is given.
+  .. `on` is most general. `using (a,b,...)` is `on t1.a=t2.a and t1.b=t2.b AND ...` but omits (t2.a,t2.b,...) from the attribute union (append). `natural` is `using` whose argument attribute set is the intersection of tables' attribute sets.
+  .. left & right (outer) join feature NULL for t1's or t2's attributes respectively where the join predicate fails. the count of left or right join is the count of the left or right table respectively. the full join is the left join union right join.
+  .. natural/using join determines the returned attribute set. *for a common predicate: inner join ⊆ left or right join ⊆ outer join ⊆ unpredicated join (cartesian product)* in fact, this is clearly seen by: *outer join = left join U right join; and inner join = left join ∩ right join; and outer join = cartesian product ∩ predicate.* cartesian product is the natural relation of symbols: `[X,Y]` implicitly has a `∀X,Y` qualification. predicated join is `[X,Y],p(X,Y)`. outer joins, however, are `[X,Y],p(X,Y);p(X,NULL);p(NULL,Y)`. `;` can be read as "union" or "or", or generally, "coproduct," denoted by `+`, which is my preferred notation. note that `[X,Y]` is sensible only if intersected with `p(X,Y)`. in order to produce a full set of `[X,Y]` prolog would need to run through all X and Y, which is exactly what cartesian product is!
+. select indices (elements)
+. `where` (filter rows/records/points)
+. `group by`. the expressions used in a group by clause are the same as those available to the result expression list.
+  .. selection expression is verb argument to `/.`
+  .. `having` (filter result of `u/.`) `having` is a fn, of a group's transient table, that returns a boolean, such as `count(*)>n` or "x is a member"
+    ... if a non-aggregate predicate is given to `having`, which is always silly afaict, then it's evaluated for an arbitrary row of the group. yet, if multiple non-aggregate expressions are supplied, then they're all applied to the SAME arbitrary row! this is sql always maintaining relations!
+. `order by`. if `group by` was used, then it's sensible only to order by a selected expression or series thereof; else one may sort by <selected expressions> union <table's attributes>.
+  .. each `order by` clause may be followed by <asc|desc> [nulls <first|last>]
+. `limit` & `offset` (subsequence selection aka _slicing_)
+. `distinct` (nub, called ~. in j and `members` in factor) is applied.
+
+NOTE: there's no mechanism to filter aggregates' results,
+
+the philosophy of join: relate a row to other rows. it's nothing more than a 1:n relation. it relates each item to a set/seq. _join_ is _correspondence_. it's equivalent to "query a table with this row." we can do joins nicely in factor by using this "sequential subquery" method: we query, get n results, then pass them to an n-ary query (quotation), and so on. the `A(a,b,c) join X(x)` pattern is quite silly. we do it in sql b/c there it's sql's only way to bring a datum into scope. in any other language we'd just have `x` in our scope. the scope may be static or dynamic. in sql's array model, all expressions ultimately are of constants or a `bind-parameter` (attribute name.)
+
+btw, see "Intervals" in the factor docs.
+
+`-1/0.` is negative infinity. `1/0.` is positive infinity. these are builtin but searching the documentation for them returns no results. sadly `1/0.` is not an integer, so `1/0. <iota>` does not work. i suppose that that's just as well; i'd rather use predicates (generators defined of predicates) instead of virtual sequences anyway. generators are available in the `generators` vocabulary. remember that generators are also called "coroutines." also exception handling is done by continuations. see `recover`. generators are more useful than virtual sequences only if we need infinite sets or we want to terminate computation early! it's true that predicates produce values, but we do not need generators for that! we can use `produce` instead!
+
+prolog analogue:
+
+. a query is intersecting & unioning relations (namely implications) of predicates. predicates are, at query time, called "goals." predicates are named tuples. each tuple slot contains a constant or *symbol* (*not* _variable_). b/c we use symbols instead of variables, there is no scoping. there is no dereferencing. symbols must be sufficiently instantiated ("constrained"?). example goals: `people(NAME,AGE,_,_,ADDR)`, `X#>4` which is syntactic sugar for `#>(X,4).
+. predicates
+
+`join` is obviously the part that needs the most optimization! this is natural in that it's the 1st part of the query, which means that it's where the most data are. thereafter each step of the query does not increase the amount of concerned data. an obvious optimization is to not produce the full cartesian product literally; collect only rows matching the join predicate. this being said, an inner join predicate can be intersected with the `where` predicate; they may as well be together virtual. (b/c the join clause may use `using` or `natural` to change the column space, which `where` cannot do. therefore `join` has its own clause. also outer joins have behavior that `where` cannot describe. only unnatural inner join's predicate is redundant with `where`. the implementation should merge their predicates together.) ultimately each row is computed independently so we may as well `_estimate <vector>  q reduce` with a quotation that does the result expression list & filter simultaneously. if there's a group by present then we associate each produced output with a group id. `from` has one table argument. `join` creates a virtual sequence.
+
+another JOIN optimization: all PARTS of an inner join / where predicate (parts being a tree of binary compositions of OR and AND) that each concern only one attribute, can be filtered in parallel then their results may be joined together.
+
+cartesian product is itself commutative, but it's not practically commutative depending on its associated predicate. consider `A join B on b>a`. the cardinality of the cardprod is `A(*&#)B`. if B is a treeset or some kind of array that maintains sort order then we can identify, for a given `a`, the related `b` easily: it's TODO: `<slice>`. again we see the pattern of the "main" variable being atop the stack. we want (all) `b` for a _given_ `a`; b/c `a` is given, it tops the stack. well, i say that, but we could do `a B with map`. anyway, this is getting into _query planning_, which is always just an optimization. the fact is that query planning is useful and requires queries to be considered as semantic objects. semantic objects generally enable optimization & _reasoning_ (e.g. rewriting) rather than mere _evaluation_. as prolog demonstrates, it's best to give predicates (intersections) to shrink (b/c ∩ never returns a larger set than either of its arguments) the consideration space. the more details in our query / fact system, the more efficient our traversals. what about indexes?—an _efficient lookup_ device, which is what we precisely want.
+
+NOTE: fast lookups mandate that the key is unique! looking up slices/ranges of values mandates use of ordered keys (e.g. treeset not hashset.)
+
+using nested select statements may or may not directly represent a programmer's query. ah! i see: with more than 2 joins, b/c join filters, the query planner must order joins. the question is how optimization is different if we store data only in attribute vectors, and tables are virtual collections thereof. for example, multi-attribute indexes don't make sense in this model, so comparing a 4-element `index` against a `where` clause's longest prefix of expressions that match the index is insensible. the question is: does the freedom given by decoupling data ultimately make things more or less efficient? that things are generally decoupled means that we must specify couplings, but these are independent and implicit; is that efficiency greater than the one where the data are coupled which makes working more freely with them harder—and is it so much harder that we can't make it as efficient as the freeer solution?
+
+using factor enables us easy optimization by tacitity itself. for example, `e1 between e2 and e3` is identical to `e1 >= e2 and e1 <= e3` in factor b/c we'd define `between` as syntactic sugar for `and` over `>=` & `<=`: `: between ( x a b -- ? ) [ >= ] [ <= ] bi-curry* bi bi and`.
+
+that's the 1st loop. we then apply any `having` predicate to each group, then apply aggregate fns, _then_ order? definitely limit & offset is last.
+
+i should be able to use dynamic variables and macros to easily mimic sql in factor. dynamic scope like `make` should do it, either. because namespaces are just assocs, any value can be the key. usually symbols are used. this being said, i'ven't been able to identify how to _use_ any non-symbol keys in namespaces.
+
+what should the select statement return? i suppose something called a "table"; the j-style (whether using locales or inverted tables) is a hash map with attribute name keys and vector values. in factor these would be so but values would be pointers. consider `with-variables` which shadows symbols' values within a quotation. one must still use `get` to get the symbols' values. `with-scope` is similar: it doesn't initialize symbols' values, but it makes setting them last only within the quotation. `change` is very useful. i'm doubtful that namespaces will be more helpful than just using a hashtable, especially since i can't seem to use non-symbol keys; all strings are available implicitly, vs symbols which must be declared.
+
+TODO: compare `namespaces` and `vocabularies`.
+
+NOTE: `CONSTANT: C V{ } 14 C push C .` shows that C has been updated. it's a constant pointer, but not constant value! this is a convenient way to make global attribute vectors!
+
+NOTE: `symbol` is a subclass of `word`.
+
+still i wonder about b+-trees being used by sqlite.
+
+a thought: maps map atoms to atoms. aggregates map sequences to atoms. (like sort, filter) map sequences to sequences. of course, this is probably of little consideration if we use only singletons, never atoms.
+
+.join example
+[source,factor]
+----
+SYMBOLS: names ages sexes ;
+V{ "tom" "bill" "harry" } names set
+V{ m f m } sexes set
+V{ 10 12 30 } ages set
+{ "tom" "bill" "harry" }
+H{ { "name" names } { "age" ages } }  ! relation 1
+H{ { "name" names } { "sex" sexes } } ! relation 2
+2dup [ keys ] bi@ diffs
+! TODO: finish
+----
+
+relations are sets of pointwise-related sequences or uid-related hashtables. should i allow relations to each have names like above? or should i see relations as sets of symbols?
+
+== j in factor
+
+the idea of this whole section is misguided. originally i wanted to know how well i could do j things in factor—the provided structures and operators thereover. it's a comparison of ergonomics and efficiency (of execution, refactoring, etc). both j [apls] and factor codes are terse, inline, and have inspectable definitions. they're both efficient and operate on few data structures, though obviously this is more enforced in j. factor's words are executed literally, which makes their efficiency explicit (contrast with j, which optimizes code greatly). factor's virtual sequences make efficient sequence operations.
+
+the main gain is, like lisp, that j is simple: one structure, many operations. however, unlike lisp, j's _particular_ capabilities & restrictions make it very suggestive:
+
+* at-most-binary functions
+* existence of built-in operators e.g. reverse, rotate, outfix, etc suggest their use rather than you writing some 
+* array, so many traversal functions that would need to be defined in lisp are tacit in j
+* advebs & conjunctions—especially the fork, for pointfree coding
+* no focus on syntax (no macros and no need for them)
+
+being an array language is less important than the focus on arrays. lisp is focused about one structure, which is good; however, what's bad is that that structure is linked lists, which are efficient only for few, simple traversals/operations, and thus, to make them efficient for other operations requires some thought (e.g. how to express a chess board by them). the need to structure lists is troublesome because the structure itself is tailored to some traversals, which means that it cannot well be tailored to multiple traversals nor be refactored for new ones. then there's the limited scope issue, e.g. needing to doubly-link a list, or retain a stack of visited nodes, simply to e.g. step back in a traversal. linked lists aren't indexed and so can't use the incredible power of natural numbers. anyway, i'm digressing. the fact of operations being "array" is merely a convenience, not really a new paradigm.
+
+* shaped arrays
+* virtual sequences:
+  ** `<shifted>` (`sequences.shifted` vocab)
+  ** `<clumps>`
+  ** `<groups>`
+  ** `<circular-clumps>`
+    *** also the `circular` & `sequences.rotated` vocabs exist, though idk what relative benefit they add if any
+  ** virtual cartesian products by the `sequences.product` vocab
+  ** `sequences.padded` vocab, for when you need to pad a sequence with some fixed length number of a given element
+  ** `sequences.cords` vocab—virtual append/concat
+  ** `sequences.inserters` vocab—useful for building upon extant seqs e.g. `{ 100 200 300 } [ 50 / ] V{ 16 32 } <appender> map-as` => `V{ 16 32 2 4 6 }`. this is totally a small optimization to save a traversal, like combining map & filter into `filter-map` or `map-filter`. and like how map & filter can be easily expressed by a fold (`each` in factor), so can this computation be easily expressed with common words: `V{ 16 32 } { 100 200 300 } over [ push ] curry [ 50 / ] prepose each`
+  ** `sequences.repeating` vocab
+  ** `sequences.snipped` vocab. whereas ``sequences``'s `snip-slice` splits a string at one index, `<snipped>` is the inverse of `<slice>`: it removes the slice! furthermore, the `snipped` tuple can be constructed instead of a starting index and length, and underlying sequence, of course. `<removed>` removes a single item from the underlying sequence.
+  ** `sequences.merged` & `sequences.interleaved` vocabs—dunno how they compare
+  ** `sequences.n-based` vocab: assoc from indices [a..] to input seq elts
+  ** `<zipped>` (`sequences.zipped` vocab)
+  ** `reversed` class
+  ** slices. see "subsequences and slices" in the factor docs.
+    *** `head-slice`
+  ** `<iota>`
+  ** define your own instances of the virtual sequence protocol, namely implementing `virtual@`. rotations would be defined easily as virtual sequences.
+  ** numeric ranges:
+    *** `[a..b]`, `[0..b)`, &al
+    *** `<range>`
+* `map` everywhere implicitly like j
+  ** make a version of rank/join (generally: relate)
+  ** singleton arrays, not atoms; this enables them to support map & rank
+* [each|map|reduce]-index are useful words!
+* vector operations
+* `strings.tables` vocab for printing arrays e.g. `sa{ { 0 2 3 4 } { -6 6547 1 0 } } [ number>string ] shaped-map shaped-array>array format-box.`.
+  ** `format-box` formats like j boxed arrays
+  ** `format-table` formats like j unboxed arrays
+
+=== cartesian product in factor and j
+
+arrays make the following regular, unpredicated maps easy: 1:1 (pointwise relation), 1:n, m:n (cartesian product). 1:n is m:n where `m=1`:
+
+[source,factor]
+----
+{ { 0 } { 1 2 3 } } [ ] product-map
+  0   { 1 2 3 } [ { } 2sequence ] with map
+= ! t
+----
+
+`cartesian-product`, like j, returns a cube; each row corresponds to:
+
+----
+   0 5 (,"_ _1"_1 _) 1 2 3
+0 1
+0 2
+0 3
+
+5 1
+5 2
+5 3
+
+! version more amenable to custom prettyprint: cartesian-product [ [ unparse ] map "\n" join ] map "\n\n" join "%s\n" printf
+! of course, a more proper solution is to implement the `prettyprinting` protocol
+{ 0 5 } { 1 2 3 } cartesian-product [ [ . ] each "\n" printf ] each
+{ 0 1 }
+{ 0 2 }
+{ 0 3 }
+
+{ 5 1 }
+{ 5 2 }
+{ 5 3 }
+
+{ 0 5 } { 1 2 3 } cartesian-product [ . ] each
+{ { 0 1 } { 0 2 } { 0 3 } }
+{ { 5 1 } { 5 2 } { 5 3 } }
+----
+
+=== retaining deep nesting
+
+[source,k]
+-------------------
+"cat"@(1 0 2;2 2 (0 0 0 1) 1)
+("act"
+ "tta")
+-------------------
+
+can be done in factor by using the `sequences.deep` vocab:
+
+[source,factor]
+---------------
+{ { 1 0 2 } { 2 2 1 } } "cat"
+'[ dup sequence? [ ] [ _ nth ] if ] deep-map
+---------------
+
+produces `{ { 97 99 116 } { 116 116 97 } }`.
+
+`deep-map` is a bit odd in that it uses `branch?` to decide whether to continue the traversal (namely based on whether it's given a sequence or not), but doesn't include sequences in its output. so the quotation preserves sequences as-is but otherwise indexes into "cat".
+
+=== factor/j bilateral translation table
+
+this section firstmost describes array operations in factor, and secondarily compares factor to j's array model and array models generally, discussing the shortcomings of the array model and how to nicely code solutions in factor that array models do not elegantly permit. i'm using j as the array language of comparison because it's the only array language that i've used. in retrospect k would have been a better choice at least for its linked list structure instead of boxed arrays. likely it's comparably fast, has a smaller executable, and less-complex source code. any other array language, such as apl, k, elymas, uiua, is just as fine a substitute for j.
+
+NOTE: to be efficient, rather than calling multiple `map`'s (or other traversal) in sequence, you'd compose their  argument quotations then call the traversal once.
+
+.symmetric traversals and array shape (metadata)
+
+an _array_ is a map from indices to individual elements. each operation in this section concerns either the array's metadata (namely shape) or element values i.e. it concerns the relation between index and value, or relation among indices, or relation between indices and natural numbers.
+
+arrays symmetry—what enables them to support array operations—is that considering an array is to consider its elements individually—without relation to each other. arguably reshaping an array changes the elements' relation, but such relation is _implied_ by the shape, but not mandated. for example, a (2 3) array may be said to be rows, but also columns, or even diagonals. multiple considerations are possible, but none is enforced.
+
+clumps, prefixes, &c can be interpreted as reshaping or traversals. this demonstrates that shape & traversal are the same, since shape only changes how arrays are traversed, since the collection of elements remains the same.
+
+whereas j uses indices, factor uses slices. they're effectively equivalent. `subseq*` (`sequences.extras`) enables slicing by negative indices (but uses `subseq` instead of `<slice>` to make the output sequence, so it's not virtual).
+
+[options="header"]
+|======================================================================================
+| factor                                                   | j
+| `shaped-shaped-binary-op`                                | dyadic verbs
+| `shape`                                                  | `$ y`
+| `length`                                                 | `#y`
+| `reshape`                                                | `x $ y`
+| the `circular` or `sequences.rotated` vocabularies^[3]^  | `x\|.y`
+| the `sequences.shifted` vocabulary                       | `x\|.!.f y`
+| `<clumps>`^[1]^                                          | `x u\ y`, x>0
+| `<groups>`^[1]^                                          | `x u\ y`, x<0
+| `<prefixes>`^[2]^                                        | `u\y`
+| `<suffixes>`^[2]^                                        | `u\.y`
+| `reverse`                                                | `\|.y`
+| `flip`                                                   | `\|:y`
+| `sort`, `inv-sort`, `sort-strings`                       | `/:~`, `\:~`
+| `sort-by`                                                | `x/:y`
+| `set-nth`, `map`                                         | `x m} y`
+| `q filter`                                               | `(#~q)y`
+| `cartesian-map`, `2nested-map` (`sequences.extras`)      | `x u/y`
+| `v?`                                                     | `}y`
+|======================================================================================
+
+.subsequences/elements
+
+most general to least general: `split-indices`, `subseq-index`, `find`, `member?`.
+
+[options="header"]
+|========================================================================================================
+| factor                                                                         | j
+| `split-indices`, `snip-slice`, `cut-when` (`sequences.extras`), `cut[-slice]`  | `x u;.±<1\|2> y`
+| `subseq-index`, suffix arrays, `start-all` (`sequences.extras`)                | `E.`
+| `q find`                                                                       | <idk j anymore so w/e>
+| `member?`                                                                      | `e.`
+| `nths`, `nth`                                                                  | `{`
+| `[ index ] keep length or`                                                     | `x i. y`
+| `[ <reversed> ] dip [ index ] keep length or`                                  | `x i: y`
+| #x≥2: `natural-search`; else see _§using the stack well_                       | `x I. y`
+| `<groups>`, `<clumps>`, `delete-slice`                                         | `x u\.y`
+| `all-subseqs`                                                                  | ???
+|========================================================================================================
+
+.asymmetric traversals
+
+these relate elements.
+
+[options="header"]
+|======================================================================================
+| factor                                                   | j
+| `reduce`                                                 | `u/y`
+| `generators` vocab, or solution below                    | `F:.` with `Z:`
+| `collect-by` (of the `assocs` vocab)                     | `x u/. y`
+|======================================================================================
+
+.particular traversals
+
+these traversals do not occur often, and illustrate functions' "black box" / "lack of fusion" deficiency. these traversals are simple conceptually, and are _almost_ implementated by common primitives such as `map`, `find`, `filter`, but must nonetheless be coded manually. an example of such a traversal is `map-filter`, which is obviously a fusion of `map`-then-`filter`, but must be coded separately simply to have one pass instead of two.
+
+many of these traversals are in factor's `sequences.extras` vocab:
+
+* `change-nths` reveals a bit of how to use `each` as a primitive for custom traversals: `[ change-nth ] 2curry each`.
+* `collapse` replaces each <substr all of whose elements match a predicate> by its head
+  ** `compact` is the same but also removes the substrs leading or trailing the input seq
+* `deduplicate` replaces all /a+/ subseqs by /a/, like unix coreutil `uniq(1)`
+* `drop-while`
+* `exchange-subseq`
+* `extract!`: the inverse of `reject!`: retain subseq of elts matching a predicate
+* `find-all`: `filter` but retains the associated indices
+* `find-pred`: (a -> b) -> (b -> Bool) -> Maybe (b,a,Index)
+* `map-find` is in `sequences`. it applies a computation to each element; if its result is non-falsy, then it, along with its input, are returned e.g. `{ 4 6 5 2 } [ [ 1 + even? ] keep 2 * and ] map-find` returns `10 5`. it's convenient when the computation is expensive or cannot be run twice. for referentially transparent computations, `q map-find` is equivalent to `q find swap q [ ] if`
+* `interleaved`
+* `longest-subseq`
+* `loop>sequence` (like k's collecting "while")
+* `map-concat`
+* `map-from` &al words starting with `map-`
+* `mismatch` (part of `sequences`, not `sequences.extras`)
+* `zip-longest`: zip, padding the shorter seq
+* i don't know of a word that of type `[a] -> (a -> b) -> Map a b`, but that's pretty easily defined: `: f ( seq q: ( x -- v k ) -- ht ) over length <hashtable> [ [ set-at ] curry compose each ] keep ; inline`
+
+.custom traversals
+
+if the particulars above aren't sufficient, then here are some primitives and relation techniques to help you code any traversal:
+
+* `kernel` vocab:
+  ** `if`
+  ** `loop`/`while`/`until` (general loop)
+    *** `follow`/`produce` (general loop but accumulate values like a scan)
+* `math` vocab:
+  ** `each-integer-from`
+  ** `find-integer-from` (or `find-last-integer` if starting from the end)
+  ** `all-integers-from?`
+* `sequences.private` vocab:
+  ** `sequence-operator`
+
+this is very apl/c-like, using integers and O(1) access at the nth elements and iterating using `i.`/`ɩ` (like c `for(i=FROM;i<END;i++)`). because all these are effectful, their sequences' elements' order matters. each of `each` & `find` itself considers only one element at a time, unrelated to other elements, though of course because of their row-polymorphic effects, each element can be related to any part of the program state by implicitly being related by being on the stack. `all?` relates elements within the input sequence. `all?` & `find` short-circuit. `any?` is just a limited version of `find`. `all?` is redundant; `[ q ] all?` is equivalent to `[ q not ] any? not`, which means that it's equivalent to `[ q not ] find drop not`.
+
+`[ q f ] find` is equivalent to `[ q ] each`, making `each` obselete, but worth retaining for efficiency's sake, since it avoids conditional branching. however, for coding, reason only in terms of the short-circuiting stateful loop primitive, `find-integer-from`. the natural numbers express all orders, so `find-integer-from` works for all (orderd) sequences i.e. traversals. generally, all (non-parallel) traversals are one element at a time, ordered, effectful. this means that _any_ abstract or data structure can be expressed as a loop body and permutation of natural numbers, which means that it's available to `find-integer-from`. you can make it available to `find` by making a virtual sequence, but that's just unhelpful cruft.
+
+`find` is like `loop` except with an integer argument, which makes it convenient for sequences.
+
+*all this to say that `find-integer-from` is our go-to. however, before you try that, and now that you understand the traversal primitives, first look for solutions in `sequences.generalizations`. that vocab is the most powerful one in all of factor, effectively making factor an array language.* also the `generalizations` and `combinators.smart` are your best friends. they enable symmetry for arbitrary-degree relations.
+
+.test whether the 2nd element from each of many arrays is even
+[source,factor]
+-------------------------------
+USE: generalizations
+1
+{ 1 2 3 } { 4 4 6 } { 7 8 9 }
+[ nth ] 3 apply-curry 3 cleave*
+3array [ even? ] all?
+-------------------------------
+
+note that if you have arrays of booleans, and you want to just do like k `&/`, that's simply `narray unclip-slice [ vand ] reduce` in factor.
+
+* `combinators.extras` vocab:
+  ** `chain` composes n quotations, short-circuiting if any returns `f`, *and applies it*: `6 { [ 1 + ] [ 10 * ] [ 3 / ] } chain` returns `6 1 + 10 * 3 /` and the literal composed quotation is `[ 1 + [ 10 * [ 3 / ] [ f ] if* ] [ f ] if* ]`.
+  ** `loop1` is do-while or something maybe? it keeps hanging for me and i keep flubbing-up the stepping.
+  ** `throttle`...i'd think kills a computation if it doesn't complete in the given timeframe, but apparently not...?
+  ** `cond-case` is like `cond` but you don't need to lead all your predicates with `dup`
+
+.`nfind` example
+
+`"hello" "there" "boys" [ [ "aeiouy" member? ] tri@ or or 1 0 ? ] { } 3map-as sum 3 >=`, but with short-circuiting:
+
+[source,factor]
+----
+0 "hello" "there" "boys" [ [ "aeiouy" member? ] tri@ or or 1 0 ? + dup 3 >= ] 3 nfind 4drop 3 >=
+----
+
+is `f`, but `t` if i change "boys" to "boysx", since then the 5th characters of the 1st 2 sequences are used. `nfind` traverses only insofar as the shortest sequence. this is a bit silly use of nfind, since we're using `4drop`; you'd likely suppose that we should use `until`, but the trouble there is that `until` does not provide easy indexing into sequences nor stopping at the end of the (shortest) sequence. the need to specify `3 >=` twice is also buffoonish. i think about how nice this would be in j: `2<+('aeiouy'&i.)"1 'hello','there',:'boys'` (something like that; i haven't tested this code). in this case, the code is nice because it exploits the fact that we're applying the vowel predicate to each letter of all sequences. this independence, along with addition's commutativity, enables much more elegant code than the general case of `q nfind` where q is not commutative.
+
+you may suggest that ideally a compiler would detect conditionals following iterators, and change `map` into `find` automatically, so that the user can write expressions uniformly, easily, without redundant computation. however, suppose that you want to use `map` to apply an effect to each item of a sequence, collecting the results. in that case short-circuiting would be incorrect. again, the best solution is to always use `find-integer-from` or `nfind`, and the compiler can detect whether the last entry of the argument quotation is the constant `f`, and if so, convert it to `neach`. once `find-integer-from` is ultimately the only sequence combinator, it should be easy to optimize code written in terms of it. remember: `nfind` is effectively `find-integer-from` for sequences.
+
+NOTE: `napply` generalizes `bi@`, and `dupn` & `ndup` differ! the former replicates the top elt n times, whereas ndup is like `2dup` &c.
+
+.lossy array operations
+
+these operations change the array shape. they remove information. `append` removes the distinction between its arguments, otherwise preserves the arguments information, but changes the right argument's indices, namely by shifting them. simply retaining the left argument's length is enough to make `append` non-lossy.
+
+[options="header"]
+|======================================================================================
+| factor                                                   | j
+| `suffix`,`prefix`,`append`                               | `x,y`
+| `concat`                                                 | `,/`
+| `flatten`                                                | `,y`
+| `without`                                                | `x-.y`
+| `intersect`                                              | `x([-.-.)y`
+| `members`                                                | `~.`
+|======================================================================================
+
+.functions
+[options="header"]
+|======================================================================================
+| factor                                                   | j
+| `nip`                                                    | `x]y`
+| `drop`                                                   | `x[y`
+| `curry`                                                  | `m&v`, `u&n`
+| `call`                                                   | `".y`
+| `swap`, `dup`                                            | `~`
+| juxtaposition, `compose`, `prepose`                      | `@`
+| fried quotations                                         | `=.`
+| `y dup v u`                                              | `(u v)y`
+| `y v x swap u`                                           | `x(u v)y`
+| `f h bi g`                                               | `(f g h)y`
+| `f h 2bi g`                                              | `x(f g h)y`
+| the `inverse` vocabulary                                 | `&.`
+| `drop y`                                                 | `y"_`
+| `v bi@ u`                                                | dyadic `u&v`
+|======================================================================================
+
+.primitives
+[options="header"]
+|======================================================================================
+| factor                                                   | j
+| `=`                                                      | `-:`, `=`
+| `CONSTANT:`, `SYMBOL:`, `set`, `:` & `;`                 | `=:`
+|======================================================================================
+
+.control flow
+[options="header"]
+|======================================================================================
+| `loop` &al                                               | `^:`
+| `if`, `if*`, `?`, `cond`, `at`                           | `@.`
+|======================================================================================
+
+.other
+
+TODO: `x#y` below is incorrect
+
+[options="header"]
+|================================================================================================================
+| factor                                                                    | j
+| `dup length <iota> <zipped> sort-keys unzip nip`^[1]^                     | `/:y`
+| `y string>number x or`                                                    | `x".y`
+| the `random` vocabulary                                                   | `?`, `?.`
+| the `prettyprint` vocab                                                   | `":`
+| `>base`                                                                   | `x#<.\|:>y` (unmixed bases)
+| the `math.bitwise` vocab                                                  | `b.`
+| `classify` (`sequences.extra`)                                            | `=y`, i think
+| `<iota>`                                                                  | `i.y`
+| `[ and ] filter`, `[ [ ] curry replicate ] 2map harvest`                  | `x#y`
+| `[ and ] map-index sift` or `<enumerated> [ nip ] assoc-filter keys`     | `I.y` (where y is a boolean vector)
+| <implemented below>                                                       | `~:y`
+| <implemented below>                                                       | `x#[.:]y` (mixed bases)
+| <see bulleted notes>                                                      | `"`
+|================================================================================================================
+
+^[1]^ or `rank` from the `math.statistics` vocabulary, which has the same order but starts at 1 instead of 0.
+
+the following are basic primitives and convenient variants:
+
+[options="header"]
+|==========================================================================
+| primitive | variant     | variation
+| `loop`    | `while`     | factors-out looping predicate
+| `loop`    | `follow`    | accumulates iteration values
+| `follow`  | `produce`   | factors-out looping predicate
+| `loop`    | `times`     | `loop` with implicit counter/increment behavior
+| `times`   | `replicate` | accumulates iteration values
+|==========================================================================
+
+^[1]^ of the `grouping` vocab.
+
+^[2]^ of the `grouping.extras` vocab. that vocab also has `group-by`, but whereas `collect-by` collects into subsequences of predicate-matching elements:, `group-by` collects substrings of predicate-matching elements. (reminder: _subsequence_ is a subset retaining order. a _substring_ is a subsequence that retains contiguity.)
+
+[source,factor]
+----
+"A STRIng with MaNY cAsES" [ dup ch>upper = ] collect-by [ >string ] assoc-map .
+! H{ { t "A STRI  MNY AES" }
+!    { f "ngwithacs"       } }
+"A STRIng with MaNY cAsES" [ dup ch>upper = ] group-by [ >string ] assoc-map .
+! V{ { t "A STRI" }
+!    { f "ng"     }
+!    { t " "      }
+!    { f "with"   }
+!    { t " M"     }
+!    { f "a"      }
+!    { t "NY "    }
+!    { f "c"      }
+!    { t "A"      }
+!    { f "s"      }
+!    { t "ES"     } }
+----
+
+NOTE: ``grouping.extra``'s `group-map` and `clump-map` apply a quotation to the group or clump *not as a sequence, but as though those values were pushed directly to the stack*:
+
+[source,factor]
+----
+! factor                  ! corresponding j
+dup 1 0 <shifted> v= all? ! (1|.!.0 x)=x
+[ = ] 2 clump-map all?    ! *./2=/\x
+----
+
+clump-map can be composed easily, too:
+
+produces 570.
+
+[source,factor]
+---------------
+! factor                  ! corresponding j
+dup 1 0 <shifted> v= all? ! (1|.!.0 x)=x
+{ 1 10 420 65 74 100 54 } 0 over [ + dup 500 > ] find drop swapd tail
+---------------
+
+produces a stack of `( 570 { 74 100 54 } )`.
+
+[source,factor]
+----
+! vector ops version
+dup 1 0 <shifted> v- 1 tail [ sgn ] map dup 1 0 <shifted> [ = not ] 2map
+! clump version
+[ swap - sgn ] 2 clump-map [ = not ] 2 clump-map
+----
+
+if you're using simd or bitvectors, though, then of course comparing a vector with its shifted version is far more efficient.
+
+^[3]^ see `<circular-clumps>` of the `grouping` vocab for related functionality.
+
+TODO: general fork/train is `2cleave`
+
+* `y x natural-search`, where x is sorted and #x≥2, returns the index of, and element there at, the least e∈x s.t. y≥e.
+  ** this behavior implies that `natural-search` never returns a negative index. `0.33 0.66 I. 0.2 0.5 0.75` returns `0 1 2`. `{ 1/5 1/2 3/4 } [ { 1/3 2/3 } natural-search drop ] map` returns `{ 0 0 1 }`. to make it j-like, add in negative infinity (`-1/0.`): `{ 1/5 1/2 3/4 } [ { -1/0. 1/3 2/3 } natural-search drop ] map`.
+* the factor expression of `/:y` leaves sorted `y` and its grading sequence on the stack. of course the grading sequence is always used for sorting `y`, so we may as well apply it, and we can use it to sort other sequences, too.
+* anything that takes a quotation implicitly works on arrays, too. j style grouping is `{ "tom" "dick" "harry" "wilbert" "billio" } { 0 1 1 0 2 2 } collect-by`, we can do `{ "tom" "dick" "harry" "wilbert" "billio" } { 0 1 1 0 2 2 } [ { } 2sequence ] 2map [ second ] group-by [ second [ first ] map ] map`. if ``group-by``'s quotation were to also take an index then this would be much more elegant: `{ "tom" "dick" "harry" "wilbert" "billio" } [ { 0 1 1 0 2 2 } nth ] group-by-index`. we can do `{ "tom" "dick" "harry" "wilbert" "billio" } V{ 0 1 1 0 2 2 } reverse [ pop ] curry [ drop ] prepose group-by` which is an elegant idea but looks clumsy b/c we must reverse the key sequence and curry with prepose. this being said, we most commonly group one set by a function of itself anyway, so predicated `group-by` is usually appropriate.
+* rank isn't much help in practice. the few commonly used maps—1:1, 1:n, n:n—are defined below.
+* `loop` loops forever until the loop body returns false
+* `>base` isn't literally like j's `#.` & `#:`. `20 2 >base` produces the _string_ "10100". we can then run `string>digits` to produce `B{ 1 0 1 0 0}`. `B{ }` is a byte vector.
+* `q map-index` is a terser version of `[ length <iota> ] keep q 2map`
+  ** `<enumerated>` (of the `assocs` vocab) makes a virtual assoc of a sequence where the seq is values and integer indices are keys.
+* usually we'll use `index` or `find-index`, not `index-or-length`. `search`, of the `binary-search` vocab, is `find` (takes a predicate) but uses binary search.
+* the following are in j but are not useful in j or factor: `x|:y`. i'm curious how `/:y` and `~:y` can be useful both generally and specifically in j, and for those j-specific uses, what can we use in factor instead?
+* the following are in factor but not in j and are nice: `join`, `interleave`, `index`. `flip-text` is an example of the `[ [ M at ] transmute ] map` pattern, which is a relational primitive. the `random` vocabulary is extensive.
+* i'm curious how often rank is used. in factor (and indeed, scheme, haskell, etc), rank _1 is implicit. for rank 0 just `flatten` (if needed) then `cartesian-map`. pointwise is `2map`. to do like `+/` on a matrix which effectively sums columns in parallel: `TODO`. there are even virtual sequences for cartesian products, `x ;"0 y`.
+
+."under" example
+[source,factor]
+----
+! i haven't considered variadic stack effects
+: &. ( x map: ( x -- y ) op: ( a -- b ) -- bx ) over [ compose ] dip [undo] [ call ] dip call ; inline
+20 [ 4 + ] [ 3 * ] &. ! equivalent to j (3&*)&.(4&+)20
+----
+
+.`F:.` with `Z:` (folds which may short-circuit based on the accumulator)
+
+this is a short-circuiting sequence iterator. factor comes with sequence iterators, and short-circuiting combinator `find[-integer[-from]]`, but no short-circuiting sequence iterators. but don't worry! if you look at the definition of `find`, you'll see that it's just `[ length-operator find-integer-from ] keepd`, and `find-integer-from`, like `each-integer-from`, is a general looping combinator, not particular to sequences; thus `length-operator` is our "magic" word that makes any general iterator into one over a sequence. "magic" is quoted b/c it's really just `[ length ] [ nth curry ] bi`.
+
+like how `reduce` is just `swapd each`, so we can use `find` but have it short-circuit by sticking a boolean on the stack:
+
+[source,factor]
+------------------------------------------------------
+0 { 1 10 420 65 74 100 54 } [ + dup 500 > ] find 2drop
+------------------------------------------------------
+
+produces `570`.
+
+if we want to return the remainder of the list, it's just a simple modification:
+
+[source,factor]
+---------------------------------------------------------------------
+{ 1 10 420 65 74 100 54 } 0 over [ + dup 500 > ] find drop swapd tail
+---------------------------------------------------------------------
+
+produces a stack of `( 570 { 74 100 54 } )`.
+
+by the way, though we can use `find` as a short-circuiting fold, factor does not come with any short-circuiting scan. no problem, though; we just do the same but push a copy of the accumulator to a vector:
+
+[source,factor]
+----------------------------------------------------------------------------------
+V{ } clone 0 { 1 10 420 65 74 100 54 } pick '[ + dup _ push dup 500 > ] find 3drop
+----------------------------------------------------------------------------------
+
+returns `V{ 1 11 431 496 570 }`.
+
+we can also instead use fried quotations and continuations:
+
+[source,factor]
+--------------------------------------------------------------------
+0 { 1 10 420 65 74 100 54 } 500
+'[ _ _ [ + dup _ >= [ swap continue-with ] when ] each nip ] callcc1
+--------------------------------------------------------------------
+
+this returns either the sum of all if it's less than 500, or the smallest sum of prefixes greater than 500—in this case, 570. `nip` removes the continuation object, since by that point it won't be used.
+
+i expect that continuations are new to you. put breakpoints wherever you like to inspect the running code. note that `continue-with` is available to use in the quotation passed to `callcc1` and returns from the continuation with a "return" value (not to be confused with `return` which returns nothing), and `callcc1` calls the quotation with the continuation object pushed onto it (this is the object to pass to `continue-with`). finally, callcc1 leaves the stack as it was before the quotation was called; this is why i curried the inital sum value, 0, and the array, and the threshold value, into the quotation—so that when the continuation finishes, only the sum will be left on the stack.
+
+finally, remember that we cannot so easily use `until` or `loop` because they aren't specialized to traverse through sequences. granted, there's not much needed to make them do so, but why put in the redundant effort? *`find` is the most general looping combinator; it combines `each` and `until`.*
+
+.`#[.:]`
+[source,factor]
+----
+: #: ( y x -- x#:y )
+  <reversed> 1 head* 1 prefix
+  dup length <vector> [ [ dup ?last 1 or ] dip * over push ] reduce <reversed>
+  [ /mod swap ] map nip ; inline
+
+! seems an odd but correct implementation
+: #. ( y x -- x#.y )
+  [ <reversed> ] bi@
+  1 head* 1 prefix
+  dup length <vector> [ [ dup ?last 1 or ] dip * over push ] reduce
+  vdot ; inline
+----
+
+then `{ 1 30 6 } { 24 60 60 } #.` returns `5406`, and `5406 { 24 60 60 } #:` returns `{ 1 30 6 }`. in factor, the control argument is nearer the top of the stack, so the argument order is inverted compared to j.
+
+.`x u\ y` when x<0 (*mistakenly written*; `group` already does this!)
+[source,factor]
+----
+! [ u ] map afterward if you please
+: xu\y ( x y -- xu\y )
+  [ length <iota> [ 1 + ] map ] keep
+  [ [ [ mod 0 = ] curry ] dip swap filter ] dip
+  swap split-indices harvest ; inline
+
+4 10 <iota> xu\y . ! outputs { { 0 1 2 3 } { 4 5 6 7 } { 8 9 } }
+----
+
+.outfix (`x u\. y`)
+[source,factor]
+----
+: outfix ( seq n -- outfixes )
+  over length -rot
+  [ swap <rotated> ] [ tail-slice ] bi-curry* compose [ keep ] curry
+  [ neg <rotated> ] compose { } map-integers-as ;
+----
+
+which is more neatly but perhaps not as efficiently coded by locals:
+
+[source,factor]
+---------------
+:: outfix ( seq n -- outfixes )
+  seq length [ [ seq swap <rotated> n tail-slice ] keep neg <rotated> ]
+  { } map-integers-as ;
+---------------
+
+.nub sieve
+[source,factor]
+----
+: ~: ( seq -- mask )
+  ! `p q 2bi swap`, not `q p 2bi`, b/c update set AFTER testing `in?`
+  HS{ } clone swap [ swap [ in? not ] [ [ adjoin ] keep ] 2bi swap ]
+  ?{ } map-as nip ; inline
+----
+
+"catamaran" ~: gives `?{ t t t f t f t f t }`, an efficiently-packed bit array.
+
+NOTE: this is a good example of `map` with tacit state!
+
+.i. & multidimensional i.
+[source,factor]
+----
+! print-mat works only on 2d arrays of numbers. we can easily extend it to any dimension, though.
+: print-mat ( a -- ) [ number>string ] shaped-map shaped-array>array format-box. ; inline
+
+: print-cube ( c -- )
+  ! we must format the whole table then add line breaks so that all of the columns widths are equal even across
+  ! line breaks.
+  [ shape second ] keep [ number>string ] shaped-map shaped-array>array concat format-table
+  [ length <iota> [ 1 + ] map ] keep
+  [ [ [ mod 0 = ] curry ] dip swap filter ] dip
+  swap split-indices harvest { "" } join [ print ] each ; inline
+
+: print-cube/boxed ( c -- ) [ [ number>string ] map { } 1sequence format-table ] shaped-map shaped-array>array
+  [ [ concat ] map format-box. ] each ; inline
+
+! each ATOM is a multidimensional index. e.g. { 2 2 3 } multi-i. { 36 } reshape is a shape error but { 12 } works, even though its `shape` is { 2 2 3 }. in this way sa's are like everything's boxed, except that there's no raze or unbox.
+
+! creates a shaped array of multidimensional normal (unshaped) arrays.
+! i could make them shaped arrays but i can't find any way to flatten them, so i see no point in doing so;
+! it only introduces an extra step of converting back to a normal array.
+: mi. ( shape -- arr ) zeros [ second ] map-shaped-index ; inline ! firsts were 0; idk what they're for.
+
+! a block version. it seems that block arrays can't be used for anything, so...*shrug*
+: mi.-block ( shape -- arr ) [ zeros >shaped-array ] [ length 1array [ <block-array> ] curry ] bi [ second ] prepose map-shaped-index ; inline
+: i. ( shape -- arr ) [ product <iota> >shaped-array ] [ reshape ] bi ; inline
+
+  { 4 2 3 } mi. [ [ 10 + ] map ] shaped-map print-cube/boxed
+┌──────────┬──────────┬──────────┐
+│ 10 10 10 │ 10 10 11 │ 10 10 12 │
+├──────────┼──────────┼──────────┤
+│ 10 11 10 │ 10 11 11 │ 10 11 12 │
+└──────────┴──────────┴──────────┘
+┌──────────┬──────────┬──────────┐
+│ 11 10 10 │ 11 10 11 │ 11 10 12 │
+├──────────┼──────────┼──────────┤
+│ 11 11 10 │ 11 11 11 │ 11 11 12 │
+└──────────┴──────────┴──────────┘
+┌──────────┬──────────┬──────────┐
+│ 12 10 10 │ 12 10 11 │ 12 10 12 │
+├──────────┼──────────┼──────────┤
+│ 12 11 10 │ 12 11 11 │ 12 11 12 │
+└──────────┴──────────┴──────────┘
+┌──────────┬──────────┬──────────┐
+│ 13 10 10 │ 13 10 11 │ 13 10 12 │
+├──────────┼──────────┼──────────┤
+│ 13 11 10 │ 13 11 11 │ 13 11 12 │
+└──────────┴──────────┴──────────┘
+  { 2 2 2 } mi. [ length { } 1sequence ] shaped-map print-cube/boxed
+┌───┬───┐
+│ 3 │ 3 │
+├───┼───┤
+│ 3 │ 3 │
+└───┴───┘
+┌───┬───┐
+│ 3 │ 3 │
+├───┼───┤
+│ 3 │ 3 │
+└───┴───┘
+  { 4 2 3 } i. print-cube
+0  1  2
+3  4  5
+
+6  7  8
+9  10 11
+
+12 13 14
+15 16 17
+
+18 19 20
+21 22 23
+----
+
+[TODO]
+* compare `>array` vs `shaped-array>array`
+* consider relations, beyond mere arrays. consider using mutable states in arrays. relations are more general than rank.
+
+it seems that `>array` can be used to flatten like `,/` in j.
+
+.padding example
+[source,factor]
+----
+sa{ { 0 2 3 4 } { -6 6547 1 } } ! error: no-abnormally-shaped-arrays
+sa{ 0 2 3 4 } sa{ -6 6547 1 } pad-shapes ! well, actually pad-shapes seems to do nothing somehow.
+----
+
+=== examples of deriving relational or array-stack programs
+
+.parse command line
+
+goal: separate part of the command line from the rest. namely: separate switches "-c" & "-s" and their following arguments from everything else, preserving order.
+
+a scalar-functional-applicative programmer's go-to method would be looping with accumulator states:
+
+----
+(let loop ([xs cmdargs] [acc1 '()] [acc2 '()])
+  (if (null? xs)
+      (values (reverse acc1) (reverse acc2))
+      (let ([x (car xs)] [rst (cdr xs)])
+        (if (or (equal? x "-c") (equal? x "-s"))
+            (loop (cdr rst) (cons (car rst) (cons x acc1)) acc2)
+            (loop rst acc1 (cons x acc2))))))
+----
+
+which i could of course write in factor, but scalar code in factor (and generally) is horrible, so i'd like to save myself the likely pain.
+
+kakoune method: "find '-[cs]', extend selection to next word, delete, paste in new place." one doesn't even need to think about how to derive a program because it's so natural. it's not altogether immediately obvious, but each step is immediately obvious given the current state! obviously we want to find strings like "-c" or "-s" which is obviously is expressed by the regex `-[cs]`; then we want the next words. then we're done selecting. to separate, of course we delete. now that we've deleted it, we must retain it, so we must paste it, but obviously we want to paste it in a location distinct from their original one. done.
+
+j method:
+
+. "find '-c' or '-s'". "find" means "select", "match", "identify". to identify, j uses bit masks. so we do `{{((<'-c')=y)+.(<'-s')=y}}"0 args`. lol, jk. it's funny how that's what my mind went to after writing the scheme code above. good j uses arrays and forks wherever possible, which is usually. thus to derive programs, we ask ourselves "which array primitives work best for my needs?" it's a good variety of constraint! `;` is just better than boxing both things. now we've an array. a common pattern is that "x=a or x=b" is "any? (= x) [a b]", which, when x is a set, is generally expressed as "not null x∩[a b]". anyway, all this thought derives `mask=.(e.&('-c';'-s'))args`.
+. then we want to select the following indices, too. this means that all `1`'s successors are set [to 1], too. it's not obvious to me how to do this; ideally i'd use some kind of verb that maps selected indices values to other indices, here that set bits are nth, and (n+1)th indices should be set to 1. but no such one exists. this would be easily done as `>:&.I.args` if an inverse were defined for `I.`. anyway, permutations are 1:1 maps between elements, which is what we want here. specifically, we want the nth indices to be related to their successors. this particular, simple permutation is expressed by rotation or shifting: `mask=.(+._1&(|.!.0))mask`.
+. now we've a mask that has two values—0 or 1—which partitions our data. to finish our solution, we only need to apply this mask as a partition: `mask</.args`. done.
+
+the whole solution altogether:
+
+[source,j]
+---------------------------------------------------------------------------
+NB. the solution that we derived. it's explicit b/c we built in in parts,
+NB. then stuck all those parts together.
+((+._1&(|.!.0))@(e.&('-c';'-s')) args)</.args
+
+NB. refactored to tersest, tacit form.
+(</.~(+._1|.!.0])@e.&('-c';'-s'))args
+---------------------------------------------------------------------------
+
+using array style in factor is much like using j except that we're freer. remember that the most general description of the solution is to:
+
+. identify -c & -s
+. extend the identification to their following args
+. separate this identified subsequence from the rest
+
+the j solution is perfect, then, at least insofar as its logic: it identifies by a mask, then modifies that mask by relating the mask to a permutation of itself i.e. we relate the mask to a relation of the mask's indices to themselves. then we apply that mask to partition.
+
+[source,factor]
+----
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" }
+dup [ swap { "-c" "-s" } member? and ] map-index
+dup f prefix [ or ] 2map collect-by
+----
+
+which leaves the following hash table on the stack:
+
+----
+H{
+    { t V{ "-c" "sess" "-c" "SE" "-s" "SA" } }
+    { f V{ "-f" "-n" "+45:6" } }
+}
+----
+
+i prefer to define my own symbolic primitives e.g. `ALIAS: ⇄ swap` to make code terse & clean. by these, the solution is:
+
+----
+↟ [ ⇄ { "-c" "-s" } ∈ A ] ∀i ↟ f prefix vor collect-by
+----
+
+my factor solution uses `f prefix` analagously to `_1|.!.0`. i'm afforded that b/c `2map` iterates a number of times equal to the length of the shorter list, not caring if two lists have different lengths.
+
+this solution is most elegant because it unions the selection vector to its offset and retains pointwise association of group id with elements.
+
+the actual ideal solution is a literal translation of "separate indices where item matches -[cs], and their successors, from the rest, retaining original order." the following factor represents this:
+
+[source,factor]
+----
+[ [ # i. ] ⎌              ! push i.@#
+  [ { "-c" "-s" } ∈ ] ∃': ! selection vector
+  [ ↟ 1 + { } 2s ] ∀      ! vector of duples { selection successor }
+  ♭                       ! flatten into selection vector "selvec"
+  [ \ ] ⎌ ]               ! (i.@#)-.selvec while retaining selvec (atop) the stack
+[ [ @: ] & ]              ! "quotation B"
+bi                        ! these two quotations are applied to the input
+bi@                       ! quotation "B" which `bi` leaves atop the stack is applied
+                          ! to the two selection vectors that quotation "B" left on the stack
+----
+
+sadly this does not read as well as the english. why not?
+
+. there's a lot of nested, ordered state retention
+. the phrase "indices and their successors" is expressed oddly: "each index with its successor put into a sequence then flatten that whole array"
+. there's currying and delayed execution (data are far from the word that consumes them) which, when finally executed, is done with `bi bi@`. this is done so that i can apply `@:` to both selection sequences without having the input on the stack. namely, i'd have to have it twice on the stack, and in the right place, in order to call `@:` twice on it. specifically, i'd need `selvec1 inputseq selvec2 inputseq [ nths ] bi@`, which would be horrible to express on the stack. currying is practically necessary (and elegant anyway) for keeping the stack managable.
+. instead of partitioning, i apply each of the selection vectors to the original input. that's two selection operations instead of one partition operation. it's because i chose to code it this way that i must retain the input for two operations, which is easiest when i curry it. the relation between the input sequence and selection vectors is 1:n, namely 1:2. `1:n` is defined as `curry map` so currying is appropriate, though it'd look nicer if we'd express the relation as `1:n` which would return one sequence of 2 sequences: the selected items and the rest—instead of pushing these two to the stack as outputs.
+
+how the english description breaks-down:
+
+----
+partition [ indices such that item matches -[cs] union their successors ]
+retaining original order
+----
+
+why would the english be easier than factor? i think that it shouldn't be. so i push myself to make the factor code better. just like factor, english builds on prior-mentioned things. i can surely be tacit here because the english expression does not use names. the only parameter is tacit:
+
+----
+partition [ indices such that [each of the input's] item matches -[cs] union their successors ]
+retaining [the input's] original order.
+----
+
+i should have my factor code mirror this _exactly_. because factor code is totally tacit, i may begin constructing my program at any part of the english phrase. first i notice that `[ # i. ] ⎌` inside the first `bi` quotation can be factored-out:
+
+[source,factor]
+----
+[ # i. ]
+[ [ { "-c" "-s" } ∈ ] ∃': [ ↟ 1 + { } 2s ] ∀ ♭ [ \ ] ⎌ ]
+[ [ @: ] & ]
+tri
+bi@
+----
+
+flatter, better, obviously shows that input is considered in three ways. there's not really any unnecessary nesting anymore.
+
+i can try to retain order in an arguably more natural way: by unioning (appending) the index vector with its successor vector then sorting them:
+
+[source,factor]
+----
+[ # i. ]                  ! related to "separate from the rest"...
+[ [ { "-c" "-s" } ∈ ] ∃': ! "indices where item matches -[cs]"
+  ! the next three lines read as "and their successors"
+  ↟                       ! "their"
+  [ 1 + ] ∀               ! "successors"
+  ++                      ! "and"
+  ⍏                       ! "retaining original order"
+  [ \ ] ⎌ ]               ! "separate from the rest"
+[ [ @: ] & ] tri bi@
+----
+
+i've mapped each part of the english phrase to the corresponding factor words directly. note that "separate from the rest" uses the `# i.` vector left quite earlier on the stack. this actually corresponds directly to the english! "the rest" only has meaning (because its meaning is relative) after specifying "indices ... and their successors!" the factor code which implements the idea of "separate from the rest" is "all minus indices & successors" which actually merely _calculates_ the rest. this demonstrates that "separate from the rest" is redundant! the fact of them being the _rest_ already _distinguishes_ them from the rest. being that "rest of the rest" is an identity, we see that "rest" means "complement" which is a set operation. "rest" is thus a fn of a set and a total. in my code, `[ # i. ]` and `\` are distant from each other. to more closely follow the english, i should have curried `# i.` to `\` (TODO: or `\:`? that's what's in the code below).
+
+[source,factor]
+----
+[ [ { "-c" "-s" } ∈ ] ∃': ↟ [ 1 + ] ∀ ++ ⍏ ]
+[ # i. ⇄ [ \: ] ⎌ ]
+[ [ @: ] & ] tri bi@
+----
+
+so i noticed that actually i can just swap the order to—big surprise—_actually match the english's order_: "rest" following "indices ..." then there's no need to curry!
+
+NOTE: because indices themselves represent the order, sorting the indices is always just as fine as producing the indices in order.
+
+more literally following the english description:
+
+[source,factor]
+----
+↟ [ { "-c" "-s" } ∈ ] ∃': [ ∈ ] & partition
+----
+
+the only problem is that `partition` takes a predicate of elements instead of indices. that being said, it takes a quotation that returns booleans, which generalizes to a quotation that returns integers, or most generally, returns distinct things. and we may decouple applying a quotation from partitioning on its outputs. `collect-by` does this. this particular case of "class and else" is nice because we can use one class to derive two classes. i may think about ways to use variants of, or prepare inputs for, `partition` or `collect-by` but i don't want to bother. that's because...
+
+the easiest way is what the scheme solution does: loop, putting an item into one list or an item with its successor into another list. that's the most straightforward description and naturally retains order, and is one traversal. the inconvenience with coding this is that we cannot use list iterators because we must consider multiple elements at a time. this means that we must loop. honestly there should be a combinator like map, reduce, etc, that takes the remainder of the list as an argument rather than just the next one item. given that i've not defined such a combinator and that i don't want to spend any more time on this yet, here's the solution basically equal to the scheme one, but a bit nicer b/c it uses `make` instead of needing to keep both vectors on the stack; and because it destructively/effectively appends to both vectors.
+
+[source,factor]
+----
+V{ } clone                                            ! one of the two accumulators
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" } ! input
+[ [ ↟ ∅ ]
+  [ unclip-slice ↟ { "-c" "-s" } ∈
+                   [ , unclip-slice , ]
+                   [ [ suffix! ] & ⋎ ]
+                   if
+  ] until
+] { } make 2↶
+----
+
+recall that this is exactly what we did in kakoune. as its elegance suggests, it's the best solution because the iteration relates each element to all of the following ones, allowing us to move it and its successor to a separate "else" vector. the traversal being in order of increasing index (i.e. in original order) is good b/c we want that order both in that we retain it in both of our output partitions, but also in that the order relates the identified elements with their successors and that we'll be indexing both of them anyway!
+
+there's a powerful combinator that this code generalizes to. however, the question is how to identify such a generalization that is not overconstrained.
+
+and for fun, the sql version:
+
+[source,sql]
+----
+create table r(i integer primary key autoincrement, e string);
+insert into r(e) values('-f'),('-c'),('sess'),('-n'),('-c'),('SE'),('-s'),('SA'),('+45:6');
+with x(a) as (select i from r where e='-c' or e='-s') -- need a local bind b/c we union x with itself
+select group_concat(e) from r group by i in (select a from x union all select a+1 from x) order by i;
+┌─────────────────────┐
+│   group_concat(e)   │
+├─────────────────────┤
+│ -f,-n,+45:6         │
+│ -c,sess,-c,SE,-s,SA │
+└─────────────────────┘
+----
+
+the equivalent factor:
+
+[source,factor]
+----
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" }
+[ # i. ] ⎌ zip                         ! table r is on the stack
+↟ [ 2nd { "-c" "-s" } ∈ ] ∀f [ 1st ] ∀ ! now r x is on the stack
+↟ [ 1 + ] ∀ ++ ⍏                       ! now r xU(x+1) is on the stack
+[ ∈ ] & [ 1st ] prepose partition      ! yay! our partitions!
+[ [ 2nd ] ∀ ] bi@                      ! remove associated indices
+----
+
+and similar factor:
+
+[source,factor]
+----
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" }
+[ ↟ # i. zip ]
+[ [ { "-c" "-s" } ∈ ] ∃': ↟ [ 1 + ] ∀ ++ ⍏ [ ∈ ] & [ 2nd ] prepose ]
+bi partition [ [ 1st ] ∀ ] bi@
+----
+
+prints:
+
+----
+{ "-f" "-n" "+45:6" }
+{ "-c" "sess" "-c" "SE" "-s" "SA" }
+----
+
+this relational style (coupling attribute vectors into a table, here a list of duples) isn't good outside of sql, because we must use accessors like `1st`. the relational style worked "nicely" here b/c i used `partition` in order to derive two groups from one predicate. however, generally (for more complex or detailed relations) it's best to use `collect-by` and keep attribute vectors separate, related by whatever maps relate them—the maps corresponding to joins, e.g. `{ { 1 65 } { 2 4 } { 2 3 } { 6 20 } }` which relates two tables' (as seen by each by each item in the list having length 2) indices.
+
+TODO: join is a sql thing. how would prolog do it? sql uses data literals. prolog uses composable, logical generator fns.
+
+window fns don't work:
+
+[source,factor]
+----
+{ "-f" "-c" "sess" "-n" "-c" "SE" "-s" "SA" "+45:6" }
+2 <clumps> [ 1st { "-c" "-s" } ∈ ] partition
+[ [ >array ] ∀ . ] bi@
+----
+
+prints
+
+----
+{ { "-c" "sess" } { "-c" "SE" } { "-s" "SA" } }
+{
+    { "-f" "-c" }
+    { "sess" "-n" }
+    { "-n" "-c" }
+    { "SE" "-s" }
+    { "SA" "+45:6" }
+}
+----
+
+so of course we can't use that 2nd sequence of duples.
+
+.useful considerations of rank
+
+[source,factor]
+----
+: 1:1 ( x y q -- z ) 2map ; inline
+: n:n ( x y q -- z ) cartesian-map ; inline ! defined as [ with map ] 2curry map
+: 1:n ( x y q -- z ) curry map ; inline
+
+{ 1 2 3 4 } "cats" [ { } 2sequence ] 1:1 .
+{ { 1 99 } { 2 97 } { 3 116 } { 4 115 } }
+
+{ 1 2 3 4 } "cats" [ { } 2sequence ] 1:n .
+{ { 1 "cats" } { 2 "cats" } { 3 "cats" } { 4 "cats" } }
+
+{ 1 2 3 4 } "cats" [ { } 2sequence ] n:n .
+{
+    { { 1 99 } { 1 97 } { 1 116 } { 1 115 } }
+    { { 2 99 } { 2 97 } { 2 116 } { 2 115 } }
+    { { 3 99 } { 3 97 } { 3 116 } { 3 115 } }
+    { { 4 99 } { 4 97 } { 4 116 } { 4 115 } }
+}
+----
