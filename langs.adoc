@@ -35,6 +35,8 @@ i like link:https://youtu.be/9xCJ3BCIudI?feature=shared&t=3023[aaron hsu's "read
 
 == concatenativity's supremacy
 
+to be precise, it's not strictly concatenativity: it's generally the ability to arbitrarily partition code—a sort of "continuous modularity". this property equals concatenativity for linear (unidimensional), sequential programs. for database paradigms like prolog, which don't have a dimension except for size, the fact of all predicates being defined independently and staying independent, their on-the-fly structuring when given a query, often being non-deterministic, is just as desirable as concatenativity.
+
 TODO: what's the implication / relationship between concatenativity and pure tacicity?
 
 after you go cat, you don't go back. the most important thing is concatenativity, which is afforded by being tacit. variable names are just another thing that isn't actual program logic; they are meaningless, used only to relate things, as a programming primitive. instead, do like factor: define a set of tacit primitve relations (these are the shuffle words in factor), then compose them. this way each word has definite meaning, and the composition of simple meaningful things makes complex meaningful things, but no matter what arbitrary subest of a program you select, you're guaranteed that it'll be meaningful! this works for any composition system, and any variety of primitve relation; they may be multidimensional, about tables, graphs, stacks, queues, or anything. of course, predicates or graphs are generally best, but it may be fun to experiment with other relation systems. with multidimensional program codings & editors, we could have some very good program code.

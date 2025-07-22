@@ -908,7 +908,9 @@ actually, though, this particular example is more elegantly expressed as:
 : all-eq? ( seq -- ? ) dup unclip-slice suffix = ; inline
 ----
 
-deep-each example: `{ { { 1 2 { 3 4 } 5 6 } { 7 8 } } } [ . ] deep-each` outputs:
+.deep-each example
+
+`{ { { 1 2 { 3 4 } 5 6 } { 7 8 } } } [ . ] deep-each` outputs:
 
 ----
 { { { 1 2 { 3 4 } 5 6 } { 7 8 } } }
@@ -927,6 +929,55 @@ deep-each example: `{ { { 1 2 { 3 4 } 5 6 } { 7 8 } } } [ . ] deep-each` outputs
 ----
 
 the `sequences.squish` vocab defines `squish` which takes a function of `{ 1 2 { 3 4 } 5 6 }` & `{ 7 8 }` whereas `deep-map` tries applying a quotation to `{ 3 4 }` & `5`, probably b/c `{ 3 4 }` is the deepest sequence and `5` follows it. idk what the general pattern is; i'll explore that when i have nothing better to do. idk what "preorder" means.
+
+.`mnmap`
+
+you'll eventually want to map over a sequence once but produce two different outputs. you can do `[ ... 2array ] map unzip` or `[ [ ... ] map ] [ [ ... ] map ] bi`, and you might even consider pushing into multiple vectors. that would be decently elegant in an applicative lang, e.g.
+
+---------------
+vec<int> v1, v2;
+loop(x in s){
+  v1.push(f(x))
+  v2.push(g(x))
+}
+---------------
+
+but the equivalent in factor is ugly compared to usual factor code. fortunately, `sequences.generalizations` has us covered with `mnmap`:
+
+[source,factor]
+----------------------------------------------------
+{ 1 2 3 } { 10 20 30 } ! 2 input seqs (m)
+[ [ + ] [ * ] 2bi ]    ! a computation ( x y -- s p ). it has m inputs & n outputs.
+2 ! m
+2 ! n
+mnmap
+----------------------------------------------------
+
+leaves 2 sequences on the stack:
+
+------------
+{ 11 22 33 }
+{ 10 40 90 }
+------------
+
+and the same, but explicitly making the 1st output an array and the 2nd output a vector by `mnmap-as`:
+
+[source,factor]
+-----------------------------------------------------------------------------------
+{ 1 2 3 } { 10 20 30 } ! 2 input seqs (m)
+[ [ + ] [ * ] 2bi ]    ! a computation ( x y -- s p ). it has m inputs & n outputs.
+{ } V{ }               ! "n*exemplar" i.e. n output types
+2 ! m
+2 ! n
+mnmap-as
+-----------------------------------------------------------------------------------
+
+produces:
+
+-------------
+{ 11 22 33 }
+V{ 10 40 90 }
+-------------
 
 ==== folds with short-circuiting
 
@@ -983,24 +1034,6 @@ SYMBOL: x      ! declare
 x get-global   ! access
 ----
 
-it's good practice to define global data structures (precisely, pointer-referenced mutables) as constants rather than use dynamic scoping e.g. don't do
-
-[source,factor]
-------------------------------------
-SYMBOL: myVar
-produce-a-hashtable myVar set-global 
-------------------------------------
-
-because `myVar get-global` defaults to `f`, not an empty hash table; now you have two cases that effectively mean "empty." this is usually bad design. also, you have to use `get-global` often, when you don't need to do if you use constants instead:
-
-[source,factor]
------------------------------------------------------------
-CONSTANT: myVar H{ }
-myVar [ clear-assoc ] keep produce-a-hashtable assoc-union!
------------------------------------------------------------
-
-this enforces constant structure, e.g. that always `myVar hashtable?`.
-
 === locals
 
 [source,factor]
@@ -1009,12 +1042,14 @@ this enforces constant structure, e.g. that always `myVar hashtable?`.
 60 [let :> x x x * ] ! pushes 64. :> binds the top of the stack to an identifier while dropping it
 ----
 
-locals do not care about nesting:
+remember that quotations are not special in factor. factor, being a stack lang, does not have local variables, and so it does not have scopes, so quotations don't introduce new, nested scopes. thus expressions like the following are allowed:
 
 [source,factor]
 ----
 [let 40 :> x x even? [ x 2 * :> y y 2 * ] [ ] if ] ! pushes 160 to the stack
 ----
+
+indeed, factor's locals support scope nesting & shadowing. this occurs if e.g. you have nested `[let`'s, or if you have a `[let` inside a `::` definition. factor's implementation of nested scopes is very simple: it's a stack of hash tables from symbols to values; the topmost (innermost) table is checked for a local name, and if it's not there, then the next highest hash table is checked, and so on.
 
 ==== mutable vars
 
@@ -1086,15 +1121,29 @@ USING: colors.gray io.styles hashtables sequences kernel math ;
 
 generally one may make a `process` tuple then modify its properties then run it. however, usually we want the default process behavior. notice that words like `run`, `run-detached`, and `<process-reader>` accept "desc"s, not process object _per se_. indeed, these words use generic word `>process`. to convert an object into a process. therefore we commonly do e.g. `{ "echo" "hello, there!" } run` rather than `<process> { "echo" "hello, there!" } >>command run`.
 
+.shell expressions
+
+factor does not have a word that uses the shell at environment variable `SHELL` to evaluate a string. for example, `"ls *" process-contents print` will print nothing unless you happen to have a file called '*' in your directory. this string is not passed to e.g. bash for the asterisk to be evaluated as a blob expression. the very fact that factor runs the expression at all is a bit misleading; if you give a single string (instead of a sequence of strings) as a command, what factor actually does is (at least on unix-based oses) calls `tokenize` to split basically on whitespace, then calls `execvp` on the head & tail. i'm actually not even sure how that works; `execvp` does not check the executable path against envar `PATH`, though `execvpe` does. thus i'd think that this "ls" example would fail with the error that "command 'ls' cannot be found."
+
+regardless, if you want to execute something by the default shell, then do:
+
+[source,factor]
+----------------------------------------------------------------------------------------
+: exec-shell ( cmd -- ) tokenize { "/usr/bin/sh" "-c" } prepend process-contents print ;
+"ls *" exec-shell ! as though i'd typed "ls *" in a terminal
+----------------------------------------------------------------------------------------
+
+at least this works for bash. i haven't cared to check whether the `-c` flag is standard posix.
+
 .read a process into a string
 
 [source,factor]
----------------------------------------------
+-------------------------------------------------
 USING: io.launcher ;
-{ "echo" "hello, there!" } process-contents .
----------------------------------------------
+{ "echo" "hello, there!" } process-contents print
+-------------------------------------------------
 
-`<process-reader>` (used by `process-contents`) starts a process asynchronously (via `run-detached`) and returns a stream, which may be partially read from whenever. compare with `[ read-contents ] with-process-reader* 2drop`, which allows you to do stuff with the process object and exit status, but *waits for the process to finish*. also note that `<process-reader>` launches the process. btw, `with-process-reade*` generalizes to `with-process-stream*`, which binds both the input & output streams. see the following examples.
+`<process-reader>` (used by `process-contents`) starts a process asynchronously (via `run-detached`) and returns a stream, which may be partially read from whenever. compare with `[ read-contents ] with-process-reader* 2drop`, which allows you to do stuff with the process object and exit status, but *waits for the process to finish*. also note that `<process-reader>` launches the process. btw, `with-process-reader*` generalizes to `with-process-stream*`, which binds both the input & output streams. see the following examples.
 
 [source,factor]
 -----------------------------------------
@@ -1103,6 +1152,8 @@ USING: io io.launcher io.encodings.utf8 ;
 { "/usr/bin/date" } >>command
 utf8 [ readln ] with-process-stream*
 -----------------------------------------
+
+NOTE: there are no `process` slots whose values you can set to make the process's stdout redirect to factor's stdout. this being said, `process-contents print` is just as well since it uses pipes and `stream-contents`.
 
 .stdin & stdout redirection
 
@@ -1827,7 +1878,7 @@ USE: http.client
 "https://github.com/" http-get nip
 ----
 
-on this data, ``modern.html``'s `string>html` fails with a malformed html error, whereas ``html.parser``'s `parse-html` succeeds. however, the former supports `string>html` while the latter does not, though i could write such a function easily. anyway, ``modern.html``'s parser seems intolerant of some common varieties of html. this is a shame considering that `modern.html` features words like `walk-html` and `find-links`.
+on this data, ``modern.html``'s `string>html` fails with a malformed html error, whereas ``html.parser``'s `parse-html` succeeds. however, the former supports `string>html` while the latter does not, though i could write such a function easily. anyway, ``modern.html``'s parser seems intolerant of some common varieties of html. this is a shame considering that `modern.html` features words that would be useful for "html in the wild", such as `walk-html` and `find-links`.
 
 i find the internal representation of `modern.html` odd—namely that it includes separate open & close tags, and fields `open` & `close` for "<" & ">", as if they could ever differ. idk why anyone would ever not prefer html as represented by sexps (what would be sequences and assocs in factor, like how it represents json) in racket scheme.
 
@@ -1866,15 +1917,13 @@ pass data as a string w/o url encoding (same as cURL's -d option):
 
 performing `ascii encode` on the string makes `http-post` error, and the string is not url-encoded.
 
-.fully-specified version
+.fully-specified request
 [source,factor]
 -------------------------------------------------------------------------------------------------
 "POST" URL" http://localhost:3000" f "1.1" H{ } clone ! begin filling params for request boa
-"a=b&c=+*&d=e" ascii encode f "application/x-www-form-urlencoded" ascii post-data boa ! post data
+"a=b&c=+*&d=e" ascii encode f "application/x-www-form-urlencoded" f post-data boa ! post data
 f 1 request boa http-request*
 -------------------------------------------------------------------------------------------------
-
-the second `ascii` (used as `post-data`'s `content-encoding` parameter) seems redundant, and replacing it by `f` does not change behavior, at least for this example.
 
 pass dict of post params, which factor encodes before sending:
 
@@ -1916,45 +1965,53 @@ note that in this case, simply passing a string does not work! we must pass a by
 
 == http servers
 
-.responders (the req->resp fn)
+the core functionality of a server—that which produces a response from a request—is called a _responder_ in factor. the factor http server basically maps urls to responders—commonly called "routing" in general http server jargon, but called _dispatcing_ in factor. naturally, in code, this is done by a `dispatcher` tuple object.
 
-* in a responder (to be exact, during execution of `call-responder*`), `HTTP request variables` (see docs) are set: `request`, `url`, `params`, `responder-nesting`,
-* wrt furnace actions, `display` is the main property for GET requests, analagously: `submit` for POSTs, `replace` for PUTs, `update` for PATCHes; set it to a quotation that takes a request and returns a response.
+.a quick note about frameworks
 
-.useful vocabs
-[options="header"]
-|==================================================================================
-| vocab                     | description
-| `io.servers`              | tcp/ip
-| `http`                    | provides the `request` & `response` classes
-| `http.server`             | http server
-| `http.server.dispatchers` | what's this?
-| `http.server.static`      | ftp emulation
-| `http2.server`            | subclass of `http-server`. upgrades requests to http2
-| `http.server.cgi`         | cgi: external subproc handles req->resp
-| `logging.server`          | logging
-|==================================================================================
+personally, i dislike frameworks on principle, so i haven't learned about them nor will i, so you won't find notes about them here. instead, i'll just discuss the workings of responders, then give server examples. both of actually starting the server, and using dispatchers, are very simple, so i discuss them briefly, mostly by comments inside the code example. however, before doing that, here're a few tips and a small sketch of the templating frameworks:
 
-.convenience vocabs
-[options="header"]
-|========================================================
-| vocab                     | description
-| `http.server.responses`   | response bodies
-| `furnace.actions`         | easy http forms
-| `html.templates.chloe`    | xhtml template device
-|========================================================
+factor has a web framework called "furnace", for handling forms and various other things, and "chloe", a system for producing xhtml. there's also an alternative to chloe called "fhtml" which is like php server pages for factor: factor expressions are inlined in text; when generating a response, the server evaluates the expressions, replaces the expressions with their output, then responds with the new text. furnace and chloe or fhtml are commonly used together. chloe is contrived but more certain. fhtml is freer and more liable to error. `USE:` `html.templates.<chloe|fhtml>` then view their docs. both implement the `template` interface of the `html.templates` vocab. chloe templates support conversion to responses via `<chloe-content>`. this being said, one can simply do `<fhtml> [ call-template* ] with-string-writer <html-content>`
 
-before i show an example server, i'll explain the ways that you can code _responders_: fns from http requests to responses:
+TIP: if you poke around factor's http vocabs, you'll see `action` a lot. it's a furnace thing. with regard to furnace actions, `display` is the main property for GET requests, analagously: `submit` for POSTs, `replace` for PUTs, `update` for PATCHes; set it to a quotation that takes a request and returns a response.
 
-. the server uses whatever responder is set to the global variable `main-responder`
-. said responder must be a class that implements `call-responder*`. i'll assume that you're using `trivial-responder`
-  .. i haven't yet imagined a scenario in which you'd want to define your own class and implementation. if you do, then know that `call-responder*`'s `path` argument is given as an array e.g. path "/hi/there" is given as `{ "hi" "there" }`.
+=== responders
+
+the thing that defines a responder is that it implements the generic word `call-responder*`. this word is where the logic of producing a response from a request goes.
+
+. during execution of `call-responder*`, the dynamic variable `request` is set, along with some redundant, other variables: `url` and `params` (url params)
+  .. load `http.server` then search "HTTP request variables" in the help browser for more info.
+. rather than a responder being `( req -- resp )`, it's `( -- )` where we load the request by `request get`, and write the response to `output-stream` (see note about `callable` below)
+. the `trivial-responder` tuple is all that you need if you want to write just a custom function from request to response. to actually have the server use your responder, set the global variable `main-responder` to your responder object. 
+
+TIP: if, for whatever reason, you want to define your own class that implements `call-responder*`, then know that `call-responder*`'s `path` argument is given as an array e.g. path `"/hi/there"` is given as `{ "hi" "there" }`.
+
 . the `response` class has obvious fields. `body` is the interesting part, since it's the actual payload. `body` may be a string, or anything else that implements `call-template*` (of the `html-templates` vocab).
-  .. the implementing class that i find most interesting is `callable`. its effect must be `( -- )` because the callable should print the response to `output-stream`. this is my preferred form, since it's so general and has smaller code and runtime complexities/costs than collecting into, then outputting, a string.
-. `<html-content>` & `<text-content>` both accept a body, which is directly put into the `response` object, which means that the body may be an object of any class that implements `call-template*`.
-. the global `development?` variable controls whether to respond with either a trace or a code 500 if your responder has an error
+  .. `callable` is my preferred type for `body`. of course the `callable` that i use is just an inline quotation; even if i define a word e.g. `: my-responder ( -- ) ... ;`, then i use `[ my-responder ]` as the value for the response's `body`. as i mentioned recently, its effect must be `( -- )`. `callable` is it's so general and has smaller code and runtime complexities/costs than collecting into, then outputting, a string.
+. usually i do not directly set the `body` field of a `response`. instead, i pass the body value to `<html-content>` or `<text-content>` (of the `http.server.responses` vocab); both accept a body value, which is directly put into the `response` object
+  .. yes, any class that implements `call-template*` may be passed to `<html-content>` or `<text-content>`!
+  .. sometimes i may create a `response` myself, but it's usually easier to create one via `<html-content>` or `<text-content>`, then modify whatever few slots i want of the resultant `response`.
+. finally, i must pass the `response` to `<trivial-responder>`
 
-.example: server with pages at /headers and /query
+=== example servers
+
+.the simplest server
+
+if you want to just generate a response from a request, then this is the simplest, shortest way to do it. this one simply prettyprints the request. to generalize the functionality, replace `.` with some function of the request that prints a response to `output-stream`.
+
+[source,factor]
+------------------------------------------------------------------------------
+USING: http http.server http.server.responses prettyprint ;
+[ request get . ] <text-content> <trivial-responder> main-responder set-global
+8080 httpd ! start the server on port 8080
+------------------------------------------------------------------------------
+
+run `stop-server: ( server -- )` whenever you're ready to shutdown & cleanup the server. see the `io.servers` vocab for more useful words, namely `stop-all-servers`, which is useful if you've accidentally lost the server object from the stack (or if you wanted to avoid ever needing to retain it on the stack!)
+
+.server with pages at /headers and /query
+
+here i introduce dispatchers; it routes /headers and /query to the associated quotations.
+
 [source,factor]
 -------------------------------------------------------------------------------------------------------------------------------
 USING: http http.server http.server.responses http.server.dispatchers io.servers sequences.extras ;
@@ -1962,14 +2019,16 @@ USING: http http.server http.server.responses http.server.dispatchers io.servers
 : resp ( quot -- responder ) <text-content> <trivial-responder> ; inline
 : print-dict ( dict -- ) [ ": " glue print ] assoc-each ; inline
 
-<dispatcher>
+<dispatcher> ! create a new dispatcher object
+
+! ( req -- resp )                             ! route   ! add responder to dispatcher, leaving updated dispatcher on stack
 [ request get header>>      print-dict ] resp "headers" add-responder
 [ request get url>> query>> print-dict ] resp "query"   add-responder
-"c'mon bro, ain't no page there!"        resp >>default ! optional. if omitted, then a generic 404 is given
-main-responder set-global
 
-8080 httpd  ! start the server on port 8080
-stop-server ! run this whenever you're ready to stop it. see io.servers for more useful words.
+! constant response string instead of quotation. works b/c string implements call-template*
+"c'mon bro, ain't no page there!"        resp >>default ! optional. if omitted, then a generic 404 is given
+
+main-responder set-global 8080 httpd
 -------------------------------------------------------------------------------------------------------------------------------
 
 the responder paths' are split on slashes, and the first one is tested against the given url, so if you want to serve local files, you'll need a special initial path segment to specify that.
@@ -1982,8 +2041,6 @@ the responder paths' are split on slashes, and the first one is tested against t
 
 if you're wondering how it is that it doesn't try to find the file at `/fs/path/to/file`, let me explain: the `path` input supplied to `file-responder`'s `call-responder*` method is a slice that doesn't include the head; this is so because the `path` parameter is supplied by the `dispatcher` class' `call-responder*` method which employs `find-responder`, which employs `rest-slice`. so this changes the `path` given to `call-responder*`; however, you'll find that `request get url>> path>>` is the full path including the leading `/fs`. the request object is never modified.
 
-'''''''''''''''''''''''''
-
 this is by far the most elegant, simple, capable server design that i've seen. by this dispatch design, the url's path's 1st segment is the function, the rest of the path segments are the command line arguments, and parameters are given by the url's query. e.g. the command line `git commit -am 'my commit'` could be represented by the url `/git/commit?a&m=my20%commit`.
 
 NOTE: if you're running the server from the listener, and your http client gives a "server reset connection" error, then that's because there's a dependent vocab that isn't compliing. e.g. if my `my-server` vocab depends on `my-utils`, then if i edit `my-utils` such that it fails to compile, then i get the "server reset connection" error.
@@ -1992,16 +2049,30 @@ NOTE: if you're running the server from the listener, and your http client gives
 * i suppose that `wait-for-server` is useful only if we want to block until the server terminates itself, or receives such a signal e.g. by someone requesting URL path `/stop` of the server.
 * `http-server` subclasses `threaded-server`, which has attrs `max-connections`, `encoding`, `timeout`.
 
-=== html templates
+TIP: the global `development?` variable controls whether to respond with either a trace or a code 500 if your responder has an error
 
-chloe is contrived but more certain. fhtml is freer and more liable to error.
+=== other http-related vocabs
 
-docs are found at the following vocab pages after loading them:
+.useful vocabs
+[options="header"]
+|==================================================================================
+| vocab                               | description
+| `io.servers`                        | tcp/ip. http is a protocol built atop tcp, so `io.server`'s words can be useful for http servers, too.
+| `http`                              | provides the `request` & `response` classes
+| `http.server`                       | http server
+| `http.server.static`                | ftp-like behavior (create responder that translates url to local pathname to serve files)
+| `http2.server`                      | subclass of `http-server`. handles http2 clients.
+| `logging.server`                    | logging
+|==================================================================================
 
-* `html.templates.chloe`
-* `html.templates.fhtml`
+there are also vocabs `http.server.cgi`, `cgi`, and `fastcgi`. cgi abbreviates "common gateway interface"—a standard for invoking subprocesses to generate responses from requests. i don't know why factor makes cgi available; i imagine that factor's server would be used for cgi with a more robust and efficient reverse proxy such as link:https://sqlite.org/althttpd/doc/trunk/althttpd.md[althttpd], link:https://redmine.lighttpd.net/projects/lighttpd/wiki/Docs_Configuration[lighttpd], or link:https://github.com/caddyserver/caddy[caddy]. and so i have not read about cgi in factor.
 
-both implement the `template` interface of the `html.templates` vocab. chloe templates support conversion to responses via `<chloe-content>`. this being said, one can simply do `<fhtml> [ call-template* ] with-string-writer <html-content>`
+.convenience vocabs
+[options="header"]
+|========================================================
+| vocab                     | description
+| `http.server.responses`   | response bodies
+|========================================================
 
 == websockets
 
@@ -2489,7 +2560,9 @@ CONSTANT: location3 T{ audio-source f {  0.0 0.0 0.0 } 1.0 { 0.0 0.0 0.0 } f }
     engine dispose ; ! always dispose of your engine to avoid memory leaks!
 ----
 
-if you don't dispose your engine, then not only is it a memory leak, but also it'll remain in your operating system's list of audio streams (as seen in e.g pavucontrol on linux, or the list of applications with sound streams in windows), polluting that list.
+TODO: refactor to not use locals (so that there're fewer words, which makes groking the code easier when the user is new to the vocab; e.g. one may easily mistake "engine" for a word definition rather than a local), and use `with-dispose`, since calling `dispose` is generally bad practice.
+
+if you don't dispose your engine, then not only is it a memory leak, but also it'll remain in your operating system's list of audio streams (as seen in e.g. pavucontrol on linux, or, in windows, probably in the list of applications with sound streams), polluting that list.
 
 == efficiency/tuning
 
@@ -2497,27 +2570,25 @@ aspects: speed, storage. you can use efficient factor code, or interface with an
 
 * you can write assembly inline in factor via `alien-assembly`
 
-=== storage
+=== specifying how data are stored
 
-* for c ffi: structs (`classes.struct` vocab), byte arrays, specialized arrays. these all are unboxed machine values.
-* tuple arrays are like how sql relations would be implemented in apl: it is effectively an array of tuples, but it's stored unpacked (no pointers) i.e. instead of storing an array of pointers to tuple objects on the heap, it stores tuple values in memory directly.
-  ** a struct stores a single tuple as an array, so it's practically a singleton tuple array. structs are more tuned: they require you to specify each slot's type in a way where its size is statically known.
-* simd vectors, and _specialized arrays_ (unboxed/packed) and tuple arrays. this should make factor a good lang for hacking binaries. by the optimizing compiler, operations on tehse binary structures can approach c's speed. un/boxing is implicit.
+* firstly, you may read the factor doc, "manual memory management".
+* if you know your data types & sizes (e.g. u32, i64) then it's more efficient to use:
+  ** `SPECIALIZED-ARRAY:` instead of a factor `array`
+  ** `STRUCT:` instead of `TUPLE:`
+  ** `SPECIALIZED-ARRAY:` instead of `TUPLE-ARRAY:`.
+* there's `SPECIALIZED-VECTOR:`, too. creating a specialized vector for a given type implicitly creates a specialized array for that type, too.
 
-specialized arrays' valid c types are described in `alien.c-types` vocabulary's documentation. many of the words are undocumented and seem redundant, e.g. `u16`, which i can only guess is equivalent to `ushort`.
+tuple( arrays) are better when you either:
 
-.how to choose specialized arrays, structs, or tuple arrays
+. store factor types in tuple slots, e.g. `timestamp`, `bignum`
+. store potentially multiple types in any given slot
 
-* c ffi => not tuple arrays
-* not storing the same size of data in each tuple => tuple arrays
-* passing struct to a c fn => struct
-* storing an array of structs => specialized array (or tuple array if you prefer that interface and don't care so much about efficiency nor types)
+for c ffi: structs (`classes.struct` vocab), byte arrays, specialized arrays or vectors. these all are unboxed machine values. a non-ffi-compatible, but more general structure, is tuple arrays: effectively arrays of tuples, but stored _unpacked_ (TODO: clarify exactly what this means). you don't have to type the tuple's values, and the types don't have to be c types e.g. you can store factor ``timestamp``s in tuple slots.
 
-at this point the question is whether to store an array of structs, or instead, a structured array for each struct attribute: `struct(a,b,c)[n]` vs `a[n], b[n], c[n]`. this is actually a stupid question. this is 2-dimensional data. are indices are attribute name and index. we may write it as (tag,idx) or (idx,tag). consider the general version of this problem: how should we store n-dimensional data? the original question does not generalize sensibly because there are far too many possible ways to nest arrays & structs. this reveals that having multiple (here two) equivalent devices is bad design because it creates this "needless choice" problem in which all choices are equally good, but the code differs, which creates syntactic asymmetries, which makes coding & refactoring harder.
+TIP: the types that can be used for specialized arrays' are c types: primitve types given in `alien.c-types` vocabulary's documentation (see the factor doc, "Primitive C Types"), or struct types, which are made of those primitves. many of the words are undocumented and seem redundant, e.g. `u16`, which i can only guess is equivalent to `ushort`. then there are endian-aware types (`alien.endian` vocab) if you must use a particular endianness, such as network protocols.
 
-thus the conclusion is: if you're storing one struct, then use the struct type; if you're using an array of structs, then use a specialized array per struct attribute.
-
-by the way, the ideal way to store a set of n-dimensional data is as a map from an index dictionary to subset e.g. the index `{name='jim',age>26}` to whatever elements correspond. this is a query satisfied efficiently by traversing a database of facts stored as predicates, reducing the total set to a subset until all predicates are satisfied. this is exactly what prolog does. how to make this traversal efficient depends on the data; it can be specialized, but there are surely various good general schemes, too.
+depending on your coding situation, you might want to consider the apl way of basically storing the transpose of an array of structs e.g. instead of storing a sequence of `struct{char a, int b}`, use two vectors, `<char-array>` & `<int-array>` for `a` & `b` respectively, then instead of `i arr nth [ a>> ] [ b>> ] bi`, you'd do `a b i [ swap nth ] curry bi@` (or w/e, depending on where your data are on the stack). really i like the apl method better. aside from enabling the usual apl magic (iykyk), it's just nicer e.g. if you've a struct with 5 attrs then you do `a b c d e` [ ... ] 5 nmap` which is nicer than `[ [ a>> ] [ b>> ] [ c>> ] [ d>> ] [ e>> ] cleave ... ] map`.
 
 .using specialized arrays
 
@@ -2527,7 +2598,7 @@ by the way, the ideal way to store a set of n-dimensional data is as a map from 
 
 .using tuple arrays
 
-* `0 <class-array> map-as` produces a "cannot call run-time computed value" error. you must do `map >class-array`.
+* `0 <myclass-array> map-as` produces a "cannot call run-time computed value" error. you should do `T{ myclass-array } map-as`. `T{ myclass-array }` is an empty tuple array. it's things like this that remind me that `{ }` is not syntax for "array type" but rather is a new array object pushed onto the stack for use by `map-as`.
 * if you `TUPLE-ARRAY: x` then words `>x-array` and `<x-array>` are generated which respectively convert a sequence to, or initialize with given capacity, a tuple array.
 
 ==== encoding numbers
@@ -2640,12 +2711,16 @@ you'll notice that i used neither of the `io.sockets` vocab's `send` nor `receiv
 
 * make a `SECRET:` syntax that is like `CONSTANT:` for strings but stores the value in a way that obscures it from the standard `strings(1)` unix program. ideally, when the vm starts, it'll overwrite the encoded string by its decoded version of the same length, keeping the same location in memory. if it's non-cryptographic (or effectively so by using a fixed symmetric cipher key) then i suppose that a dedicated hacker might decompile the factor binary, then identify the places where strings would be stored even if as a seq of obscured bytes, then just reverse the encoding algorithm,...but that would take some effort, and, at least currently and somewhat sadly, with factor being unpopular, unlikely someone would take time to release such a hack.
 * http2 client. link:https://www.rfc-editor.org/rfc/rfc9113.html[http/2] is a version of http that particularly handles what in http/1.1 is keep-alive connections. keep-alive is just plan sensible for rest api calls, especially for frequent calls.
+  ** reference <https://github.com/httpwg/http2-spec/wiki/Implementations>—perhaps the haskell `http2-client` package.
 * when loading a program, list all errors (namely unfound symbol errors) at once, and suggest import locations as the listener does, outputting an import string like when you try _running_ a program. my example is loading `.factor-rc`; i was told many times that a word was "found in the current vocabulary search path."
 * make a word to reload `.factor-rc` without restarting the listener (actually, i think that i encountered this already but forgot what the word is called)
+* document `sequences.generalizations`. a small bit of documentation goes a long way.
 
 == factor hackery
 
 === (custom) images
+
+TODO: see "Bootstap initialization file"
 
 bootstrap:: create an image from source rather than as a memory (heap) snapshot of a running factor process. see "Bootstrapping new images" doc.
 
@@ -2661,7 +2736,7 @@ TIP: `save` saves the ui theme, so you can associate a theme to each session/pro
 
 NOTE: `image-path` is a word that gets the value of dynamic variable `\ image-path`! note the preceeding backslash to treat `image-path` as a symbol instead of invoking the word!
 
-TODO: somehow noly my saved image cannot find the `trees.avl` nor the `aws` vocabularies. why? why are some vocabs present but others not? i suppose that i should learn more about exactly what images are and how vocabularies relate thereto, and generally work, before i expect to be able to answer. maybe it had to do with me deleting the original image then rebuilding it....
+TODO: somehow only my saved image cannot find the `trees.avl` nor the `aws` vocabularies. why? why are some vocabs present but others not? i suppose that i should learn more about exactly what images are and how vocabularies relate thereto, and generally work, before i expect to be able to answer. maybe it had to do with me deleting the original image then rebuilding it....
 
 === modding the listener
 
@@ -2758,3 +2833,103 @@ always specify combinators stack effects as their most general, row-polymorphic 
 another stack checking defect:
 
 `"" <get-request> [ drop ] do-http-request [ ] with-stream` works fine but if we re-express by changing argument order and using swap—`[ ] "" <get-request> [ drop ] do-http-request swap with-stream`—then we get the "call/run-time computed" error. if we use `dip` instead of `swap`, then there's no error: `[ ] [ "" <get-request> [ drop ] do-http-request ] dip with-stream`. this seems to be due to the combination of `do-http-request` being inline recursive and with-stream using continuations (and being inline). i guess this b/c `"" ascii [ ] "" <get-request> [ drop ] do-http-request swap with-file-writer` (or file reader) errors but `"" ascii [ ] "" <get-request> [ drop ] do-http-request swap 0 "" with-variable` works, and the difference between `with-input-stream` and `with-variable` is `with-disposal`, which uses continuation words.
+
+=== factor as (part of) a computer interface
+
+i don't write many programs. usually i use my programming knowledge for everyday tasks, where i write code on the fly, tailored to each situation—basically like how people use bash, except i use factor and kakoune for interactive data munging, so it's actually nice instead of a headache. these, a little bash, and the yazi file browser, and firefox are the majority of how i interact with my computer.
+
+so! this section gives examples for how it's nice to have a factor listener always running, ready for arbitrary computations or system administration, as a preferable alternative to command line shells for sufficiently-complex computations. again, i should check-out link:https://dt.plumbing/user-guide/lang/stdlib.html[dt]. still, i bet that factor's ability to interact with data on the stack well and browse through tuples' slots is unparalleled. good for active development and interactively, simultaneously developing & running computations alike!
+
+==== find disagreeing cue files
+
+the situation: i have the scorpions discography, but its directory structure is kinda complex and some albums have multiple cue files. i want to know how the cue files compare so that i can decide which to use with link:https://mp3splt.sourceforge.net[`mp3splt(1)`]:
+
+-------------------------------------------------------------------------------------------------
+ .
+├──  Albums
+│   ├──  '1972 Lonesome Crow'
+│   │   ├──  '1972 Lonesome Crow [1989 US R2 70915 Rhino]'
+│   │   │   ├──  '1972 - Lonesome Crow (R2 70915).cue'
+│   │   │   └──  '1972 - Lonesome Crow (R2 70915).flac'
+│   │   └──  '1972 Lonesome Crow [2002 US 422 825 739-2 Hip-O]'
+│   │       ├──  'Scorpions - Lonesome Crow (422 825 739-2 USA).cue'
+│   │       └──  'Scorpions - Lonesome Crow (422 825 739-2 USA).flac'
+│   ├──  '1974 Fly To The Rainbow'
+│   │   └──  '1974 Fly To The Rainbow [1987 USA 5057-2-R RCA]'
+│   │       ├──  '1974 - Fly To The Rainbow (5057-2-R).cue'
+│   │       └──  '1974 - Fly To The Rainbow (5057-2-R).flac'
+...
+├──  'Box Set'
+│   ├──  "2004 Axe Killer Warrior's Set [France AX070398]"
+│   │   ├──  'CD 1'
+│   │   │   ├──  'Scorpions - In Trance Virgin Killer  Deluxe Collector Edition Disc 1.flac'
+│   │   │   ├──  'Scorpions - In Trance Virgin Killer  Deluxe Collector Edition Disc 1.flac.cue'
+│   │   │   └──  'Scorpions - In Trance Virgin Killer  Deluxe Collector Edition Disc 1.wav.cue'
+│   │   └──  'CD 2'
+│   │       ├──  'Scorpions - In Trance Virgin Killer  Deluxe Collector Edition Disc 2.flac'
+│   │       ├──  'Scorpions - In Trance Virgin Killer  Deluxe Collector Edition Disc 2.flac.cue'
+│   │       └──  'Scorpions - In Trance Virgin Killer  Deluxe Collector Edition Disc 2.wav.cue'
+│   └──  '2010 3 Original Album Classics [EU LS02361 Sony]'
+│       ├──  '1975 In Trance'
+│       │   ├──  'Scorpions - In Trance (flac).cue'
+│       │   ├──  'Scorpions - In Trance.cue'
+│       │   └──  'Scorpions - In Trance.flac'
+│       ├──  '1976 Virgin Killer'
+│       │   ├──  'Scorpions - Virgin Killer (flac).cue'
+│       │   ├──  'Scorpions - Virgin Killer.cue'
+│       │   └──  'Scorpions - Virgin Killer.flac'
+│       └──  '1977 Taken By Force'
+│           ├──  'Scorpions - Taken By Force [CDA] (flac).cue'
+│           ├──  'Scorpions - Taken By Force [CDA].cue'
+│           └──  'Scorpions - Taken By Force [CDA].flac'
+...
+-------------------------------------------------------------------------------------------------
+
+so i hacked-up this factor code:
+
+[source,factor]
+----------------------------------------------------------------------------------------------
+"/home/nic/music/scorpions-discography"
+[ dup directory?
+  [ dup directory-files [ file-extension "cue" = ] filter dup length 1 >
+    [ swap dup print [ { "/usr/bin/diff" } prepend process-contents print f ] with-directory ]
+    [ 2drop f ] if
+  ] [ drop f ] if
+] find-files drop
+----------------------------------------------------------------------------------------------
+
+it gave this output:
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+/home/nic/music/scorpions-discography/Singles/1990 Wind Of Change (Russian & Spanish) [EU 866 265 - 2]
+1,2c1
+< REM ACCURATERIPID 0001a56a-00058ca7-1902f803
+< REM GENRE "Rock"
+---
+> REM GENRE Rock
+7c6
+< FILE "Scorpions - Wind Of Change.flac" WAVE
+---
+> FILE "CDImage.ape" WAVE
+
+/home/nic/music/scorpions-discography/Compilations/2005 The Platinum Collection/2005 The Platinum Collection [2005 Germany 00946 340 407 23 EMI]/CD 3
+
+/home/nic/music/scorpions-discography/Compilations/2005 The Platinum Collection/2005 The Platinum Collection [2005 Germany 00946 340 407 23 EMI]/CD 2
+1d0
+< stuff
+8c7
+< FILE "Scorpions - The Platinum Collection CD 2.wav" WAVE
+---
+> FILE "Scorpions - The Platinum Collection CD 2.flac" WAVE
+
+[...]
+
+/home/nic/music/scorpions-discography/Box Set/2004 Axe Killer Warrior's Set [France AX070398]/CD 1
+7c7
+< FILE "Scorpions - In Trance Virgin Killer  Deluxe Collector Edition Disc 1.wav" WAVE
+---
+> FILE "Scorpions - In Trance Virgin Killer  Deluxe Collector Edition Disc 1.flac" WAVE
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+granted, ideally i'd add some delimiters for clarity, but this is sufficiently readable.
