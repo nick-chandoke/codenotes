@@ -2051,6 +2051,46 @@ NOTE: if you're running the server from the listener, and your http client gives
 
 TIP: the global `development?` variable controls whether to respond with either a trace or a code 500 if your responder has an error
 
+.simple calculator app
+[source,factor]
+-------------------------------------------------------------------------------------
+USING: assocs http.server http.server.responses io io.servers
+kernel math.parser multiline namespaces prettyprint sequences ;
+IN: calcy
+: page ( -- )
+[[ <!doctype html>
+<html>
+<head>
+  <title>test</title>
+  <style>
+    label{padding-right:0.5em}
+    form{display:flex;flex-direction:column}
+    form>*{padding-bottom:1em}
+  </style>
+  </head>
+  <body>
+    <form action="/" method="get">
+      <div><label for="x">number 1:</label><input type="text" name="x"></input></div>
+      <div><label for="y">number 2:</label><input type="text" name="y"></input></div>
+      <input type="submit" value="calc"></input>
+    </form>
+  <p id="result">]] print
+  params get values
+  [ string>number ] map sift dup empty?
+  [ drop "NOOOOOO! bad inputs! >:(" ]
+  [ sum >dec ] if print
+  [[ </p>
+  </body>
+<html>]] print ;
+
+: start ( -- )
+  [ page ] <html-content> <trivial-responder> main-responder set-global
+  t development? set-global
+  8080 httpd drop ;
+-------------------------------------------------------------------------------------
+
+i literally threw this calculator app together in 5 minutes, including the time that i needed to consult w3schools for the form element 'cause i haven't written html or used forms in a long while. so it goes to show that you sure don't need furnace or other frameworks. sure some people will cringe at it, and i cringe back at them when they use frameworks. it's simplicity vs modularity, hackiness vs oop.
+
 === other http-related vocabs
 
 .useful vocabs
