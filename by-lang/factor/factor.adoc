@@ -1,10 +1,10 @@
 = the factor programming language
-notes by nicholas chandoke. currently undergoing significant revision.
+notes by nicholas chandoke
 :toc:
 
 == factor vs other programming languages / code systems
 
-probably. factor is best b/c it minimizes any stuff that gets between you and code, and maximizes access & ease of understanding the code; and its code is simple, so there's minimal distance between the abstract thought and its code representation, and code is easy to refactor, which makes it a highly-interactive system, which means detailed, easy, immediate feedback and hackabilty. i've found it so for small scripts to polished, robust, end-user products. it's like coding elisp in emacs (rather, a usable variant of it, e.g. spacemacs) except that it doesn't malfunction each time that you sneeze or that a glacier falls off the antarctic ice shelf. oh, and without the parentheses.
+factor is best b/c it minimizes any stuff that gets between you and code, and maximizes access & ease of understanding the code; and its code is simple, so there's minimal distance between the abstract thought and its code representation, and code is easy to refactor, which makes it a highly-interactive system, which means detailed, easy, immediate feedback and hackabilty. i've found it so for small scripts to polished, robust, end-user products. it's like coding elisp in emacs (rather, a usable variant of it, e.g. spacemacs) except that it doesn't malfunction each time that you sneeze or that a glacier falls off the antarctic ice shelf. oh, and without the parentheses.
 
 so yeah, very simple, terse, readable, efficient, refactorable, hackable, and comes with tons of functionality. in fact, its only shortcoming is that the executable sizes of compiled factor programs can be absurdly large (hundreds of megabytes) (also the factor binary itself (including the required `factor.image` file) is large: 130M). i would say that it being infeasably slow to use as an interpreted language is a shortcoming, but it is not: factor code is best compiled, which produces a fast executable that anyone can run. the need to compile it (and the compilation time needed) are no more undesirable than needing to have an end-user install a program just to run yours.
 
@@ -79,6 +79,7 @@ notes' new structure:
   .. to retain something on the stack when a quotation will be called multiple times, then use `curry`, as is common in looping/iteration combinators like `loop`, `each`, `map`.
   .. to copy something, then use `over`, `pick`, etc
   .. to leave something on the stack as a return value, then depending on the data flow, you'll use either `dup` (copy atop), `tuck` (copy below), or `[ ... ] keep` (copy on top with fn of stack). `over` is equivalent to `swap tuck`, btw. your proficiency in shuffling the stack will show itself in your ability to notice such relations, by thinking in terms of datum position on the stack and duplication.
+    ... `[ ] keep` is equivalent to `dup`
   .. to apply a symmetry to multiple data on the stack, use "cleave", "spread", or `apply` combinators e.g. `2bi`. `tri*`, or `bi@`.
   .. otherwise sometimes you'll want to use general shuffle words. don't worry about making it beautiful; as you code, over time you'll naturally begin to notice more elegant ways to manage the stacks
 . vocab reference (useful stuff, eliding unnecessary things, as most things are)
@@ -1119,11 +1120,11 @@ USING: colors.gray io.styles hashtables sequences kernel math ;
 
 === subprocesses (`io.launcher` vocab)
 
-generally one may make a `process` tuple then modify its properties then run it. however, usually we want the default process behavior. notice that words like `run`, `run-detached`, and `<process-reader>` accept "desc"s, not process object _per se_. indeed, these words use generic word `>process`. to convert an object into a process. therefore we commonly do e.g. `{ "echo" "hello, there!" } run` rather than `<process> { "echo" "hello, there!" } >>command run`.
+generally one may make a `process` tuple then modify its properties then run it. however, usually we want the default process behavior. notice that words like `run`, `run-detached`, and `<process-reader>` accept "desc"s, not process object _per se_. indeed, these words use generic word `>process`. to convert an object into a process. therefore we commonly do e.g. `{ "echo" "hello, there!" } run-process` rather than `<process> { "echo" "hello, there!" } >>command run-process`.
 
 .shell expressions
 
-factor does not have a word that uses the shell at environment variable `SHELL` to evaluate a string. for example, `"ls *" process-contents print` will print nothing unless you happen to have a file called '*' in your directory. this string is not passed to e.g. bash for the asterisk to be evaluated as a blob expression. the very fact that factor runs the expression at all is a bit misleading; if you give a single string (instead of a sequence of strings) as a command, what factor actually does is (at least on unix-based oses) calls `tokenize` to split basically on whitespace, then calls `execvp` on the head & tail. i'm actually not even sure how that works; `execvp` does not check the executable path against envar `PATH`, though `execvpe` does. thus i'd think that this "ls" example would fail with the error that "command 'ls' cannot be found."
+factor does not have a word that uses the shell at environment variable `SHELL` to evaluate a string. for example, `"ls \*" process-contents print` will print nothing unless you happen to have a file called '\*' in your directory. this string is not passed to e.g. bash for the asterisk to be evaluated as a blob expression. the very fact that factor runs the expression at all is a bit misleading; if you give a single string (instead of a sequence of strings) as a command, what factor actually does is (at least on unix-based oses) calls `tokenize` to split basically on whitespace, then calls `execvp` (for `fork-process` if you use `run-process` on a \*nix os; or `posix_spawnp` if you call `spawn-process`) (with the environment) on the head & tail.
 
 regardless, if you want to execute something by the default shell, then do:
 
@@ -1979,7 +1980,7 @@ TIP: if you poke around factor's http vocabs, you'll see `action` a lot. it's a 
 
 the thing that defines a responder is that it implements the generic word `call-responder*`. this word is where the logic of producing a response from a request goes.
 
-. during execution of `call-responder*`, the dynamic variable `request` is set, along with some redundant, other variables: `url` and `params` (url params)
+. the dynamic variable `request` is set (along with some redundant, other variables: `url` and `params` (url params)) before `call-responder*` is called, so they're available for use within Implementations of `call-responder*`
   .. load `http.server` then search "HTTP request variables" in the help browser for more info.
 . rather than a responder being `( req -- resp )`, it's `( -- )` where we load the request by `request get`, and write the response to `output-stream` (see note about `callable` below)
 . the `trivial-responder` tuple is all that you need if you want to write just a custom function from request to response. to actually have the server use your responder, set the global variable `main-responder` to your responder object. 
@@ -2060,13 +2061,13 @@ IN: calcy
 : page ( -- )
 [[ <!doctype html>
 <html>
-<head>
-  <title>test</title>
-  <style>
-    label{padding-right:0.5em}
-    form{display:flex;flex-direction:column}
-    form>*{padding-bottom:1em}
-  </style>
+  <head>
+    <title>test</title>
+    <style>
+      label{padding-right:0.5em}
+      form{display:flex;flex-direction:column}
+      form>*{padding-bottom:1em}
+    </style>
   </head>
   <body>
     <form action="/" method="get">
@@ -2081,7 +2082,7 @@ IN: calcy
   [ sum >dec ] if print
   [[ </p>
   </body>
-<html>]] print ;
+</html>]] print ;
 
 : start ( -- )
   [ page ] <html-content> <trivial-responder> main-responder set-global
@@ -2628,7 +2629,51 @@ for c ffi: structs (`classes.struct` vocab), byte arrays, specialized arrays or 
 
 TIP: the types that can be used for specialized arrays' are c types: primitve types given in `alien.c-types` vocabulary's documentation (see the factor doc, "Primitive C Types"), or struct types, which are made of those primitves. many of the words are undocumented and seem redundant, e.g. `u16`, which i can only guess is equivalent to `ushort`. then there are endian-aware types (`alien.endian` vocab) if you must use a particular endianness, such as network protocols.
 
-depending on your coding situation, you might want to consider the apl way of basically storing the transpose of an array of structs e.g. instead of storing a sequence of `struct{char a, int b}`, use two vectors, `<char-array>` & `<int-array>` for `a` & `b` respectively, then instead of `i arr nth [ a>> ] [ b>> ] bi`, you'd do `a b i [ swap nth ] curry bi@` (or w/e, depending on where your data are on the stack). really i like the apl method better. aside from enabling the usual apl magic (iykyk), it's just nicer e.g. if you've a struct with 5 attrs then you do `a b c d e` [ ... ] 5 nmap` which is nicer than `[ [ a>> ] [ b>> ] [ c>> ] [ d>> ] [ e>> ] cleave ... ] map`.
+.array of structs (AoS) vs struct of arrays (SoA)
+
+depending on your coding situation and favored coding style, you might want to store your code a la apl, as vectors; instead of a struct each of whose fields stores one value (aka an "atom" or "scalar"), have it represent an array of values. if you have multiple variables each of which represents an array, then it's just called "array programming". if, however, you group multiple variables together, e.g. by putting them together as fields of a struct, then this representation is called a "struct of arrays" or "SoA", as opposed to an array of structs, "AoS". in apl it's called "inverted tables". or it can be described as a _column-major_ db table. this design is inherently more memory- & cpu-performant, regardless of programming language / runtime/vm, and, being of the array programming paradigm, enables all the wonders of that paradigm, provided that your language supports it.
+
+NOTE: factor structs don't support specialized array fields. rather, they do, but only in a roundabout way if you type them as `void*`. however, you can store them as a tuple, which is just as well, since the actual efficiency is in using specialized arrays, and we're just storing pointers to them anyway.
+
+instead of `i arr nth [ a>> ] [ b>> ] bi`, you'd do `a b i [ swap nth ] curry bi@` (or w/e, depending on where your data are on the stack). really i like the apl method better. aside from enabling the usual apl magic (iykyk), it's just nicer e.g. if you've a struct with 5 attrs then you do `a b c d e` [ ... ] 5 nmap` which is nicer than `[ [ a>> ] [ b>> ] [ c>> ] [ d>> ] [ e>> ] cleave ... ] map`.
+
+example from my automated stock trader code:
+
+[source,factor]
+-------------------------------------------------------------------------------------------------
+USING: specialized-vectors alien.c-types ;
+SPECIALIZED-VECTORS: uint ushort uchar ;
+
+! each slot is to store a specialized vector
+TUPLE: ts { d read-only } { m read-only } { s read-only } { p read-only } { v read-only } ; final
+
+: <ts> ( n -- d m s p v )
+  { [ <uint-vector> ]
+    [ <ushort-vector> ]
+    [ <uchar-vector> ]
+    [ <uint-vector> ]
+    [ <uint-vector> ]
+  } cleave ; inline
+
+: (push-ts) ( ts -- q: ( d m s p v -- ) )
+  { [ v>> [ push ] curry ]
+    [ p>> [ push ] curry ]
+    [ s>> [ push ] curry ]
+    [ m>> [ push ] curry ]
+    [ d>> [ push ] curry ] } cleave
+  compose compose compose compose ; inline
+
+: (push-all-ts) ( ts -- q: ( d m s p v -- ) )
+  { [ v>> [ push-all ] curry ]
+    [ p>> [ push-all ] curry ]
+    [ s>> [ push-all ] curry ]
+    [ m>> [ push-all ] curry ]
+    [ d>> [ push-all ] curry ] } cleave
+  compose compose compose compose ; inline
+
+-------------------------------------------------------------------------------------------------
+
+where `: (trades) ( ... ticker time-range q: ( results -- ... ) -- ... ) ... ;`
 
 .using specialized arrays
 
@@ -2640,6 +2685,26 @@ depending on your coding situation, you might want to consider the apl way of ba
 
 * `0 <myclass-array> map-as` produces a "cannot call run-time computed value" error. you should do `T{ myclass-array } map-as`. `T{ myclass-array }` is an empty tuple array. it's things like this that remind me that `{ }` is not syntax for "array type" but rather is a new array object pushed onto the stack for use by `map-as`.
 * if you `TUPLE-ARRAY: x` then words `>x-array` and `<x-array>` are generated which respectively convert a sequence to, or initialize with given capacity, a tuple array.
+
+.serializing structs & specialized vectors
+
+structs and specialized vectors don't need serialization; they can be written & read raw:
+
+[source,factor]
+-------------------------------------------------------
+USING: specialized-arrays alien.c-types io io.streams.c
+       classes.struct ;
+SPECIALIZED-ARRAY: uint
+STRUCT: my-struct { foo uint } { baz uchar } ;
+
+uint-array{ 24 1 56 0 4 3 }
+6 10 my-struct boa
+"/home/nic/test" "w" fopen <c-writer> [ [ write ] dip write ] with-output-stream
+-------------------------------------------------------
+
+note that we cannot have specialized array types (e.g. `uint-array`) in structs; they aren't "c types", so the `STRUCT:` syntax disallows it. we can store pointers to these arrays and use `void*` for the struct type slot, and we get usable code from that, but then we can't just write the raw struct to disk, since the pointer would be written, and its value isn't generally meaningful. also you'd need to write the length of the array, which, i suppose you'd specify manually depending on its length; you'd write an endian-encoded length of a given number of bytes. most generally you could consult `sequences.private:array-capacity` to know how many bytes are needed (8 bytes currently on a 64 bit system).
+
+there's a word, `read-struct`, which reads a struct from `input-stream`, and thus would support reading from a file, so that's done. but there's no extant, elegant way to read bytes into a specialized array. it's not hard, though: `: read-uint-array ( n -- ) uint-array [ element-size * malloc ] 2keep boa`, though honestly i'm unsure whether, by this method, the underlying memory is freed properly, or if i must `free` it sometime....
 
 ==== encoding numbers
 
