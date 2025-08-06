@@ -1,0 +1,18 @@
+= when direct arithmetic is best for coding (it's often)
+
+[source,factor]
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+! using a timestamp tuple object
+: mins-since-midnight ( timestamp -- mins ) [ hours>> 60 * ] [ minutes>> ] bi + ;
+
+! direct translation into arithmetic version
+: mins-since-midnight ( millis -- mins    ) 60000 /i 60 /mod [ 24 rem 60 * ] dip + ;
+
+! actually sensible version when one reasons from arithmetic originally
+: mins-since-midnight ( millis -- mins ) 86400000 rem 60000 /i ;
+
+! timestamp version, where ``midnight``'s expanded definition is `clone 0 0 0 [ >>hour ] [ >>minute ] [ >>second ] tri*`
+! obviously the arithmetic version is simpler, has fewer instructions, is shorter, and is trivially portable to any programming language, including risc assembly
+: midnight/millis ( millis -- midnight ) 86400000 [ /i ] keep * ;
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+
