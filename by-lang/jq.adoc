@@ -102,9 +102,9 @@ NVR     11785    7949.8       7870.2       7995.0       7862.08     3590      2
 BRK.A     290  696051.0112  703115.0     704259.99    695129.0612    286      1
 -------------------------------------------------------------------------------
 
-actually, i thought about how i was using array vs atomic functions, and i realized that i could express more elegantly by moving the sort statement to later and putting `select` inside the rhs of `.[]|=`, since `.[]|=` is effectively map (see `jq(1)`): `.results | .[]|=(select(.h>650) | del(.vw,.t) | ."hl%"=(100*(.h/.l-1) | round))|sort_by(.h) | .[-5:]`.
+actually, i thought about how i was using array vs atomic functions, and i realized that i could express more elegantly by moving the sort statement to later and putting `select` inside the rhs of `.[]|=`, since `.[]|=` is effectively map (see `jq(1)`): `.results | .[]|=(select(.h>650) | del(.vw,.t) | ."hl%"=(100*(.h/.l-1) | round))|sort_by(.h)[-5:]`.
 
-i can modify it to change the key names, too: `.results | .[]|=(select(.h>650) | ."hl%"=(100*(.h/.l-1) | round) | {ticker:.T,high:.h,low:.l,"hl%"}) | sort_by(.h) | .[-5:]` to produce:
+i can modify it to change the key names, too: `.results | .[]|=(select(.h>650) | ."hl%"=(100*(.h/.l-1) | round) | {ticker:.T,high:.h,low:.l,"hl%"}) | sort_by(.h)[-5:]` to produce:
 
 -------------------------------------
 ticker         high        low    hl%
@@ -116,7 +116,7 @@ WFCpL     1195.0     1192.5         0
 ZTEST     7616.1492  7616.1492      0
 -------------------------------------
 
-rather than "renaming keys" _per se_, i'm generating an output json object (for each array item) from input values. when i think about it, then, i can revise this into a more elegant form by inlining the definition of "hl%": `.results | .[]|=(select(.h>650) | {ticker:.T,high:.h,low:.l,"hl%":(100*(.h/.l-1) | round)}) | sort_by(.h) | .[-5:]`.
+rather than "renaming keys" _per se_, i'm generating an output json object (for each array item) from input values. when i think about it, then, i can revise this into a more elegant form by inlining the definition of "hl%": `.results | .[]|=(select(.h>650) | {ticker:.T,high:.h,low:.l,"hl%":(100*(.h/.l-1) | round)}) | sort_by(.h)[-5:]`.
 
 also, did you catch the error? i refactored incorrectly: i left `sort_by(.h)` despite there being no `h` key anymore since i renamed it to `high`! bad design for `sort_by` to allow a null value! the solution to this would be for nulls to propogate (i.e. any expression containing a null becomes itself null); remember that the expression given to `sort_by` is indeed a general expression, not necessarily just a key.
 
