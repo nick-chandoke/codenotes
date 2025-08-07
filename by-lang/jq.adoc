@@ -1,0 +1,149 @@
+= jq
+
+i use the term "table" to mean table data expressed as json, even when cells may be missing which is equivalent to saying that their data is null. "table" is thus most generally a non-nested array of json objects mostly having the same keys. i use link://github.com/kellyjonbrazil/jtbl[`jtbl`] (found in the arch user repository) to format tables often.
+
+jq is a possible alternative to `json_pp` though the latter is probably more efficient and likely guarantees identical representation of values.
+
+== basics
+
+`.[]` breaks an array into a sequence of objects; these objects can be acted upon by a function, and the function is applied to all items of the sequence. sequence is not valid json, though it represents a sequence of json objects. the sequence can be re-encapsulated into an array by surrounding the expression in brackets e.g. `.[]|=f` to map expression `f` over all items of the input array, outputting a sequence, and `.[]=[f]` to output a "proper" json array. jq prints sequences as it does arrays but without item-delimiting commas nor surrounding brackets e.g:
+
+[source,sh]
+---------------------------------------------
+jq '.[]' <<< '[{"x":3,"y":4},{"x":10,"y":6}]'
+{
+  "x": 3,
+  "y": 4
+}
+{
+  "x": 10,
+  "y": 6
+}
+---------------------------------------------
+
+=== array semantics
+
+idk, maybe none? i must use `.[]|` in `.[]|{xa:.x,y}` for e.g. `'[{"x":3,"y":4},{"x":10,"y":6}]'` to rename key `x` to `xa` in each array item.
+
+== recepies & case studies
+
+=== add a computed field to each element of an input array
+
+given `[{"x":3,"y":4},{"x":10,"y":6}]`, `.[]|=(.z=.x+.y)` produces
+
+-----------
+[
+  {
+    "x": 3,
+    "y": 4,
+    "z": 7
+  },
+  {
+    "x": 10,
+    "y": 6,
+    "z": 16
+  }
+]
+-----------
+
+it works b/c setting a key's value implicitly adds the key if it isn't already present. also, we don't need to surround the output expression in brackets b/c the `|=` operator modifies the input array.
+
+=== expression nesting
+
+unary math functions e.g. `sin` are invoked without parens in jq e.g to round all `x` in an array of items each of which contains an `x` attribute but leave the rest of the table unchanged: '.[]|=(.x=(.x|round))':
+
+-----------------------------------------
+     x    y    z              x    y    z
+------  ---  ---            ---  ---  ---
+ 3.45     4        becomes    3    4
+10.645    6   45             11    6   45
+-----------------------------------------
+
+=== long, composite examples
+
+i use polygon.io for stock data. their json api http responses have a key called "results" wherein tabular data is stored:
+
+---------------------------------------------------------------------------------------------------------------------------
+T                      v             vw              o              c              h              l              t        n
+-------  ---------------  -------------  -------------  -------------  -------------  -------------  -------------  -------
+ATKR        1410733.0         56.7485        55.56          57.12          57.68          55.02      1754510400000    29127
+BPAY           1490.0         32.4677        32.62          32.6551        32.6551        32.33      1754510400000       39
+IWMY         102574.0         23.2267        23.21          23.28          23.29          23.13      1754510400000     1441
+CPHI          19615.0          1.6025         1.62           1.57           1.63           1.57      1754510400000      136
+VCSH       15528120.0         79.4613        79.46          79.5           79.51          79.4       1754510400000    19384
+IBDQ         542675.0         25.1058        25.11          25.11          25.11          25.1       1754510400000     1431
+HUYA         622980.0          3.3883         3.4            3.42           3.42           3.34      1754510400000     3261
+MGEE          97992.0         84.2854        84.45          83.89          85.445         83.68      1754510400000     3833
+...
+---------------------------------------------------------------------------------------------------------------------------
+
+consider the following script (spaces added for readability): `.results | map(select(.h>650)) | sort_by(.h) | .[]|=(del(.vw,.t) | ."hl%"=(100*(.h/.l-1) | round)) | .[-5:]`.
+
+step-by-step, where each step corresponds to a pipe-delimited segment of the script:
+
+. get object at `results` key
+. `select` means "filter" but unlike in most functional programming languages, `select` operates on at atom, not an array; it marks the atom as "to be present" or not in output. we must `map` `select` in order to get the familiar `filter` functionality as found in nearly all other programming languages. you can this of this segment as me mapping a predicate over data, but where the predicate's output is used specially to decide whether the data are retained or not. i'm yet unsure in which all contexts `select` can be used.
+  .. TODO: this is related to how `.[]` breaks into sequences of sort-of "pseudo-objects" i.e. they are sensible but not valid json. also, haven't i seen this design somewhere before? it's also related to jq's special `empty` primitive.
+. sort by key `h`
+. break the array into a sequence then apply the parenthecized expression to its elements. the expression must be parenthecized to denote that its pipeline is to be applied to each element independently. the expression:
+  .. delete keys `vw` & `t`
+  .. set a key named `hl%` to 100*(h/l-1), rounded. note that the rhs of `=` is parenthecized! without them would be like passing the result of the assignment to `round`, which makes no sense.
+. take the last 5 elements, expressed as a slice whose starting index is negative, and whose end slice index is omitted
+
+output:
+
+-------------------------------------------------------------------------------
+T           v            o            c            h            l      n    hl%
+-----  ------  -----------  -----------  -----------  -----------  -----  -----
+AZO    109262    4023.05      4072.8       4094.69      4020.0     13548      2
+BKNG   199175    5474.47      5536.31      5538.83      5415.0     23471      2
+ZTEST       0    7616.1492    7616.1492    7616.1492    7616.1492             0
+NVR     11785    7949.8       7870.2       7995.0       7862.08     3590      2
+BRK.A     290  696051.0112  703115.0     704259.99    695129.0612    286      1
+-------------------------------------------------------------------------------
+
+actually, i thought about how i was using array vs atomic functions, and i realized that i could express more elegantly by moving the sort statement to later and putting `select` inside the rhs of `.[]|=`, since `.[]|=` is effectively map (see `jq(1)`): `.results | .[]|=(select(.h>650) | del(.vw,.t) | ."hl%"=(100*(.h/.l-1) | round))|sort_by(.h) | .[-5:]`.
+
+i can modify it to change the key names, too: `.results | .[]|=(select(.h>650) | ."hl%"=(100*(.h/.l-1) | round) | {ticker:.T,high:.h,low:.l,"hl%"}) | sort_by(.h) | .[-5:]` to produce:
+
+-------------------------------------
+ticker         high        low    hl%
+--------  ---------  ---------  -----
+BH.A      1467.0     1420.0         3
+NVR       7995.0     7862.08        2
+WTM       1795.47    1756.0         2
+WFCpL     1195.0     1192.5         0
+ZTEST     7616.1492  7616.1492      0
+-------------------------------------
+
+rather than "renaming keys" _per se_, i'm generating an output json object (for each array item) from input values. when i think about it, then, i can revise this into a more elegant form by inlining the definition of "hl%": `.results | .[]|=(select(.h>650) | {ticker:.T,high:.h,low:.l,"hl%":(100*(.h/.l-1) | round)}) | sort_by(.h) | .[-5:]`.
+
+also, did you catch the error? i refactored incorrectly: i left `sort_by(.h)` despite there being no `h` key anymore since i renamed it to `high`! bad design for `sort_by` to allow a null value! the solution to this would be for nulls to propogate (i.e. any expression containing a null becomes itself null); remember that the expression given to `sort_by` is indeed a general expression, not necessarily just a key.
+
+.correct output after changing h to high
+-----------------------------------------
+ticker           high          low    hl%
+--------  -----------  -----------  -----
+AZO         4094.69      4020.0         2
+BKNG        5538.83      5415.0         2
+ZTEST       7616.1492    7616.1492      0
+NVR         7995.0       7862.08        2
+BRK.A     704259.99    695129.0612      1
+-----------------------------------------
+
+idk why, but i can't accomplish this by appending `|.[]|{}` to the end of the original script. i mean it'd be less elegant anyway since it's effectively using an extra `map` (the `f map g map` antipattern which should be `f . g map`), but still.
+
+if i want the count, then i could append `,length` to the script, but that produces a sequence which is not well-formed json and isn't tabular anymore so i can't pass it to `jtbl`. fortunately, over the years, i've learned a healthy disrespect for semantics and am quite comfortable with the following solution:  `... |sort_by(.high)[-5:]+[{length:length}]`, which, when passed to jtbl, gives:
+
+---------------------------------------------------
+ticker           high          low    hl%    length
+--------  -----------  -----------  -----  --------
+AZO         4094.69      4020.0         2
+BKNG        5538.83      5415.0         2
+ZTEST       7616.1492    7616.1492      0
+NVR         7995.0       7862.08        2
+BRK.A     704259.99    695129.0612      1
+                                                 41
+---------------------------------------------------
+
+>:D heheheheh.
