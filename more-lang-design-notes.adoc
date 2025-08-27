@@ -26,3 +26,4 @@ words like `group-by` are effectively defined as `[ ... ] accumulate` rather tha
 . does not give us access to its accumulator/state
 
 incremental design would make much easier the automatic fusion of operations e.g. `<groups> [ ... ] map` would be one fold.
+
