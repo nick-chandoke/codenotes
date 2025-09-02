@@ -28,11 +28,26 @@ not only will the language be documented with a formal specification, but its de
 
 depth should correspond to text direction, not nest. e.g. rather than `[ [ ] map ] map`, it should be `[ ] [ ]` with the fact of the quotations mapping being implicit. this is just a desire, and a shoddy sketch, certainly leaving much to be fleshed-out. off the top of my head: is this a concern at all for array or set languages? what about `curry` naturally consuming from the top of the stack into part of a quotation? what about when we have `[ [ ] map stuff ] map`? i'd think that all of these questions are irrelevant since set langs don't concern depth at all and that any "nesting" is really not nesting but rather multidimensional indices, which are treated no differently from unidimensional indices in code. i suppose that this concern really begs the questions:
 
-. use of curry—common in factor, where quotations are built-up, though fried quotations are the applicative version where we don't need curry; all quotations are expressed as inline code, which is still natural, but is it sometimes less elegant? also curry in factor can be used instead of \: & /: in k, but shaped arrays & rank in rectangular apls generalize each-left & each-right nicely, but is rank a useful generalization? and how does it practically vs theoretically compare with sql or prolog?
-. what can we do with notation? this is a text concern, and text is unidirectional, so it supports concatenation, which makes it a natural notation for concatenative programs, which are elegant; but can we achieve even better elegance by going from text to some graphics or using multidimensional syntax?
-. what's an elegant way to conceptualize depth? is depth a foolish concept, an illusion, that we should ignore? depth obviously conjures thoughts of scope/subset and "for all", but aren't both of these obviously ubiquitous thus making "depth" a redundant term? what's more, putting "for all" and subset right next to each other is a funny thing since a subset is either the whole (indeed, _all_) or a proper subset (just all the things but filtered!)
+* use of curry—common in factor, where quotations are built-up, though fried quotations are the applicative version where we don't need curry; all quotations are expressed as inline code, which is still natural, but is it sometimes less elegant? also curry in factor can be used instead of \: & /: in k, but shaped arrays & rank in rectangular apls generalize each-left & each-right nicely, but is rank a useful generalization? and how does it practically vs theoretically compare with sql or prolog?
+* what can we do with notation? this is a text concern, and text is unidirectional, so it supports concatenation, which makes it a natural notation for concatenative programs, which are elegant; but can we achieve even better elegance by going from text to some graphics or using multidimensional syntax?
+* what's an elegant way to conceptualize depth? is depth a foolish concept, an illusion, that we should ignore? depth obviously conjures thoughts of scope/subset and "for all", but aren't both of these obviously ubiquitous thus making "depth" a redundant term? what's more, putting "for all" and subset right next to each other is a funny thing since a subset is either the whole (indeed, _all_) or a proper subset (just all the things but filtered!)
+* the question of concatenative/stack vs applicative is stupid. the answer is "obviously neither": if you don't immediately know what to name a variable, then it probably shouldn't be named and should instead be an anonymous [read: tacit] datum in a combinator pipeline. conversely, if you have complex data relationships, then you'll likely want to reference variables by name, and naming them is likely easy since they'll likely reflect clear ideas. combinators are nice because they dispense with what's commonly needless: naming variables. furthermore, combinators are nice because they reflect symmetries, which has the bonus of making code factorable i.e. when code is represented in terms of common patterns then those patterns can be expressed in terms of common patterns and so on until the code is compressed ultimately. as i think i already mentioned elsewhere, there's no excuse for not using a stack + variable model since during any program's execution, never are 16 or more data needed at once, which means that either a stack with max size 16, or 16 registers, is ample, let alone having both together. actually using a stack isn't even helpful; the utility of a stack language is not the stack, but tacit combinators. the stack is a very good way to tacitly represent data, though i wonder if there's something better. j's `x` & `y`, and clojurescript's `%n` arg syntax allows us to reference data by position, without naming them.
+* variadic functions aren't needed, and so neither are function argument delimiters (no parentheses nor commas in function calling syntax)
+* i totally forgot about erroneous looping forever. `while` is rarely needed! traversals through finite spaces are exceedingly common. they're always through data structures or numbers. usually they consider subsets until null or a short-circuit flag. sometimes, however, some may loop forever. an example of one that shouldn't is a fn followed by loop state transition fn of right bitshift, since that definitely approaches 0. right shift does not. similarly, subtraction of unsigned integers w/o overflow for converges to 0. addition of non-zero size_t's always eventually satisfies `[ x >= ]` for some `x`. as this language is index-centric and traversals are just fns applied to tacit indices, there should be safety checks for halting code.
+* lexical scoping is a mistake, but scoping to a subroutine is good. also i like, particularly enabled by a stack machine model, once a datum is off the stack, it's gone, implicitly marking its availability for reuse. we could have a function that uses 4 variables, but only one at a time, so we could store each of the 4 in 1 register.
 
-honestly i've been away from lang design awhile rn, and i've probably already answered these questions simply by designing designs that don't even allow these concerns.
+the stack model elegantly updates multiple values simultaneously for computations that don't change stack height (such as would be used in loops) but store "last n elements" e.g. in
+
+[source,factor]
+---------------------------------------------------------------------------------------
+: 3-clump-mask-map ( seq q: ( a b c -- ? ) -- idxs )
+  [ [ first2 ] keep 2 tail-slice ] dip over length 2/ <vector>
+  [ '[ [ rot 2over @ ] dip swap [ 2 + _ push ] [ drop ] if ] each-index ] keep ; inline
+---------------------------------------------------------------------------------------
+
+`rot 2over` is `( a b c -- b c a b c )` so the last 2 elements `a` & `b` become `b` & `c` while we still perform a fn on `a b c`. the stack makes some updates nice. often, though, it does not, or the elegance isn't considerably better than expressing it applicatively, especially when we must calculate how to arrange the data on the stack to attain such elegance.
+
+honestly i've been away from lang design awhile rn, and i've probably already answered these questions simply by designing designs that don't even allow many of these concerns.
 
 ''''
 
@@ -45,13 +60,15 @@ many langs have useful limitations:
 * ngn/k verbs support no more than 8 args
 * by its stack nature, factor doesn't support variadic fns
 
-there can be the tendency to be overly concerned about limitation, e.g. "what about if i want a ternary fn, or a fn with more than 8 args, or to use locals instead of the stack" etc, but this is a slippery slope. enjoy the limitation's:
+there can be the tendency to be overly concerned about limitation, e.g. "what about if i want a ternary fn, or a fn with more than 8 args, or to use locals instead of the stack" etc, but this is a slippery slope. enjoy the limitations':
 
 . simplicity
 . compression & exploitation thereof that it allows e.g. j's grammar is context-sensitive b/c it exploits its contrived grammar and thus achieves an extremely small grammar with many ad-hoc rules and very terse code
 . efficient implementation, speed, and resource usage
 
 the caveat is that either your code will rarely-but-sometimes be inelegant, or you'll have to learn how to structure your code to be elegant. i find great relief in that so much factor & apl code is so readable, terse, elegant, yet uses limited systems. they demonstrate that code does not have to be complex, though complex code is commonly written in languages that allow it e.g. java, ruby, python, c++, lisp.
+
+in much of my personal coding, i rely on fitting as much information into a structure as possible. frequently i use e.g. all combinations of 3 booleans which i store as a number 0~7, or i map 2 booleans for each of n values where n<64 which i can store in a 64-bit dword. these coding schemes that _just get by_ are similar to having at-most-binary functions. indeed, they don't accomodate all, but they do most and their limitation enables great things, such as j's fork syntax.
 
 some simplest designs are best, but others not. consider delimited continuations vs goto. they're both _branching_. consider exceptions in c vs java vs factor or haskell. though exceptions are commonly thought of as a unique concept, it's again just branching, no different from an `if` [factor] or thread mailboxes! all are just conditional jumps, though mailboxes feature an `await` call, but that's really hardly a conceptual adjunct!
 
@@ -68,6 +85,87 @@ any time that you ask, "without X we can't do Y?", first ask: 1. do we actually 
 * sql & prolog demonstrate that one variable can elegantly refer to a set. apls aren't so elegant, since they impose restrictions on variables' shapes.
 * factor demonstrates that a mix of stack combinators & shuffle words and locals elegantly expresses relations among (few data or relations thereof)
 * multi-dispatch (generics) is the same as predicate or pattern matching which is the same as case/cond/if. a single "match" form should be a language's only expression of this device.
+
+the essential quality of arrays is that elements are considered independently of each other; for example, `map` acts on one element without regard to others. this is different if we use `reduce` or `clump-map` (as it's called in factor; in k it's called `':`). of course, the independent case is simpler than the non-independent one, so it's easier to express the former in any language than the latter. though array langs are much better for the former, they're not so much better than non-arrays langs for the latter. consider the following efficient version of sql `select distinct y from x join y where y>=x group by x` or k `(?x{*(~x>)#y}\:y)^0N`:
+
+[source,factor]
+-------------------------------------------------------------------------------------------------------------------------------
+: first-following ( x y -- z )
+  [ 0 0 ] 2dip over length <vector> ! 0 & 0 are last idx & val
+  [ '[ pick ! gotta check that last idx is truthy
+       [ 2dup >
+         [ drop ]
+         [ swapd [ >= ] curry _ swap find-from dup
+           [ nipd dup _ push ]
+           [ drop swap ] ! (A). leaves a false "last idx" value.
+           if
+         ] if
+       ] [ drop ] if
+     ] each
+  ] keep 2nip ;
+-------------------------------------------------------------------------------------------------------------------------------
+
+* it's stupidly (though not necessarily considerably) inefficient in that `each` does not short-circuit in the line marked (A); once (A) is first reached, it's necessarily taken for all subsequent elements of `x`.
+* needing to check whether the last index is truthy or not is dumb. maybe i could use `or` or something to make dealing with it more elegant, but then the fact of needing to do _that_ is dumb.
+
+since i haven't learned zig yet, cpp offers the most expressive & efficient solution of all:
+
+[source,cpp]
+------------
+#include <vector>
+#include <iostream>
+std::vector<uint> v;
+uint x[] = {2,3,4,5,6,8,9,10,11,12,16,17,18,19,20,40,60,80};
+uint y[] = {5,8,9,10,11,12,19,26,27,28,29,32,43,49};
+
+int main(){
+  for(uint lv,Ly1=sizeof(y)/sizeof(uint)-1,i=0,j=0;i<sizeof(x)/sizeof(uint);i++){
+    uint a=x[i],b; // a & b are labels for x[i] & y[j]
+    while(j<Ly1 & a>(b=y[j]))j++;
+    if(a>b)break;
+    if(a>lv)v.push_back(lv=b);
+  } for(uint x:v)std::cout<<x<<' '; std::cout<<'\n';
+}
+------------
+
+* it'd be nicer to express `j` as "the next in `y` greater than `a`". (B) can pretty easily be understood to mean "`b` is earliest in `y` greater than `x[i]` and `j` is `b`'s index" but it could be more clearly expressed.
+* i didn't catch the #y-1 off-by-one error at first because i used `&&` instead of `&` so `y[j]` never got executed after `j` increased to #y.
+  ** needing to consider order of operations sucks. i just want j to go through `y`. i wish that i could just say "b in y" as a constraint and conditionally call `next()` as necessary. i cannot simply null-terminating `x` & `y`, and omitting `i` & `j`, using `*a` & `*b` pointers directly to iterate through `x` & `y`, because null-terminating breaks comparisions such as `a>b`; i must iterate through `y` until i get to its end—its maximum value—and retain that value for comparisions. of course i could add an extra variable to maintain the last iteration's `b` (`lv` won't work; it's the last _pushed_ `b`), but at that point i may as well use the code that i already have. at least the code that i have minimizes the number of dereferences anyway. still, this demonstrates the strong desire for not looping combinators, but traversal primitives, specified as predicates, which combine commutatively e.g. "b in y" and "next b" which does nothing if `b` has no next. keeping indices as variables is legitimate if they're in arithmetic operations, but that's not the case here. `next()` is nearly the only needed iteration primitve needed. sometimes iterations return to their start. rarely is an iteration variable reset to any other prior value. similarly, rarely is an ivar set forward more than one position at a time. binary search is a familiar counterexample: "next" is a fn not only of the usual `i` & `#x`, but also `x[i]`. the advancement of the index fn is not the usual increment, but a complex one, even involving conditionality: next(i,j)=mi=(i+j)/2;m=x[mi];m<Q?(mi,j):m>Q?(i,mi):(mi,mi). considering `(i,j)` as a range (which i assume is a sensible primitive given its fundamentality in sql searches), `(a,a)` is a particular termination case; obviously we cannot shrink it, so we must be done
+    *** this is actually a particular case of the convergence/termination/fix-point pattern, next(i)=i. we may try to shrink, but we'll certainly be left with the same interval which doesn't support shrinking, and thus the interval remains the same from one iteration to the next. we'd definitely loop forever, so we may as well consider this a loop termination case.
+      **** a seeming example of fix point termination is when next() fails because we're already at the end, and thus returns the same value. however, this is indistinguishible from merely encountering the same value twice, which is a common occurrence. the truely sensibly convergent version is when next() fails and its _index_ remains the same. *for this reason, ivars should be accessible as either their index alone, their value alone, or both altogether as a whole object.*
+
+so, i wrote the factor version first, then i wrote the cpp version, then i tested the factor version on different inputs, and i found that it's actually incorrect! given how much better the cpp version is, i did't even try to fix the factor version; instead i opted to take far too long & arduous a time translating the cpp version into factor:
+
+[source,factor]
+------------------------------------------------------------------------------------------------
+: first-following ( x y -- z )
+  [ dup length [ <vector> tuck ] keep ] dip  -rot [ [ length 1 - ] keep ] 2dip ! v x #y-1 y v #x
+  '[ [ _ nth
+      [ [ < pick _ < and ] curry [ dup _ nth dup ] prepose ! ( j -- j b ? )
+        [ drop 1 + ] while
+      ] keep ! lv j b a
+      ! if(a>b) don't loop again; else{if(a>lv)...; loop again;}
+      2dup < [ 2drop f ] [ reach > [ dup _ push -rot nip ] [ drop ] if t ] if
+    ] [ _ < and ] [ 1 + swap ] tri
+  ] [ 0 0 0 ] dip ! lv/b j i
+  loop 3drop ;
+------------------------------------------------------------------------------------------------
+
+the cpp version was easy & natural to write, but i admit that i understood the algorithm better by being forced to know where each variable was used, leading to the `tri` on `i`. as simple as i'd intended the cpp algorithm to be, i realize that someone who isn't familiar with the algorithm would have to figure out the total meaning (use) of all seven variables, despite `i` & `j` corresponding to `a=x[i]` & `b=y[j]`—an obvious symmetry that cpp can't well express (and in this case, factor can't well express, either, i think) or that `Ly` is a constant that i saved to a name so that it'd be calculated only once. complex as the factor code is, we see that, in the first `tri` block, `i` is converted to `a` immediately and thus thereafter `i` is not present in that block's computation; it's off the stack and thus out of scope. ``i``'s use in ``tri``'s other 2 blocks is obvious because the blocks are so simple.
+
+if you look at the factor version calmly and don't let your eyes instinctively cross, then you can easily pick-out the 3 cpp statements:
+
+. `x[i]`
+. increment-j loop
+. conditional push & tell whether to loop again
+
+i wonder how elegant a comparably efficient array version would be. the main efficiency gain is in accounting that search space `y` shrinks over looping through `x`. a secondary, much more minor efficiency gain is to simply not collect redundant `x` rather than to do so but account for it after looping by taking the nub.
+
+unlike factor or algol-like langs, array langs don't have stateful iterators except for reduce, which is a very particular form and often less elegant than `map` that uses state i.e. the row-polymorphic part of its stack signature, `( ... xs q: ( ... x -- ... y ) -- ... ys )`.
+
+also i found that the factor code doesn't even work correctly! for inputs { 2 3 4 5 6 8 9 10 11 12 16 17 18 19 } & { 5 8 9 10 11 12 19 26 27 28 29 32 43 49 } it gives { 5 5 8 8 9 10 11 12 19 19 }.
+
+also i realized an inefficiency in my method that might not present in the sql version (i've to think about it): consider the new example inputs; even though `y`'s 1st elt is 5, and it's pushed on the 1st loop, the next 3 loops iterate over `x` as 3, 4, & 5, despite already knowing that `y` is already 5. ideally rather than `i++` we'd increment i until x[i]>lv.
 
 = index[ed set]-centric computing
 
@@ -95,12 +193,18 @@ the actual source code should read like english, and wrt symmetries, with w/o us
 
 an index-centric model would avoid bad design such as factor's `2each-from`, which obviously generalizes to parallel traversal of n seqs from a given offset. still, however, this function, is even poorer design because it is a particular traversal. traversals should not be in functions; they should be virtual sequences, e.g. `zipped` instead of `zip` and `cord` instead of `append`. all would be virtual; the programmer would have no ability to override this. like in k, computations would have naturally elegant information reductions e.g. reducing to `0N` which is truthy but propogates and can be converted to a falsy value by `^:`. it should not be defined, and though its definition, `-roll 2length-operator each-integer-from`, is efficient, clean, and short, it is better expressed as `[ tail-slice ] curry [ bi@ ] curry dip 2each`. the latter version generalizes to any virtual sequences of any argument seq. furthermore, i say the same for `each-index`; prefer `each` over a virtual zipping of a seq w/its corresponding iota.
 
+features/example capabilities:
+
+* if you specify a map operation whose output is passed only to `length` then, because it's known that map does not affect length, the map operation is not actually performed
+* any train of iterations is combined into one. this is because `filter`, `map`, etc are actually traversal modifiers, not traversals themselves
+
 case studies for implicit iteration:
 
 * join/intersperse can be expressed well by a virtual sequence: if the index's lsb (parity) is set, then return the join element; else return seq[i/2] (i.e. seq @ i >> 1).
   ** ofc if you're going to take many arbitrary subseqs, then you'd want a literal join, since accessing contiguous memory is faster than going through index de-virtualization functions then accessing multiple unrelated sectors of memory.
 * inner or outer join
 * asymmetric relations, especially those that change during iteration
+* consider how bins solves the general "find greatest x less than y" problem provided that it always returns either the element before or after the query. a good version would return 2 data: the value, and a bool indicating whether it's an exact match. this being said, that doesn't work well for the array method, and we can easily look-up the element at the index then test equality
 * combinations or permutations
 * matching the elegance of `: converge ( ... x q: ( ... x -- ... y ) -- ... y ) [ keep dupd = not ] curry loop ; inline`
 * enable a hashtable to retain insertion order. this is a stupidly simple operation: add an extra integer field, and modify insert to insert size() (evaluated before adding the key) along with the key. in black-box programming, this would need to be done by adding structure [read: "relation"] around an underlying hashtable that relates the underlying elements to this seq of integers. with white-box programming, there are no scopes, and...well, no black boxes! rather than subroutines, which are sequences of instructions, we use predicates, which are inherently non-hierarchical (though ofc they incidentally permit hierarchies by various traversals) and rather than support concatenation, support union, intersection, subtraction, etc. the problem is how to conveniently retain only certain relations through refactoring. catlangs make this trivial, and stack langs have good data sharing via the global state: the stack. (i suppose that stack langs w/row polymorphic word effects are arguably "gray-box", then.)
@@ -173,6 +277,21 @@ notice that the applicative version is, surprisingly to me, actually not terser!
 similarly, array langs encourage users to code in terms of arrays, which are symmetric structures. homogenous, rectangular arrays are stifilingly symmetric, but hetrogeneous, ragged arrays are flexible while still being easy to reason about in terms of array symmetries. so array code is much more prone to being fewer, simpler, though less-efficient operations than a typical solution coded in a non-array lang.
 
 also, when writing in applicative style, it's easy to forget to account for certain data, whereas usually in stack code if you forget to account for data, then it's just still sitting on the stack, yet to be consumed, which appears as a stack checker error; thus stack code is more suggestive in development. the lack of constraint among of local variables is freeing, but completely not suggestive. the lack of constraint means that any code runs, so the errors found in debugging applicative code will be much more frequently run-time errors than compile-time.
+
+consider the following:
+
+[source,factor]
+----------------------------------------
+: true-ticks ( v h l t n -- v h l t )
+  [ <groups> ] curry 4 napply
+  { [ [ sum     ] uint-array{ } map-as ]
+    [ [ maximum ] uint-array{ } map-as ]
+    [ [ minimum ] uint-array{ } map-as ]
+    [ [ first   ] long-array{ } map-as ]
+  } spread ;
+----------------------------------------
+
+of course, syntax should be terser; but my point here is that this code should represent one traversal which, rather than breaking into groups represented by tuples, should do one traversal over the 4 sequences simultaneously (with one index variable) which resets states. "<groups>" should mean "every n"; *it's a fn of traversal index*. i've never seen a language consider traversal indices as a special linguistic element, but perhaps it's time that one did. words should have the ability to modify tacit indices (and thus traversals)! this example's 4 traversals should instead be 4 words that all modify one traversal and compositionally specify how 4 distinct data should update through the traversal and when they should store intermediate values! this suffices as a universal model for computation: traversal (most generally a `while` loop) with storing intermediate states (most generally, with the ability to remove states, too).
 
 characteristics:
 
@@ -405,3 +524,7 @@ again, as always (and i should have a document that says all this once, then i s
 * consider join and "factor", a form of info compression: `[ \ ] [ ∩ ] [ swap \ ] 2tri`. one datum in many exprs implicitly relates those exprs; their intersection is non-null. "intersect" can be described as "largest common form". certainly all code is merely data being together vs apart. union is just another way of specifying a subset (of all). `AND` is application & merging whereas `OR` maintains distinctness/separation.
 
 note about parsers: we can impose models, such as the array model, which does not affect the basic case e.g. `1+2` is `3` regardless of whether the array model is imposed or not. yet things that would otherwise be nonsense (uninterperable) are interpreted sensibly by it e.g. `1 2 3 + 4` produces `5 6 7`. we can freely union additional orthogonal parsers (orthogonal meaning here that each parser's parsing expressions do not overlap) without worry about changing the interpretation (meaning) of our code. we're also free to install new non-orthogonal models and compute the overlap then choose the order in which sets of overlapping rules are tried, and we can run it on code to identify which subsets of our code's meaning may change by installing the new parser. obviously <installing a new parser whose rules are tried only after the prior parser's overlapping rule fails> will affect only if the original parser fails, which may or may not be expected in your code, depending on how you wrote it.
+
+== final note
+
+idk if my lang will be stack-based or concatenative, but i can't deny that regardless, i will continue to code in a tacit, forth/factor-like language because its aesthetic is one that i personally find wonderful—namely the cleanness of syntax: that only whitespace separates tokens. this is natural with concatenativity. however, factor programs, by use of quotations, can become nested (forth has not this). nested code is nice, too, but comes at some moderate cost that i think i've discussed elsewhere.

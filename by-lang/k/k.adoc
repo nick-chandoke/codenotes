@@ -24,7 +24,7 @@ k3 & k6 much differ. this document details k6 & ngn/k yet. a section comparing k
 
 === k vs j
 
-k is categorically better than j:
+k is categorically better than j (except performance):
 
 * vectors instead of arrays
   ** no boxing
@@ -836,6 +836,8 @@ being a permutation, the map's domain is always implicitly `!#x`. b/c the map's 
 * in a sorted array, the elements nearest a given element are its neighbors
 
 grade is an inverse thing. see the bqn explanation.
+
+* grade expressed in factor: `dup length <iota> <zipped> [ first ] sort-by [ second ] map`
 
 [TODO]
 * explore group theory, then permutation cycles. these should help me understand j's anagram and cycle primitives, too.

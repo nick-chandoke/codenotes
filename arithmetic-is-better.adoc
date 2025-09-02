@@ -1,5 +1,13 @@
 = when direct arithmetic is best for coding (it's often)
 
+NOTE: this "coding" method (see "coding.adoc") based on arithemtic, information theory, and development with regard to the machine's architecture, which i discovered & developed myself, is apparently already a known practice called link:https://vimeo.com/649009599?fl=pl&fe=ti["data-oriented design/programming"]. i've only just discovered this term, so i have yet to compare my perspective with common knowledge. i basically developed my method from apl (all data is arrays of numbers, and we exploit number theory to the hilt). also see link:https://github.com/simongog/sdsl-lite/wiki/List-of-Implemented-Data-Structures[the succinct data structure library].
+
+.terminology
+
+`and` & `or` should be called `both` & `either`—or even better than these binary versions, their n-ary versions _all_ & _any_—at least when one is first learning/introducing the concepts. even by the time one gets to boolean rings, they should be "product" & "coproduct", though "and" & "or" are terser....  really, "any" & "all" are clearest, which naturally mean, for booleans, "any or all [of the nth bits is/are set]."
+
+.some factor stuff
+
 [source,factor]
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
 ! using a timestamp tuple object
@@ -16,3 +24,58 @@
 : midnight/millis ( millis -- midnight ) 86400000 [ /i ] keep * ;
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+much better than converting into a `timestamp` tuple [oop] just to convert back to milliseconds. furthermore, i can store unix timestamps as words [asm] on 64-bit systems, which means that i can store them in static arrays without pointers.
+
+.map from numbers to two booleans
+
+sure you could use a hash table from a number to an ordered pair or whatever of booleans, but sometimes we can do better. for example, i found a need to map numbers from 0~53 to two booleans. each boolean corresponds to one bit of information, so two booleans is two bits. 53 is less than 64, so i can, on a 64-bit architecture, use a dword to store 53*2 bits of information. then to get the two bits at a given number _n_, all i must do is `THE_MAP >>> (n*2) & 3`. as it turns-out, here's the map:
+
+------------------------
+key    bool 1    bool 2
+----  --------   -------
+   1        1         1   
+   2        0         1   
+   4        1         1   
+   5        1         1   
+...
+  37        0         1   
+  38        1         0    
+  41        1         1   
+  52        0         1   
+  53        0         1   
+------------------------
+
+to build the map/number:
+
+[source,c]
+-----------------------------------------------------
+unsigned long long map;
+int A[n][3];
+for (int i = 0; i < n; i++)
+  map |= (A[i][0] * 2) << ((A[i][1] << 1) | A[i][2]);
+-----------------------------------------------------
+
+idk if that c is exactly correct, but hopefully you get the idea. and, yeah, instead of multiplying by 2 you can shift right 1, but i wanted the code to be semantically obvious. i did the actual coding in factor: with the matrix on the stack, `0 [ first3 [ 1 shift ] dip bitor swap 2 * shift bitor ] reduce`.
+
+anyway, the result is this heccin' chonker: 0x500000c27fff7ccf50035ff4f1c. we can get the 2 booleans for e.g. key 34: `0x500000c27fff7ccf50035ff4f1c 34 -2 * shift [ 2 bitand 2/ ] keep 1 bitand`. we can test that the encode/decode works: with the matrix on the stack: `dup [ first dup 0x500000c27fff7ccf50035ff4f1c swap -2 * shift [ 2 bitand 2/ ] keep 1 bitand 3array ] map =` returned true.
+
+.representing stock market status
+
+i could use symbols, but i can use arithmetic in a lovely, natural way:
+
+[options="header"]
+|=================
+| binary | meaning
+| 00     | closed
+| 01     | am
+| 10     | day
+| 11     | pm
+|=================
+
+* the empty value 0 is semantically natural with "closed"
+* the codes' order corresponds to temporal progression
+* the rightmost bit tells whether we're in extended hours or not
+
+an interesting thing about this pattern is that, if we want to build this number from 3 booleans (we get 0 if none), first we assign incrementing ordinals to them, then we could OR them all together, or we could just take their max: `(am*1) | (day*2) | (pm*3)` or max(am*1,day*2,pm*3). here, as is very common, we see `or` & `max` both as "coproduct". we could've used addition instead, just as well, just another coproduct. in fact, if we use addition instead of `or`, then the experssion is the usual dot product.
+
+this situation has the pattern that at most one of these booleans can be true, so in apls, where bits are represented as boolean vectors, we can just prefix with a zero then select the index of the first truthy bit e.g. in k: `0^0 0 0 1?1`. we need `0^` to convert `0N` (null, a value returned if none was found) into a zero. also, iirc, the x86 architecture has an instruction to return the index of the left- or right-most set bit. i mean that'd be useless as redundant, since to get that bit we would have already had to OR them together, which gives the same result anyway. but still, good to think about, since if our situation were just a bit different, it could be useful.

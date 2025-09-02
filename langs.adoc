@@ -15,6 +15,9 @@
 | factor  | A       | sus                | v.high  | no     | high       | no
 |===========================================================================================================
 
+* also rust, go, zig, odin, futhark.
+* btw, (better) alternatives to haskell: ocaml, erlang, pony
+
 runtimes: VM (compiled), I for interpreted, N for compiled-native, A for ambivalent to compilation or interpretation, JIT for just in time compilation.
 
 notice that, despite racket scheme being a simple model and syntax, i gave it only a "good" simplicity score because it's so flexible that there's no de facto way of coding. also, conceputually similar codes are often incompatible because of type differences e.g. streams & sequences. this problem does not exist in picolisp.
@@ -157,9 +160,13 @@ how i read this factor code:
 
 i also see the leading literal format string as a parameter of `format!` separately from ``format!``'s arguments on the stack.
 
+i found link:https://andrewkelley.me/post/openzfs-bug-ported-zig.html[some buggy openzfs c code]. the bug is seen as variables being unused. this cannot be a problem in stack langs; if data is produced, then it's stored on the stack, and it must be consumed else you have stack effect error. a beauty of the stack is that it makes defining/holding too many data obviously bad, whereas it's not as obvious in applicative languages.
+
 === conclusion
 
 totally tacit is a blessing! use/make combinators & quotation rather than shuffling. and yes, arg ord is an important part of tacit program design, just like it is in haskell! although, factor's `swap` is much easier to reason about than haskell's `flip`! this fact generalizes.
+
+one thing about applicative coding—namely declaring variables: it gives a place to specify the datum's type/size. factor has `declare` which sucks, though using it everywhere _might_ be still better than applicative code, but it isn't great, either way. idk how forth handles typing yet.
 
 lessons:
 
@@ -206,11 +213,6 @@ we know the phrase "no stinkin' loops." sure. true, even in haskell and scheme w
 * safety, such as correctness or memory safety
 * parallelism
 * concurrency
-
-== other langs
-
-alternatives to c: go, zig; commonly rust or v
-(better) alternatives to haskell: ocaml, erlang, pony
 
 == ideal lang (design & implementation)
 

@@ -4,32 +4,9 @@ use `case`/`switch` instead. in a nutshell, `switch` is declarative and `if`/`co
 
 it's actually already being done: haskell's `if` is syntactic sugar for `case` on `True` & `False` constructors of the Bool sum type. `switch` syntax should be terse; for example, `x:: 1: a; b;; 2: c;` for what in c would be `switch(x){case 1: a; b; break; case 2: c;}`. this is no longer than an `if` statement. in a tacit, concatenative language, it could be just `1:[ a b ] 0:[ c ] sw` vs `[ a b ] [ c ] if`. the syntax could simply be that, like c enumeration syntax, if case numbers are omitted then natural numbers are assumed, starting from the last-declared case number (so the false branch would precede the true one). rather than store multiple booleans as vars by name or in the stack, mask them together then run a `switch` statement. this is flat and makes tracking all booleans explicit and thus easy. for example:
 
-.oldest version
+TODO: put in an example
 
-TODO: put here from backup
-
-.old version (sketch; get the basic feel for it)
-[source,factor]
----------------
-pluggedin?
-[ getcharge 98 >= [ ... drop f ] [ drop t ] if ]
-[ getcharge [ >= ] curry MY_ARR swap find drop 3 or ! in k this whole line is expressed simply as 1+MY_ARR'getcharge[]
-  [ 0 =
-    [ ... ]
-    [ ... ] if
-  ] [ drop ] if
-] if
----------------
-
-TIP: using link:https://code.jsoftware.com/wiki/Vocabulary/icapdot#dyadic[bins] (') returns a natural number, which puts it into the magical land of natural number arithmetic, so i can bitshift and use switch/case. thanks to apls for making bins a primitive to encourage its use!
-
-.new version
-[source,factor]
----------------
-NEXT
----------------
-
-using numbers afforded me to refactor from the oldest to newest versions because it reduced complexity both in that there were fewer variables to track, and simpler control structure i.e. mentally tracking which data is on the stack and in which order, or which booleans hold in a given conditional branch, and in factor, balancing `if` branches to have equal stack effect. you still must ensure equal effect of `case` branches, but it's much easier since both 1. `case` is flat, and 2. one input is tested against each case branch, whereas each `cond` branch's effects depends on its predecessor's branch's effect.
+using numbers afforded me to refactor from the oldest to newest versions because it reduced complexity both in that there were fewer variables to track, and simpler control structure i.e. mentally tracking which data is on the stack and in which order, or which booleans hold in a given conditional branch, and in factor, balancing `if` branches to have equal stack effect.[1] you still must ensure equal effect of `case` branches, but it's much easier since both 1. `case` is flat, and 2. one input is tested against each case branch, whereas each `cond` branch's effects depends on its predecessor's branch's effect.
 
 one might erroneously think that the old version could be equivalently rewritten by combining into a single test case: `getcharge 98 >= pluggedin? and` then inlining it with the other `if` branches, all expressed as one `cond`, but that would be wrong because most of the clauses actually require that we are _not_ plugged-in. if we incorporate the `pluggedin?` bool as a bit in a number, then we immediately know from the case number whether, in that case, we're plugged in or not; in other words, it makes each case, independently, an effortless & elegant expression of all of which booleans are true and all of which are not, altogether/simultaneously.
 
@@ -91,3 +68,29 @@ switch(x){
 ------------------------------
 
 the "switch" idiom can be effortlessly ergonomic, if only sensible syntax is chosen.
+
+''''
+
+[1] for example, this code, which i'd intended to be `( ? n -- str )` fails due to imbalanced `if`'s:
+
+[source,factor]
+-----------------------------------------
+{ { [ 2dup 7 eq? and ] [ 2drop "FULL" ] }
+  { [ dupd 0 eq?     ] [ 2drop "SLEP" ] }
+  { [                ] [ "LOW"        ] }
+} cond
+-----------------------------------------
+
+yet if i change the 2nd `2drop` to `drop`, and move the other `drop` into the predicate of the 3rd test, then it succeeds:
+
+[source,factor]
+-----------------------------------------
+{ { [ 2dup 7 eq? and ] [ 2drop "FULL" ] }
+  { [ dupd 0 eq?     ] [ drop "SLEP"  ] }
+  { [ drop           ] [ "LOW"        ] }
+} cond
+-----------------------------------------
+
+if you keep your wits about you, then this is obvious, but it's easy to become awash in code and start becoming hazy and start making mistakes like this, confusing the stack effect for a branch/body clause with the stack effect of the test clause which leaves data on the stack for the next test.
+
+`switch` is cool because it re-expresses many things as equality. for example, `5 >` is now a boolean, a bit in a number, which we test for equality. if we have many such cases of greater/less than, then link:https://code.jsoftware.com/wiki/Vocabulary/icapdot#dyadic[bins] gives an integer corresponding to the range, which we can `switch` on.

@@ -63,6 +63,18 @@ ok, so these notes are:
 . the listener, walker, and documentation browser
 . useful vocabs, sectioned by purpose
 
+.interesting concatenativity example
+
+i found link:https://blog.demofox.org/2016/08/23/incremental-averaging/[some code] when looking for moving averages:
+
+-------------------------------------------------------------------
+NewAverage = OldAverage + (NewValue - OldAverage) / NewSampleCount;
+// Or:
+Average += (NewValue - Average) / NewSampleCount;
+-------------------------------------------------------------------
+
+at first i tried coding the second expression in factor, since it looks like it's fewer computations: `over - 5 / +`, but i didn't get the result that i expected (because of my own mistake; the expression is correct), so i looked to the first expression to see if it'd give my expected result. but when i would need to modiify this expression in factor, i found that it was already identical! thus what can be expressed only one sensible way in factor can be expressed in two different ways in applicative languages! by "sensible" i namely mean that i'm not counting `dupd swap -` instead of `over -`, since the former is just a poorer expression that we might expect from a factor novice.
+
 '''''''''''''''''''''''
 
 TODO: add section about how coming to factor from scheme/haskell was awful, but from j was good. factor's combination of virtual sequences, mixins, row-polymorphic looping combinators, and mutation is unique, allowing one to do things that they cannot do nearly so elegantly in c, haskell, scheme, or j.
@@ -75,13 +87,16 @@ notes' new structure:
 . intro to factor: stack, cat, and discussing how factor programs generalize fns, and how purity is no longer applicable, since the code is not applicative.
   .. i imagine that a common reason that people coming from app.prog. find factor difficult to read is that they're used to trying to hold a whole function or other block of code in their head at once; if they don't see it altogether, then they feel like they're blind. by contrast, cat.prog. is about hardly holding _any_ of the code in mind at a time; the whole point is that you don't need to care at all about anything before or after some small part of the program that you're considering, since they don't affect each other—yk, being _concatenative_ and all. so these app.prog.-minded people start at either the beginning of a word, or at the middle but then work their way backward just to trace the stack effect. that's madness!
 . how to code well in factor: combinators, quotations, currying, stack shuffling (retain [somewhere], discard, or shuffle; e.g. `pick` & `rot` both bring, of `x y z`, `x` to the top, but `pick` copies whereas `rot` moves), factoring, and code structure.
+  .. to interactively play with complex shuffling, if you so wish instead of using locals, you can e.g. `SYMBOLS: v n h l t ; { v n h l t v n h l t } [ [ rot ] 3dip ] with-datastack` to make the datastack print in one line for easier tracking
   .. currying is not always the most elegant, since it requires composing, which can be difficult, especially in nondeterministic loops through multiple sequences, namely when you must, inside a quotation passed to `map`, curry the current element then compose that `curried` with another quotation to be passed to an iterator such as `find`, all still inside that quotation passed to `map`. contrastingly, the stack is just the stack as the computation goes on; it's easy to shuffle it at any point in the computation.
   .. to retain something on the stack when a quotation will be called multiple times, then use `curry`, as is common in looping/iteration combinators like `loop`, `each`, `map`.
   .. to copy something, then use `over`, `pick`, etc
   .. to leave something on the stack as a return value, then depending on the data flow, you'll use either `dup` (copy atop), `tuck` (copy below), or `[ ... ] keep` (copy on top with fn of stack). `over` is equivalent to `swap tuck`, btw. your proficiency in shuffling the stack will show itself in your ability to notice such relations, by thinking in terms of datum position on the stack and duplication.
     ... `[ ] keep` is equivalent to `dup`
+    ... if you're having trouble with shuffling, just use nkeep or ndup then drop or nip as needed. keep & dup are the simplest forms of retention, and though words like `over` efficiently shuffle with duplication, sometimes it's easier to decouple shuffling & duplication. for example, consider the case where you have `i x xs` on the stack, and you want to branch on whether xs@i > x, then use `i`, `xs`, and `x` in the branch computation. you would probably think to use `over` first, but then you want the result of `>` to top the stack for `if`, while retaining all 3 data for its branch. it's easier to just `3dup swapd nth [ ... ] [ ... ] if`. in fact, this code is perfect, since it consumes all 3 data and leaves them exactly where they must be.
   .. to apply a symmetry to multiple data on the stack, use "cleave", "spread", or `apply` combinators e.g. `2bi`. `tri*`, or `bi@`.
   .. otherwise sometimes you'll want to use general shuffle words. don't worry about making it beautiful; as you code, over time you'll naturally begin to notice more elegant ways to manage the stacks
+  .. a funny shuffle hack: with n elements on the stack, to break them on the ith then swap those partitions: `n-i ncurry i ndip`. of course, you could always use the `shuffle` vocab's `shuffle-effect` which allows you to plainly, explicitly permute elements.
 . vocab reference (useful stuff, eliding unnecessary things, as most things are)
 . common troubles & solutions
 . tuning: using numbers, bytes, avoiding: reflective objects, pp, and certain vocabs like peg, if you can. otherwise you'll have to deal with longer compilation times and (much) larger executables. a good deal of effective tuning technique is to use the array paradigm in factor, which is easily accomplished by virtual sequences.
@@ -312,6 +327,25 @@ f(A,B){
 notice the nested scopes! i shadow `i`, use `L` & `i` in `g`, and `x` in the lambda passed to `findIntegerFrom`! this is why the factor code is so hairy. maybe i should have just written it in applicative style in factor by using locals. then again, the tricky part was just thinking about how best to code such a complex relation. also, this applicative translation might not be perfectly accurate; i have no way to test it. seems about right, at least.
 
 another important note about this example: it demonstrates that, like such words as `length-operator`, it's common in factor to modify some items on the stack but leave the stack the same height and of mostly the same form; this style of programming is to take multiple arguments and return multiple, so that they are prepared for certain combinators such as `map`, but now the map traversal is modified. this is unheard of in non-stack languages. instead, what's common in applicative functional languages is a slew of combinators that take specific varieties of arguments (e.g. some take binary functions with or without some extra arguments that affect how the function executes, and there may be ternary variations or whatever other variations), so you have very many functions that are mostly the same, and hopefully one of them is just what you want; god forbid you need even the slightest variation, since then you'd have to define your own function! the stack is much more flexible since words/combinators hardly require the stack to be particularly constrained. building-up or modifying quotations is common practice in factor. very rarely do applicative languages have higher-order functions from functions to functions, and those that do exist are typically very much less flexible than corresponding factor versions.
+
+btw, this array style solution is worse than an incremental-style one (and i strongly predict that generally array solutions are inferior to incremental ones). arrays require us to consider the whole array at once, which is needless coupling. more flexible, and easier, is to write a function that acts on a single timestamp. here's a better alternative to aligning sequences:
+
+[source,factor]
+---------------------------------------------------------------------------------------------------------------------------------------
+! when the output quotation is called, finds the index, j, of xs's least item greater than a, then returns j, a, & ys[j].
+! returns a quotation so that xs & ys are curried-in, and the quotation can be used in traversals over monotonically increasing inputs.
+: aligner ( xs ys -- q: ( i a -- j a y ) ) ! pass 0 for i for 1st call, then let j be used for further calls
+  [ [ 3dup swapd nth >
+      [ over [ > ] curry [ swapd ] dip [ find-from drop ] keepd length or 1 - swap ]
+      [ drop ]
+      if over
+    ] curry
+  ] dip [ nth ] curry compose ;
+---------------------------------------------------------------------------------------------------------------------------------------
+
+whereas aligning sequences strictly [eval] produced two sequences, this can be used to produce such sequences, but there's no need. it could just as well be used to update values in-place, or be used in any general traversal, to be applied over any arbitrary subset of values (though it would be easiest if applied to inputs given in ascending order, so that we could leave i/j on the stack as-is through the traversal).
+
+btw, this whole section came from me writing an efficient version of `find-transition` from `tzinfo.private` to act on a sequence of monotonically increasing unix timestamps. i wrote `aligner` as an improved solution, but i see how it is similar to, yet differs from the sequence aligning method; i'll later add to this section an expression of sequence alignment in terms of `aligner`.
 
 .practical factorability and reuse of code
 
@@ -1063,9 +1097,7 @@ USE: locals
   5 x + ;  ! return 5+x
 ----
 
-`x!` pops into `x`. exclamation marks ("shrieks") are particular here.
-
-this syntax can be used in `[let` also e.g. `[let 24 :> x! x x * x! x 400 - ]` which outputs 176.
+this syntax can be used in `[let` also e.g. `[let 24 :> x! x x * x! x 400 - ]` which outputs 176. then again, you could instead just use `:>` again: `[let 24 :> x x x * :> x x 400 - ]`. exclamation marks are a tad shorter, i guess.
 
 === multiple simultaneous output streams
 
@@ -1158,15 +1190,16 @@ NOTE: there are no `process` slots whose values you can set to make the process'
 
 .stdin & stdout redirection
 
-pass a string to a subproccess's stdin, and redirect its stdout to a file:
+to pipe to a process's stdin, use `with-process-writer*`; within the quotation that you pass to it, `output-stream` is bound to the process's stdin. you can also set a process's `stdout` slot to a string which it'll interpret as a file path to write to.
 
+.effectively posix shell `tr lt ' d' <<< 'but what the hell, forget about it!' > msg.txt`
 [source,factor]
-----------------------------------------------------------------
-<process> { "cat" } >>command "outfile.txt" >>stdout
-ascii [ "this output is in a file!" print ] with-process-writer*
-----------------------------------------------------------------
+--------------------------------------------------------------------------
+<process> { "tr" "lt" " d" } >>command "msg.txt" >>stdout
+ascii [ "but what the hell, forget about it!" write ] with-process-writer*
+--------------------------------------------------------------------------
 
-use `with-process-writer` (no asterisk) if you don't need the process object nor its status.
+use `with-process-writer` (no asterisk) if you don't need the process object nor its status. to stream one process's output as input to another process, use `run-pipeline` of the `io.pipes` vocab.
 
 NOTE: `with-process-writer*` is (at least effectively) just `with-process-stream*` but without binding `input-stream`.
 
@@ -1174,7 +1207,7 @@ in unpredictable, asynchronous cases, you may want to set the `process`'s `timeo
 
 i don't understand why `with-process-stream*` returns the process object in addition to the status, since the process is guaranteed to be terminated by the time that `with-process-stream*` returns, which would seemingly make the process object useless. indeed, both `wait-for-process` and `(wait-for-process)` return only the exit status. similarly, i don't know why either of these two words can be run any number of times on a process.
 
-pass in stdin, and output to a string:
+you can do duplex, asynchronous communication with a process:
 
 [source,factor]
 ------------------------------------------------------
@@ -1182,7 +1215,15 @@ pass in stdin, and output to a string:
 ascii [ "hi!" print flush readln ] with-process-stream
 ------------------------------------------------------
 
-WARNING: always flush the input stream before trying to read the subprocess's output! if you don't, then the subprocess may indefinitely await input, leaving the program hanging!
+this is good but is dangerous since it's prone to livelock. certainly always you should `flush` the output stream before trying to read the subprocess's output, but beyond that, you must know how your subprocess handles buffering and when it writes to its stdout (which factor can read from by e.g. `readln`). if you don't, then the subprocess may indefinitely await input, leaving the program hanging! some programs, such as `asciidoctor`, apparently don't write until their input stream is closed, so we must not only flush, but `dispose` the output stream to close it:
+
+[source,factor]
+---------------------------------------------------------------------------------
+<process> { "asciidoctor" "-e" "-" } >>command ascii
+[ "hi!" print flush output-stream get dispose read-contents ] with-process-stream
+---------------------------------------------------------------------------------
+
+without `output-stream get dispose` this program will hang forever! also idk if you have to `flush` if you're going to dispose afterward anyway.
 
 you can replace `cat` by a curses program e.g. `w3m` and see that curses programs work fine, too.
 
@@ -1193,7 +1234,19 @@ you can replace `cat` by a curses program e.g. `w3m` and see that curses program
 ascii [ "`0:`j@3+!9" print flush readln ] with-process-stream json>
 -------------------------------------------------------------------
 
-pushes `{ 3 4 5 6 7 8 9 10 11 }` to the stack.
+pushes `{ 3 4 5 6 7 8 9 10 11 }` to the stack. `k` is a repl without support for multiline statements, so we know that it writes something each time that we stream a newline-terminated string to it, so `flush` alone is safe here. in fact, if we want to keep the repl open and interact with it many times, then of course we can't close its pipes! we want to retain full duplex communication. here's an example where `k` & factor communicate many times:
+
+[source,factor]
+---------------------------------------------------------------------------------
+<process> { "/home/nic/.local/bin/k" } >>command ascii
+[ "`0:`j@3+!9" print flush readln json>
+  4 head-slice [ >dec ] map " " join "`0:`j@2\\" prepend print flush readln json>
+] with-process-stream ...
+---------------------------------------------------------------------------------
+
+prints `{ { 0 1 1 1 } { 1 0 0 1 } { 1 0 1 0 } }`.
+
+so you can use any repl effectively as a stateful server.
 
 NOTE: `binary` encoding does not work with `with-process-writer` nor `with-file-writer`! it gives some odd error: `element-size` does not define a method for the <such-and-such> class (class depends on what you're writing) dispatching on <item of that class>.
 
@@ -1231,8 +1284,6 @@ USING: io.launcher.private ;
 * if you put an invalid path for the first element of the command, then `process-running?` returns `t`, on linux, at least.
 
 ''''
-
-TIP: to stream one process's output as input to another process, use `run-pipeline` of the `io.pipes` vocab.
 
 .exec
 
@@ -1493,6 +1544,8 @@ terminal: blank or ∈ ["'|{}=()[].!&*+?:~<>]
 
 == debugging
 
+there's no ^C (interrupt) on linux (but iirc there is on windows). to get around this, you can run `listener-window` to spawn a new listener window that shares global variables with the original. create a global variable that you'll set to `t` or `f` to choose whether to exit a loop e.g. you may `SYMBOL: stop? [ ... stop? get-global not ] loop` then you can run the loop in the original listener window and run `t stop? set-global` in the new window whenever you like to stop the loop.
+
 firstly, using `prettyprint` is not apt for debugging a running program, though it's fine in the listener to print values that you don't want kept on the stack. to inspect values during runtime, use `B` (an alias for `break` in `tools.continuations` and the inspector (context-click an object then select "Inspector") or factor's logging framework. to produce values for logging, use `unparse` or `unparse-short` of the `prettyprint` vocab.
 
 to set a breakpoint for a word—especially useful for words that you don't use directly, but are ultimately entailed in the definitions of words that you use—use `breakpoint` for example, to break at the start of executing generic word `call-responder*` for the `file-responder` type, do `M\ file-responder call-responder* breakpoint`. to remove the breakpoint hook, do `M\ file-responder call-responder* reset`. `M\ file-responder call-responder*` satisfies `word?`, so it supports having a breakpoint set for it. *do not use `breakpoint` on common words* like `map` or `append`! because the listener or walker employs such words, setting a breakpoint upon them will cause the listener or walker to infinite loop.
@@ -1650,6 +1703,16 @@ the error was "sequence index out of bounds" where the index was `1` and the seq
 * `M\ x y` means that `y` is generic and indicates ``x``'s implementation of it
 * `(O)` seemingly indicates an ordinary word
 * `(U)` seemingly indicates a quotation
+
+=== the walker
+
+if you create a mutable structure (e.g. hashtable) then, in the walker, then context-click it and select "push", it will open a new listener window with the object on the stack. notice that it is the _same object (same reference)_ in the walker, in the original program (if it's using the stack of the original listener window), and in the new listener window. if you modify it in one listener, execute `.s` in the other listener to see its new value.
+
+this is very useful for stepping through words of long definitions and computationally expensive code, to preserve state so that you can resume conmputation from a saved state.
+
+TIP: assumedly the mutable structure is retained on the stack throughout the whole computation after it's pushed; if the computation fails for some reason, then you can find the structure in the traceback window's stack view, then push it.
+
+also, i thought that i could create a `SYMBOL:` then `set-global` in the walker, but `get-global` only returned `f`, except for the first time that i tested it. anyway, this does not seem like a good method for saving & loading items between your source code and the listener!
 
 == using the stack well
 
@@ -2121,7 +2184,7 @@ TODO: see `handle-discord-websocket` in `programming/factor/extra/discord/discor
 
 websockets are made in the design of unix sockets; they're lightweight, full-duplex realtime communication. once established, the connection remains open and both client & server may send or receive any bytes at any time. the websocket protocol is extremely small & simple.
 
-though websockets are not http, `ws:` & `wss:` use ports 80 & 443 respectively, and link:https://en.wikipedia.org/wiki/WebSocket#Opening_handshake[http is used to establish websocket connections]; the websockt server responds with http code 101 ("switching protocols"). this is why factor's `http.websockets` vocab does not have any words for establishing nor managing connections.
+though websockets are not http, `ws:` & `wss:` use ports 80 & 443 respectively, and link:https://en.wikipedia.org/wiki/WebSocket#Opening_handshake[http is used to establish websocket connections]; the websocket server responds with http code 101 ("switching protocols"). this is why factor's `http.websockets` vocab does not have any words for establishing nor managing connections.
 
 as usual in factor, there are no websockets handles to pass around; a connection is opened which sets `output-stream` & `input-stream`. in fact, the whole websockets vocabulary is just `add-websocket-upgrade-headers ( request -- request )`, constants, and words for de/encoding bytes per the websockets protocol.
 
@@ -2197,7 +2260,7 @@ so clearly `http-request*` is inappropriate for ws, but `do-http-request` is sti
 
 it pushes all into a byte vector then converts it into a decoded byte array. this implies that `chunk` is bytes. generally you must assume that chunk is not a fully parsable string, so you must incrementally parse & act on bytes as they come in. if your ws server sends json, then this is fine, since `read-json` blocks until enough input comes in to return a well-formed object.
 
-TIP: if you want to read `do-http-request`'s code, then read its source code, not the parsed definition as shown in the help browser, because it's defined in terms of a fried quotation.
+TIP: if you want to read ``do-http-request``'s code, then read its source code, not the parsed definition as shown in the help browser, because it's defined in terms of a fried quotation.
 
 .example
 [source,factor]
@@ -2217,16 +2280,16 @@ USING: http.client http.websockets io.streams.duplex ;
 ] with-stream
 ----------------------------------------------------------
 
-. used in `read-response-body`, to, of course, read the http body, which may be arbitrary binary data. in `do-http-request`, the duplex stream is created via `<request-socket>`, which uses `ascii` for both input & output. ascii is just the binary encoding but, if it recieves a byte whose value is greater than 127, then it throws an error and/or replaces the byte with the unicode replacement character, code point 65533, which is ironic, seeing as that's a 2-byte value. by the way, `latin1` is basically the same as `ascii` but its threshold is 255, which is odd considering that that's the max byte value. see their implementations of `decode-char` for details.
+. used in `read-response-body` to, of course, read the http body which may be arbitrary binary data. in `do-http-request`, the duplex stream is created via `<request-socket>`, which uses `ascii` for both input & output. ascii is just the binary encoding but, if it recieves a byte whose value is greater than 127, then it throws an error and/or replaces the byte with the unicode replacement character, code point 65533, which is ironic, seeing as that's a 2-byte value. by the way, `latin1` is basically the same as `ascii` but its threshold is 255, which is odd considering that that's the max byte value. see their implementations of `decode-char` for details.
   .. likewise, we need to be able to send binary over websockets.
 . commonly, a websocket server will require authentication or provide metadata which you'll read via `read-websocket` then account for, before beginning the main streaming loop.
-. this simple loop just outputs teh object and opcode to a file and reads from the websocket for no more than 5 minutes.
+. this simple loop just outputs the object and opcode to a file and reads from the websocket for no more than 5 minutes.
 
-as it's currently written, `read-websocket-loop` executes the quotation that you pass regardless of whether `read-websocket` returns `t`, though only if it _and_ your quotation return `t` does it continue to loop. i'd've thought that it would execute your quotation only if `read-websocket` returned `t`. this leads to some odd patterns such as you needing to check the opcode even though `read-websocket` has kinda already handled it e.g. i must check whether a payload is of opcode 8 ("close connection") or not, so that i can handle the payload differently. however, because it's opcode 8, i know to not continue the loop, so naturally i'd handle that myself, but `read-websocket` has already guaranteed that the loop will stop here anyway! so the awkwardness is the redundant need for both `read-websocket` and my argument quotation to `read-websocket-loop` to `case` on the opcode. this being said, it's not too bad in practice because `read-websocket` reads all payloads (except maybe for opcode 9, "ping") into a utf8-encoded string, so the argument quotation to `read-websocket-loop` really only needs an `if` clause to check whether it's opcode 8 or not. btw i don't see how `read-websocket` handles closing correctly; i see some `be>`'s in it and `read-payload`, but no `utf8 decode`; the payload is, if present, supposed to be a 2-byte/be reason code, followed by a utf8-encoded string.
+as it's currently written, `read-websocket-loop` executes the quotation that you pass regardless of whether `read-websocket` returns `t`, though only if it _and_ your quotation return `t` does it continue to loop. i'd've thought that it would execute your quotation only if `read-websocket` returned `t`. this leads to some odd patterns such as you needing to check the opcode even though `read-websocket` has kinda already handled it e.g. i must check whether a payload is of opcode 8 ("close connection") or not, so that i can handle the payload differently. however, because it's opcode 8, i know to not continue the loop, so naturally i'd handle that myself, but `read-websocket` has already guaranteed that the loop will stop here anyway! so the awkwardness is the redundant need for both `read-websocket` and my argument quotation to `read-websocket-loop` to `case` on the opcode. this being said, it's not too bad in practice because `read-websocket` reads all payloads (except maybe for opcode 9, "ping") into a utf8-encoded string, so the argument quotation to `read-websocket-loop` really only needs an `if` clause to check whether it's opcode 8 or not. btw i don't see how `read-websocket` handles closing correctly; i see some ``be>``'s in it and `read-payload`, but no `utf8 decode`; the payload is, if present, supposed to be a 2-byte/be reason code, followed by a utf8-encoded string.
 
 == websocket (server)
 
-TODO: implement
+TODO: link:https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers[implement]
 
 == filesystem
 
@@ -2710,6 +2773,8 @@ there's a word, `read-struct`, which reads a struct from `input-stream`, and thu
 
 the `endian` vocabulary has efficient words for coding (un)signed integers and floats as byte arrays of either endianness. `>le` &al's 2nd parameter is the number of bytes needed to encode the number. it truncates or pads as appropriate: padding: `10 2 >le` => `B{ 10 0 }`; truncation: `260 1 >le` => `B{ 4 }`; normal: `2000 2 >le` => `B{ 208 7 }`. notice how negative numbers are encoded: `-5 2 >le` => `B{ 251 255 }`. it's 2's complement of the positive version. `bitnot` is equivalent to `neg 1 -`. because factor fixnums are not stored as fixed-size bit arrays, if you want to flip the kth bit of some length n representation, then you must convert them to a length n bit array or byte array via the `integer>bit-array` (which determines number of bits from  `bit-length` i.e. basically `log2 1 +`) or `>le` &c words, then flip bits either by using boolean words for bit sets, or manually by using words like `bitxor` (or, more conveniently, words of the `math.bitwise` vocab), possibly using a masks such as `255 bitand` as necessary.
 
+TIP: `math.intervals:fixnum-interval` gives `fixnum`'s min & max values
+
 NOTE: remember that factor supports syntax like `0b1001`. also, `.b`, `.o`, `.h` print in binary, octal, or hexadecimal, and that you can set dynamic variable `number-base` to make all pretty-printed numbers display in a given base. because they use dynamic variables, they work for byte arrays, too: `2024 03 28 julian-day-number 3 >le .h` prints "B{ 0xee 0x8a 0x25 }". even values shown in the walker are in the set base!
 
 ==== writing binary files
@@ -3038,3 +3103,7 @@ it gave this output:
 -----------------------------------------------------------------------------------------------------------------------------------------------------
 
 granted, ideally i'd add some delimiters for clarity, but this is sufficiently readable.
+
+== antipatterns & solutions
+
+* `[ at ] curry { a b c d } swap map first4-unsafe` should be `[ a b c d ] dip [ at ] curry 4 napply`, or if you want to apply functions to the key values, then you must use `{ [ a of f ] [ b of g ] ... } cleave`.

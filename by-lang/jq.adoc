@@ -1,5 +1,7 @@
 = jq
 
+TIP: see <https://github.com/jqlang/jq/wiki/FAQ>
+
 i use the term "table" to mean table data expressed as json, even when cells may be missing which is equivalent to saying that their data is null. "table" is thus most generally a non-nested array of json objects mostly having the same keys. i use link://github.com/kellyjonbrazil/jtbl[`jtbl`] (found in the arch user repository) to format tables often.
 
 jq is a possible alternative to `json_pp` though the latter is probably more efficient and likely guarantees identical representation of values.
@@ -20,6 +22,8 @@ jq '.[]' <<< '[{"x":3,"y":4},{"x":10,"y":6}]'
   "y": 6
 }
 ---------------------------------------------
+
+* we must do `[.results[].T]|sort`, not `.results[].T|sort`, since `sort` applies only to arrays, not sequences (specifically, jq tries to apply sort to an array item, for each item). also note in this example how i put brackets immediately after a key, and put another key immediately thereafter. i needed neither pipes nor `.[]`.
 
 === array semantics
 
@@ -58,6 +62,10 @@ unary math functions e.g. `sin` are invoked without parens in jq e.g to round al
  3.45     4        becomes    3    4
 10.645    6   45             11    6   45
 -----------------------------------------
+
+=== caveats
+
+* to test if array `a` `contains` number `b`, enclose `b` in brackets. `a` cannot be `null`; to make the test return false instead of erroring for null a, do `a+[]` e.g. `map(select(.c+[]|contains([41])))`.
 
 === long, composite examples
 
@@ -147,3 +155,67 @@ BRK.A     704259.99    695129.0612      1
 ---------------------------------------------------
 
 >:D heheheheh.
+
+.screening stocks for not being of the "life science" category
+
+b/c life science stocks have repeatedly lost upwards of half their value literally overnight. they are identified by havinga an "sic code" whose leading 3 digits are "283".
+
+i must request one stock per request. the json that i receive has this schema:
+
+{
+   ...
+   "results" : {
+      ...
+      "ticker" : "AAUC",
+      "sic_code" : "2252" //optional
+      ...
+   }
+}
+
+so if i request multiple stocks e.g. `curl -Z 'https://api.polygon.io/v3/reference/tickers/{A,AA,AAPL,...}?apiKey=SECRET' (notice that i'm using curl's curly braces syntax to specify an array of urls) then when i pipe it to jq, i get this example result:
+
+.`jq '.results|{ticker,sic_code}'`
+--------------------
+{
+  "ticker": "AAUC",
+  "sic_code": null
+}
+{
+  "ticker": "AAPL",
+  "sic_code": "3571"
+}
+{
+  "ticker": "TSLA",
+  "sic_code": "3711"
+}
+--------------------
+
+they're not an array; they're 3 separate objects. to output them to `jtbl`, i must have an array. one solution is to use `reduce`, but there is a solution devoted to this problem: the "slurp" cmdline flag, `-s`, which reads separate sources into a single array:
+
+.`jq -s 'map(.results|{ticker,sic_code})'`
+----------------------
+[
+  {
+    "ticker": "AAUC",
+    "sic_code": null
+  },
+  {
+    "ticker": "AAPL",
+    "sic_code": "3571"
+  },
+  {
+    "ticker": "TSLA",
+    "sic_code": "3711"
+  }
+]
+----------------------
+
+now to check whether the sic code starts with "283": `jq -s 'map(.results|{ticker,omit:.sic_code|tostring|startswith("283")})' | jtbl -c`. `tostring` converts `null` to `"null"`:
+
+.output
+-----------
+ticker,omit
+AAUC,False
+AAPL,False
+TSLA,False
+-----------
