@@ -1,0 +1,91 @@
+== incremental vs array/set models
+
+* instead of `minimum x >`, prefer `[ x > ] all?` (`char b = 0; for(char i = 0; i < len(A); i++) { b&=A[i]>x; if (!b) break; }`) since it short-circuits. then again, it has a jump inside a loop; i wonder how processors handle that compared to having a jump only after the loop.
+
+"do you know that feeling of having to hold too many things in your head at once, such taht if someone talks to you, you lose everything? fp removes that, by definition" is true because functions are units of computation. they have particular form, and are thus constraints; they obey invariants, and thus they compose easily, unlike manually arranging data, trying to manually compose all the constraints altogether. this is true and important! but _functions_ are a poor way to encode constraints! predicates already compose more naturally and freely. array operations are also better than functions. unlike functions, they are binary or unary, they are few actually basic ones, and each one corresponds to a fundamental property of computing e.g. position, subset, order. *a system of composing constraints* is all that we need for easy programming!
+
+.why are some operations easier to express by array ops, and how do we convert between array exprs and incremental ones?
+
+incrementals work on streams, which are effectively scans/folds; we consider one datum at a time and, at each iteration, have access to all prior elements. some operations must be different from their array versions: for example, where we may grade an array, we cannot afford to do that for each iteration. we'd use a treeset instead—likewise for bins, which both requires that an the search space be sorted, and which can be more efficient when we apply it at once to a vector of queries, namely when some queries are repeated or all queries are ordered.
+
+* when i say "fold" i mean "loop", which is just as well expressed as `while` or `for`, since they're just variants of a comomn syntax. scan is just `map : ( ... xs q: ( ... x -- ... y ) -- ... ys )` (or its generalization, `nmap`) that has non-empty `...`.
+* using `reverse` with streams: either push onto a stack then traverse, or collect into a vector then traverse it in reverse order, or, depending on the computation, invert some operations or swap arguments.
+* streams use one big loop instead of multiple array operations each of which loops (or in a good pluralistic lang, which merge into one traversal). to convert between these models: folds don't need translation; else it's expressible by some sequence of filters and/or maps. use the rule `map f . map g` = `map (f.g)`. express filters as masks, then combine them and select by the result.
+* shift/rotate is just to offset an index, with optional modulus
+* `append` becomes `push` or `push-all`
+* note that bins & grade both concern order, and maintaining order of all elements (except for sequence order, of course) is a non-trivial problem.
+  ** to keep things sorted, keep a tree set in the loop state. to efficiently give the grade as each new element is entered, idk
+* `nub` in a stream loop is best done by retaining a set (hash or tree) as part of the loop state. i'm curious how nub & nub sieve are implemented in j, similarly to `i.`.
+* atomic operations (e.g. arithmetic) doesn't need translation
+* a verb on infix (clumps) is easily accomplished by using a ring buffer in the loop, performing the verb on each iteration; for verbs on n-groups, just perform the operation each time that the loop index divides n.
+* outfix: TODO
+* general verbs, wrt rank, is a simple translation: just iterate through two streams simultaneously (`2each`), retaining whatever state you want. use `curry` to effectively broadcast. for example, vector `=` is either `x [ = ] curry map` or `[ = ] 2map`
+* of course, we can't do tally (length) until we finish consuming the stream
+* iota is trivial and ubiquitous: it's just the iteration number
+* cut/intervals (`I_A` in k) is elegantly expressed in a loop: just collect into a vector on each loop; and upon meeting a condition (e.g. current elt equals spilt character, or loop iteration number divides n, or loop iteration number equals the head of a queue of split indices), push that collection vector into another collection vector. to split on a string or other predicate (e.g. `E.`) quickly becomes the question of how to write a parser. at this point, just use a packrat/peg parser. every language should (as in, that would be good; not as in i expect it currently) come with one.
+  ** head, tail, take, & drop are all just particular varieties of cut/intervals. "take n" is expressed in a loop as modifying the index variable's limit to be max(n,prior_max)
+* `#.` & `#:` probably wouldn't be expressed as a loop, but were it: collect into an output value (shift left/right or divide/multiply, then add or bitor). mixed radix might require regrouping; i don't recall.
+* for key [dyad], just use a hash map in the loop state
+* agenda becomes switch/case
+* index of (`i.`) of course just returns the loop number upon meeting a predicate of the loop state
+* `e.` is linear or binary search
+
+`E.` can be implemented as `{((#y)':x)~\:y}`, which is basically, but more efficiently, expressed in c++ as
+
+[source,cpp]
+-----------------------------------------------------------------------------------------------------------
+for(char e,i=0,k=0,n=sizeof(y)-1;i<sizeof(x)-1;i++)if((e=y[k]==x[i])&((k=e*(k+e)%n)==0))v.push_back(i+1-n);
+-----------------------------------------------------------------------------------------------------------
+
+this method isn't designed to work when `1=#y`; that special case can be computed more efficiently (namely by `e.` or `i.`) and is a degenerate case of `E.`.
+
+TIP: the minus one's of the length are b/c c strs are null-terminated and so have extra length to account for, unlike other c array literals
+
+except that the c++ version returns integers instead of a mask, which is more efficient b/c fewer data to accumulate, but also it's easier since we know to push `i` only at the ``i+n-1``th index. an efficient version that produces a mask is similar, but on each iteration pushes `k`, then iterates backwards through that result to replace substrs of 1 2 3...n by 1 0 0...0:
+
+[source,c]
+-----------------------------------------------------------------------------------------------------------
+char z[sizeof(x)-1];
+const uint n=sizeof(y)-1;
+for(char e,i=0,k=0;i<sizeof(x)-1;i++)z[i]=(k=(e=y[k]==x[i])*(k+e));
+for(uint f=0,i=sizeof(z);i>0;i--)
+  switch(z[i]){
+    case 0: f=0;    break;
+    case 1: z[i]=f; break;
+    case n: f=1;
+    default:z[i]=0; break;
+  }
+-----------------------------------------------------------------------------------------------------------
+
+NOTE: `v` is now `char z[sizeof(x)-1]`
+
+assessment:
+
+* `f` ("flag") is a loop-scoped var that changes only on some iterations. it passes info among iterations, and thus, to express the loop functionally would require a fold or stateful map.
+* despite what i'd said about "you may as well use a parser at this point", perhaps not; this is a simple, efficient, common case.
+* it's beautifully simple & efficient c code. c makes easy the semi-regular relationship of pointers—for example here, that i relate `x[i]` & `y[k]`, where `k` obeys a simple arithmetic update expr per iteration, but where i must specify that update expr. you won't find a combinator that supports this kind of relation! it's so simple & direct, though. that's what's good about c: it allows natural directness to remain direct, whereas anything more complex or contrived (e.g. apl, factor, haskell, or even java, since java doesn't use ℤ/2 for bools) doesn't support expressing directly; their more-complex primitives necessarily mean more-roundabout expressions! well, this is actually not necessarily true; it could be that you use more-complex primitves, but fewer of them. this is common in j compared to c. to succeed in coding this requires knowing how to convert between c & j, which requires knowing the computation's information [info theory]. i'm sure that i could find many examples that are elegant in sql & c, though obviously sql has _very_ few primitives,...and frankly, none of them is complex!
+* i'm curious to compare this definition to the one currently used in j.
+* if we're not using the value of `x` again, then we can simply overwrite `x`, never needing to allocate for `z`
+
+TODO: #/2 &, related, I./1
+
+so for the most part, we can well express all computations as a loop whose state is a treeset with optional associated values (for nub, grade, key, bins), the current element(s) (multiple if iterating over multiple streams together i.e. `neach`), and the current iteration number.
+
+TODO: consider how j's `^:` is used for both while and if. this is natural, and in prolog they're one form, but in non-declarative style, to express while as if is nice.
+
+so to convert between the array and loop models simply requires knowing their underlying truths:
+
+.!!! THE IMPORTANT SHIT !!!
+. everything is either an interval OR an indexed set `(i,x)`. their characteristic difference is that sets' elements' order is meaningless. in this case, the set's indices are arbitrary. someone might argue that a set is the most general structure, and that an indexed set is an array. this is generally correct, but in j, wherein we store permutations (commonly grades, but they could be arbitrary, too) separately from data, it generally makes most sense to see permutations as a way to relate elements across arrays, akin to sql's join relating elements across tables. if the permutation relates elements, then its order is meaningful, albeit arbitrary (we could reorder the arrays while maintaining elements' relations)! _ordered_ does not mean _sorted_! intervals are always sorted. sets _may be_ ordered either by a person, or by some emergent processes (e.g. retaining order appended), or they may be arbitrarily ordered for the mere purpose of relating elements across array variables.
+. indices are degenerate intervals
+. all computation is predicates on `(i,x)`
+
+TODO: discuss the importance of scans and how they well preserve information for successive appar ops. revisit my k notes (or wherever it is that i do that "produce"-style k code with effective short-circuit on emergent loop values)
+
+comparing verbs like prefix & suffix against haskell foldl & foldr is easy but unhelpful; compare them directly against c loops. indeed, even suffix being akin to `foldr` is a total coincidence! in j it's b/c j evals rtl, whereas in haskell it's b/c thunks are built of other thunks and lists are null-terminated on the right/innermost. yes, their parenthecized expressions are equivalent, but the causes for that equivalence differ!
+
+this is what makes sql so powerful. we see this in j:
+
+* cut & bins, both of which take an ascending vector of frets as their control argument (though cut takes it as a mask whereas bins takes it as indices)
+  ** be/head, cur/tail, take, & drop all can be expressed in terms of cut; they're simply more convenient forms since each of them takes exclusively-either the inf or sup.
+* both of `i.` & ``i:``'s unary & binary forms: the unary forms produce intervals, and the binary forms give either an inf or sup.

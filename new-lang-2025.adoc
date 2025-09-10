@@ -86,7 +86,11 @@ any time that you ask, "without X we can't do Y?", first ask: 1. do we actually 
 * factor demonstrates that a mix of stack combinators & shuffle words and locals elegantly expresses relations among (few data or relations thereof)
 * multi-dispatch (generics) is the same as predicate or pattern matching which is the same as case/cond/if. a single "match" form should be a language's only expression of this device.
 
-the essential quality of arrays is that elements are considered independently of each other; for example, `map` acts on one element without regard to others. this is different if we use `reduce` or `clump-map` (as it's called in factor; in k it's called `':`). of course, the independent case is simpler than the non-independent one, so it's easier to express the former in any language than the latter. though array langs are much better for the former, they're not so much better than non-arrays langs for the latter. consider the following efficient version of sql `select distinct y from x join y where y>=x group by x` or k `(?x{*(~x>)#y}\:y)^0N`:
+the essential quality of arrays is that elements are considered independently of each other; for example, `map` acts on one element without regard to others. this is different if we use `reduce` or `clump-map` (as it's called in factor; in k it's called `':`). of course, the independent case is simpler than the non-independent one, so it's easier to express the former in any language than the latter. though array langs are much better for the former, they're not so much better than non-arrays langs for the latter. my sql solution is `select distinct y from x join y where y>=x group by x`, which i assume is efficient b/c sql's semantics are extremely constrained and thus can be made very efficient. my k solution was `(?x{*(~x>)#y}\:y)^0N`, which is inefficient.
+
+NOTE: after i wrote this whole section, and spent like 1 or 2 days on it (it was so harrowing that i don't remember how long it took), cameron came-up with a solution in a minute that used bins. i assume that bins is efficient since both inputs must be monotonically increasing and the single bins operation considers both arrays altogether. the solution is not only more efficient, but terser: `y@&~=':x'y`! an apl solution would use nub sieve, which, btw, in k is `{(x?x)=!#x}`. now i'm starting to think that bins is as powerful as sql's fundamental use of ranges to efficiently answer queries. the fact of using the result of bins to nub sieve then use as a mask on y amazed me. perhaps bins alone makes apls sufficiently efficient...! and i've been told that bins specifically takes advantage of its argument being ordered. certainly it is interval index, not necessarily executed as binary search, despite the name-pun "bins".
+
+TODO: iirc somewhere in this section i say that my cpp/factor solution has the inefficiency that x is incremented once but that i should increment `i` multiple indices at a time. this is wrong; b/c idk x[i+1], i can't just increment i beyond 1.
 
 [source,factor]
 -------------------------------------------------------------------------------------------------------------------------------
@@ -112,8 +116,8 @@ since i haven't learned zig yet, cpp offers the most expressive & efficient solu
 
 [source,cpp]
 ------------
-#include <vector>
-#include <iostream>
+#include<vector>
+#include<iostream>
 std::vector<uint> v;
 uint x[] = {2,3,4,5,6,8,9,10,11,12,16,17,18,19,20,40,60,80};
 uint y[] = {5,8,9,10,11,12,19,26,27,28,29,32,43,49};
@@ -139,7 +143,7 @@ so, i wrote the factor version first, then i wrote the cpp version, then i teste
 [source,factor]
 ------------------------------------------------------------------------------------------------
 : first-following ( x y -- z )
-  [ dup length [ <vector> tuck ] keep ] dip  -rot [ [ length 1 - ] keep ] 2dip ! v x #y-1 y v #x
+  [ dup length [ <vector> tuck ] keep ] dip -rot [ [ length 1 - ] keep ] 2dip ! v x #y-1 y v #x
   '[ [ _ nth
       [ [ < pick _ < and ] curry [ dup _ nth dup ] prepose ! ( j -- j b ? )
         [ drop 1 + ] while
@@ -150,6 +154,8 @@ so, i wrote the factor version first, then i wrote the cpp version, then i teste
   ] [ 0 0 0 ] dip ! lv/b j i
   loop 3drop ;
 ------------------------------------------------------------------------------------------------
+
+NOTE: there's an off-by-1 error similar to the aforementioned one. it may oob of x b/c, whereas cpp's `for` checks the condition before executing the loop, factor's `loop` checks at the end and is hence a do-while. thus the error is that i increment `i` _after_ testing it against #x. it should be before. as before, it'd be ideal to just say "for i,a in x". this syntax exists in lua and is nice, and it'd be perfect here as-is, but again, ideally this form wouldn't necessarily increment `i` & update `a` on each iteration of the loop; it'd happen only when i manually call `next()`.
 
 the cpp version was easy & natural to write, but i admit that i understood the algorithm better by being forced to know where each variable was used, leading to the `tri` on `i`. as simple as i'd intended the cpp algorithm to be, i realize that someone who isn't familiar with the algorithm would have to figure out the total meaning (use) of all seven variables, despite `i` & `j` corresponding to `a=x[i]` & `b=y[j]`—an obvious symmetry that cpp can't well express (and in this case, factor can't well express, either, i think) or that `Ly` is a constant that i saved to a name so that it'd be calculated only once. complex as the factor code is, we see that, in the first `tri` block, `i` is converted to `a` immediately and thus thereafter `i` is not present in that block's computation; it's off the stack and thus out of scope. ``i``'s use in ``tri``'s other 2 blocks is obvious because the blocks are so simple.
 
@@ -217,6 +223,7 @@ case studies for implicit iteration:
 * subsequence-and-not-substring operations (and why can't these be done with factor folds (generally expressed by `each` and selective pushing into a collection vector)?)
   ** regrouping (the version of apls' en/decode that we actually want; we don't want a number of a given radix e.g. to convert to h:m:s, we want hours to be variable, i.e. for there to be any number of hours)
   ** in factor's `tzinfo.private` vocab, effectively `[ find-transition ] map` but that efficiently operates over an ascending-ordered input seq
+* consider cameron's fizzbuzz in j: +++;@((+:/,])@(0=3 5&|)#Fizz`Buzz;~":)"0>:i.100+++
 * deep nesting e.g. `(activity-spike)` below
 
 [source,factor]

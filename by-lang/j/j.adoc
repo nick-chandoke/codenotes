@@ -1,213 +1,650 @@
-= the j programming language
+= array programming in the j programming language
 notes by nicholas chandoke
 :toc:
 
-running summary of coding by j:
-
-* the general structure: arrays/relations/(bytestrings with partition/index vectors). particular structure properties:
-  ** systematic relation of subsets (which is encodable by a logical proposition)
-    *** order. arbitrary orders are imposed by using *arbitrary data which permit a natural order*.
-* operations: arithmetic | structural 
-* structure operations
-* coding [style] viz combinators, which are pointfree / higher-order fns.
-
-relations (which naturally permit orders which may be of relevence) -> multisets -> sets
-
 [TODO]
-* a test of any language is not how short its code is, but how short its code and accompanying documentation are!
 * syntax highlighting in kak for idioms; each idiom gets a different color depending on the kind of idiom [functionality].
-* graphical tiered display of modifier trains, with annotations of the kind of modtrain pattern it is e.g. AAV, VVV, or VV. b/c trying to parse-out nested parens and break <code strings which represent trains> into parts is horrible. ofc we'd need a good interface for modifying these structures. for starters, though, just having adjacent displays of code and a tree would be amazingly helpful already. afterward we can have a fully opengl environment with keybinds for selecting subexprs.
+* j ought to be more interactive. graphical tiered display of modifier trains, with annotations of the kind of modtrain pattern it is e.g. AAV, VVV, or VV. b/c trying to parse-out nested parens and break <code strings which represent trains> into parts is horrible. ofc we'd need a good interface for modifying these structures. for starters, though, just having adjacent displays of code and a tree would be amazingly helpful already. afterward we can have a fully opengl environment with keybinds for selecting subexprs.
   ** use `5!:6` to get defs. `par=:{{5!:6 <'g' [ (g=.u f.) :: ] 0}}` works like `(2++@-/&?)par`; it's an adverb which takes an expression. replace `5!:6` by `5!:4` to produce a diagram instead of parenthetical.
   ** use link:https://code.jsoftware.com/wiki/Vocabulary/Dissect[dissect]
   ** interestingly, because j's grammar is contextual, syntax highlighting requires semantic knowledge, namely which part of speech each entity is. that's pretty easy. semantic tools like we see in swi prolog should be easy in j, too, right?
-* consider groups [group theory] of j primitives?
+* consider j primitives wrt group theory
 * how to put quotes &al special or unicode or bytes in string literals?
   ** quote literals in strings are done by escape sequence `''` e.g. string `'it''s' hot today'`
-* can we use datalog to derive j programs from a set of constraints? can we use it do convert between tacit & non-tacit expressions?
+* the ability to use `jbrk` w/or.t. a pid implies that j is one proc? then:
+  ** how to run multiple j progs and use `jbrk` on only one of them? 
+  ** how to modify a running j program?
 
 everything in j works along the leading axis. when assembling, it concats along the leading axies.
 
-there's not much to learning j:
-
-. understand arrays
-. understand rank and verb application
-. learn primitives
-. learn how to use primitives well
-
-[TODO]
-* consider `<jdir>/system/extras/util/boot.ijs` & `<jdir>/system/extras/config/profile.ijs`
-
-== semantics
-
-=== scoping
-
-* lexical scoping but scopes do not nest additively; inner scopes are independent of outer ones
-* functions are passed by name but values are passed by value. e.g.
-
-[source,j]
-----
-   g=:{{2 + f y}}
-   g
-3 : '2 + f y'
-   g 4
-|value error: f
-|   2+    f y
-   f=:%
-   g 4
-2.25
-----
-
-=== definition-time vs invocation-time evaluation
-
-j actually has this! it's the first language that i've seen support this!
-
-[quote,special combinations page]
-----
-Preexecuting verbs with (( ))
-
-Normally, PPPP will not pre-parse a fragment that contains the execution of a verb. This is because some such fragments consume a great deal of memory: (i. 1e8) for example.
-
-If you enclose a fragment in double parentheses, it will be pre-parsed even if it executes verbs, provided it meets the other requirements for PPPP. An example:
-
-[source,j]
-----
-a =. (('Name';'Value')) , table
-----
-
-The table header will be computed at definition time rather than at execution time. 
-----
+TODO: consider `<jdir>/system/extras/util/boot.ijs` & `<jdir>/system/extras/config/profile.ijs`
 
 == motivation/rationale
 
-* terse
-* good for scientific & mathematical computing. has very good support for implicit & explicit type conversion (including precision.) j lacks general typing (cf haskell) but very well accomodates all the structures that anyone actually needs: equivalence classes, lattices, [boolean &al modulo] rings, fields. furthermore, it does not consider these different types; the booleans are properly ℤ/2ℤ⊂ℤ⊂ℂ; therefore any numeric datum may be properly, naturally considered an element of multiple sets (types) simultaneously, and by purely numeric representation which naturally or easily allows e.g: the injection of complex numbers to integers, which may be considered as bitvectors; or _tolerant comparison_ of numbers of various internal types. given that all types are the common numbers by their usual considerations, all those are assumed, which frees the programmer from needing to specify these obvious constraints [properties/relations] throughout code.
-* interpreted, dynamic. internally all primitives are represented by c structs. as j primitives are semantic objects, they can be reasoned about and combined s.t. e.g. `|.@:|.` evaluates to `]`. this does not actually happen in j9.0.4, but it could, and there was at least one variety of combined primitives that, to my pleasant surprise, evaluated to `]`.
-* decoupled (e.g. uses primitives and separate control arguments instead of black-box functions)
-* good built-in combinator support
-* array
-  ** loopless: uses rank conjunction `"` to immediately & deeply associate subsets!
-* optimized (so you don't have to care much about program efficiency wrt memory or speed, though you must know which j primitives work efficiently together)
-  ** loops are fused like haskell pipes, conduit, &c
-* free, portable, easy to install
-* small, unlike apls or bqn, which, for backwards compatibility, feature redundant sets of primitives all of whose elements have basically the same functionality, but they're incompatible with each other and have slight caveats.
-* like picolisp, dynamic
-  ** dynamically scoped
-  ** supports eval, though fundamentally only of programs encoded by syntax strings
-  ** hot-moddable
-  ** functions are stored as strings. they are not black-box!
-* simple execution, data structure, and data manipulation model
-* simple language, which allows one to easily (quickly & accurately) read source code
-  ** hardly any syntax
-  ** has only (unary or binary) functions
-  ** has only unary or binary higher-order functions: adverbs or conjunctions
+* terse syntax, efficient, elegant, suggestive primitive functions, and combinators.
+* (multidimensional) arrays store data wrt their symmetries. verbs explicitly or implicitly relate the axes.
+* discourages higher-order functions, or generally working with functions; instead it prefers working with data, which is superior design; e.g. rather than a higher-order `sort-by` function, the "grade" verb stores the order as a permutation (selection vector). i can store that information in a local variable, whereas `sort-by` implicitly uses that information within its body but then the information is lost when `sort-by` returns. in j we retain much of a computation's information at once, all expressed arithmetically, which is a great benefit. functions are a double-edged sword: they encapsulate functionality but also partition functionality; functions are interoperable with others only to the extent that they accept inputs (consider data) or return outputs (preserve its intermediate or terminal computation(s)).
+* good type system: arrays of numbers or characters (homogenous), or mixed (boxes). no user-defined types. good implicit & explicit type conversion among precision or numerical class e.g. between ℤ & ℂ, or conversion among radixes. these well represent: equivalence classes, lattices, [boolean &al modulo] rings, fields, &c. booleans are literally ℤ/2.
+* interpreted, dynamic, yet efficient. b/c j primitives are semantic objects, they can be reasoned about and combined s.t. e.g. `|.@:|.` evaluates to `]`. this does not actually happen in j9.0.4, but it could, and there was at least one variety of combined primitives that, to my pleasant surprise, evaluated to `]`.
+* portable & easy to install (except that when i compile it, the repl starts but malfunctions; and when i download the prebuilt zip, i must run `execstack -c` on the shared object file(s) listed when i try running `jconsole.sh` but it fails with "cannot enable executable stack as shared object requires: Invalid argument"). i can't find any info on where execstack exists (though there's an aur package for it) except that it's written by jakub jelinek at redhat.
+  ** upon first launch of repl, run `load'pacman'` then `'install' jpkg '*'`. see <https://code.jsoftware.com/wiki/Pacman>.
 
-idk where to put this note ^^; anyway, j lacks the _adjective_ part of speech. i argue that verbs are often inappropriate, such as `x $ y` meaning "shape y to x" because that is not what it means; if i do `5 3$a[a=.i.10` then i did not modify `a`, so i did not shape it! we can correctly say either "x shapes y", or "y [but] with x's shape" i.e. "[a variant of] y with x's shape." one is a verb form, the other attributive. as always, i prefer to eschew such concerns by simply saying that `$(x,y,z)` is a relation.
+== debugging & inspection
 
-what j is not most apt at:
+* monadic `;:` tells how a line is parsed into words, with one word per box
+* link:https://www.jsoftware.com/help/jforc/loopless_code_i_verbs_have_r.htm#_Toc191734338[fndisplay] outputs verb evaluation
+* link:https://code.jsoftware.com/wiki/Vocabulary/bdotu[`b.`] tells information about _verbs_ but not other parts of speech. e.g. it doesn't tell a train's resultant part of speech. that's fine, though; we can exploit that only verbs & nouns execute; e.g. `every each` in the repl shows their definition and `(every each) 0` says "syntax error, unexecutable fragment (adv noun) which tells us that `every each` is an adverb.
+* `3!:0` tells type
 
-* efficiently selecting subsets of ordered sets; prefer sql with indexes. even if j optimizes for efficient lookup on sorted lists, it does not make maintaining indexes easy like sql does.
+== shebang scripting
 
-a great deal of j's elegance is in using arbitrary data and a small, immutable set of symmetric primitives. a somewhat-related example of the folly of the "power of arbitrary (user-specifiable) functions" (as opposed to mere _expressions_ in j (or sql)) is in being able to pass a function to `sort`. ok, look, _sorts_ are *actions* about the *essential information*—_order_—which corresponds to the _lattice_ *structure*. it's best to keep these three aspects distinct! the essential information is known immediately if one's familiar with lattices; lattices are defined of (<=,S). now it's obvious that `<=` is the only thing that we're concerned with! in some langs like haskell `<=` is commonly user-defined in a typeclass, but seeing as all orders are isomorphic to the natural numbers, we can just use the naturals in any language/model. another nice thing about j is that it dispenses with foolish notions of trying to program with "concepts" which of course are all, as are all computations, implemented by bytestrings. so what do all user-defined λ's passed to higher-order `sort` do? they merely *select substructure* then apply `<=`, but obviously they apply `<=` because it's part of the definition of sort/order/lattice; so really why not obviate the obvious and just show the truth: that the user is merely selecting substructure? the difference between higher-order functions and expressions is actually nothing. it's hardly even a difference of notation; it's primarily a difference of notion.
+* the shebang line is itself a j sentence. it must not have side effects nor raise an error, which simply basically means that it should have no special characters aside from, for whatever reason, '/', even in the filepath of the shebang line i.e. the path to `jconsole`.
+* there is a command `echo` which is `stdout` but writes a trailing 0x10
+* like picolisp, unless you call `exit y` (y is an integer return code), the j repl will remain open after the script executes
 
-TODO: can j's grammar be reworked to be more elegant by making modifier trains more symmetric?
+== using j well
 
-a benefit of using such a simple system that exploits pushing arbitration to data instead of operators is that such a small set of operators can be optimized well, so that code is efficient without the programmer needing to manually code a traversal that is most optimal for this case, e.g. short-circuiting when using `+./`.
+unlike nearly all other languages, learning j is best done by learning j's array model and primitives before learning the language semantics! j has small semantics and syntax, but small as they are, they're hardly concerned. most j code is just long expressions of array arithmetic (verbs) & trains, sometimes often with binding to identifiers along the way.
 
-sensible. check this shit out:
+verbs to use most often: the (i.)-family, a class of verbs all based on `i./2`, which searches `x` for `y`. they have many variants and mostly linear performance.
+
+* nub [sieve]: `~.` `~:`
+* index of [last]; element of (equivalent to `1>.i.`): `i.` `i:` ; `e.`
+* without: `-.`
+* key: `u/.`
+
+the following special combinations are also considered members of the family: `u/@e.` for `u` of `+. *. +`, and `([-.-.)`.
+
+``x``'s rank alone (or `y` in the case of nub [sieve]) determines how `y` is partitioned (`y` may be multiple data, in a list, or an array): `x` is considered as a list.
+
+TIP: for best performance: if items are numbers, prefer exact comparison; else if items only _contain_ numbers, use exact comparison; else use tolerant comparison.
+
+link:https://code.jsoftware.com/wiki/Vocabulary/SpecialCombinations[special combinations &al optimizations] are essential to using j with a clean conscience, knowing that your computation is sensibly efficient, e.g. exiting loops early, or overwriting memory without allocating new memory, or dereferencing pointers needlessly, as one would in coding in c.
+
+sql's calculus is simple yet very efficient & expressive, and its semantics doesn't even concern arrays (like prolog, it concern sets; still, i'd call it a "plural" language if not an "array" language), so of course it's feasible for an array language to be efficient. however, all other functional languages (excepting factor, perhaps), assuming that you're using their functional devices which differ them from c, execute quite inefficiently because they do exactly what you tell them to rather than optimizing. no _language runtime_ can afford to optimize like an array language can, because array langs are composed of a small set of known primitives. all non-array languages place the burden of optimization on the programmer. sometimes efficient code is clean, and sometimes not. honestly, i think my efficient c & factor code plain & direct; however, it's never as terse as j! also, yes, c compilers "optimize", but they do so by parsing a far more complex, less regular/constrained language (syntax & semantics) than j; thus c optimizers frequently optimize or not based on arbitrary things such as order of operations or how a computation is expressed. granted, also j requires that computations be expressed particularly, but it simply lists these short expressions in one html page. c code complects many data altogether, whereas (tacit) j sequences verbs.
+
+a particular example is in j how `#\y` is _faster_ than `>:@i.@#y`. in _any other language_ the former would be astoundingly brash, greatly sacrificing performance for brevity.
+
+basically to code perfectly is to use sql/j operations/relations but store information as numbers and use S/MIMD.
+
+.j vs sql
+[options="header"]
+| j             | sql
+| `e./2`,`i./2` | in, where (`in` is used only for a search space of constants)
+| `I./2`        | where (binary search on indexed data)
+| `I./2`        | join on < (take range)
+| `#/2`         | where (general predicate)
+| `/.` `cut`    | group by
+| `"`           | join using (idx)
+| `,`           | union all
+| `~@,`         | union
+| `@.`          | case
+
+my model for all computation:
+* modify traversals, not data
+* store data attributes in a metadata bitset for each _needed datum_ (if i need only to consider one search space at a time, then i'll have only one bit vector)
+* _index_ is a property of traversal, not of data! sql demonstrates: any table can have one attribute, in which case it's obviously a set; however, having multiple columns, none to many may be indexd. indexing is, by definition, whatever makes lookups fast.
+* lookup & traversal are synonymous; traversal is just repeated lookup
+* element/index(s) (both always stored together) of <SET>. the lookup is faster if the data are: ordered, for selecting substrs; or hashed, for selecting single elements; hashed is best if you want to select arbitrary elements. of course, what makes hashing fast is that we know the literal index from the value alone; no traversal necessary. same for substr selection: if we can compute the start & end idxs immediately, then we can select the whole range instantaneouly.
+* all data should be consumed as streams; this allows selecting any size range to traverse, then traversing so long as the traversal code dictates, not necessarily traversing the whole search space. this allows sql LIMIT to work nicely.
+* all efficiency is from exploiting arithmetic ranges (e.g. that a>b & b>c => a>c) & uniqueness. we also see this when unioning bit sets: set union for some booleans is to set each one in the bit set. in computing, all set data is ultimately indexed somewhere, asd if there's a unique mapping between element and index then we can union freely.
+* [a,b] is described as natural number "index" traversal variable, `i`: `i=a,i<=b,i++`. testing elements takes more time than texsting the index b/c we must `lea`.
+* _uniqueness is conditionality_. it's the very core of what says "do this" vs "do that"; all computation ultimately reduces to `switch` blocks or lookups on equality. commonly some search space reduces to an equality check e.g. ranges become causes via `I./2`, or predicates become indices via `@.`, or cond expands to if statements, each of which is testing against 0/False or 1/True (really 0 or non-zero in c-like langs)
+* practically, `else` is a primitive. it means "the rest of the search space". we don't always use `else` (or `default` as it's called in `switch`), but it's a good primitive because it recognizes special cases (akin to asymmetries) vs a common case (akin to a natural symmetry).
+* all combinations or union (choice, additive) or intersection (constraint, reductive)
+* deriving efficient computation of code hinges on the primitives obeying a calculus that reduces to a small search space
+
+=== the remaining j verbs
+
+`I./2` is the only other particularly "array" verb in j; the rest are common to most programming languages, but where most languages use built-in syntaxes which complect a computation and an action on its result, j has you perform a computation to produce an index or mask, then separately pass that index or mask to a "control flow" verb. much of how j uses arithmetic is how early programmers did, when hand-coding assembly was common, and which techniques were brought into coding in c, a language that practically consists only of `for`/`while` (jump backward), `if`/`switch` (jump forward), arithmetic, and pointer dereferencing & inc/decrementing. however, unlike other languages, apls are suggestive, and they suggest to use integers almost entirely. the only reason that coders used integers so ubiquitously for prior computations is that it's all that they could afford to compute and the languages hardly supported anything else.
+
+NOTE: reflect on how elegant c uses only `for`, `switch`, arithmetic, `*` (lea), and `=` (mov). everything that makes c suck is about its runtime, such as linking, or inconsistent or insanely complicated portability constraints. to call c portable is like calling a house portable. just because it's doable and commonly done by some few companies doesn't make it portable compared to, say, a cheeseburger.
+
+| j verb  | j version                            | common version
+| `F:` &c | like haskell, only one loop variable | loop syntax
+| `,/2`   | append                               | append
+| /:      | grade                                | sort
+| cut^*^ | 
+* indexing modifiers: reverse, shift, rotate
+* I./2 /: both concern order
+* infix, outfix
+* select
+* cut/intervals (`I_A` in k) is elegantly expressed in a loop: just collect into a vector on each loop; and upon meeting a condition (e.g. current elt equals spilt character, or loop iteration number divides n, or loop iteration number equals the head of a queue of split indices), push that collection vector into another collection vector. to split on a string or other predicate (e.g. `E.`) quickly becomes the question of how to write a parser. at this point, just use a packrat/peg parser. every language should (as in, that would be good; not as in i expect it currently) come with one.
+  ** head, tail, take, & drop are all just particular varieties of cut/intervals. "take n" is expressed in a loop as modifying the index variable's limit to be max(n,prior_max)
+* `#.` & `#:` probably wouldn't be expressed as a loop, but were it: collect into an output value (shift left/right or divide/multiply, then add or bitor). mixed radix might require regrouping; i don't recall.
+* for key [dyad], just use a hash map in the loop state
+* agenda becomes switch/case
+* index of (`i.`) of course just returns the loop number upon meeting a predicate of the loop state
+* `e.` is linear or binary search
+
+^*^cut can be expressed by `I./2` & `/.`; intervals map to group ids, and `/.` is sql's `group by`. ofc, like `;.n` vs `{`, `;.n` benefits from using an interval, which is a compressed [info theory] coding of an equivalent index set, and thus permits more optimal operations. cut thus is actually more conceptually interesting a primitive than just "split": it's "group by bin."
+
+* `#/2 `& `I./1` both produce multiple copies of data but are commonly used with masks, and wherever a 0 appears, that corresponding data are omitted.
+
+the remaining j verbs are special to j's model:
+
+and the _actual_ remaining verbs, such as `A.`, are ones that i'm simply not going to discuss yet.
+
+sadly, some j verbs, like `u;.0` (or maybe that's the only one, idk) break j design: rather than being one idea, namely "substring", it complects that with afterward applying a verb, and shaping it to ``x``'s shape. i suppose that complecting these behaviors may somehow be more efficient than performing them as separate verbs, but that would be very "un-j." more likely is that the language designers couldn't work a new verb in without making it an adverb and thus arbitrarily had it take `u` as an arg; or that binding the verb operand allows it to be applied with less consideration of framing fill which otherwise would need to be accomplished by boxing then immediately doing `u&.>`. granted, these are real concerns in j, but boxes are a silly design generally. it would be far better, and more consistent—ideally, at least—design to specialize select (`{`) to note when its permutation is an interval, then substring efficiently.
+
+== semantics
+
+* scopes don't nest
+* verbs (fns):
+  ** stored as strings. evaluated only upon invocation. e.g. `{{2 + f y}}` is `3 : '2 + f y'`. `f` needs to be defined only when `g` is invoked.
+  ** functions are passed by name but values are passed by value. e.g.
+* to compute at definition time instead of invocation time (like factor's `$[`), surround by `(( ))`. this is called "PPPP" in the special combinations page.
+* trains have rank infinity
+* arrays' rectangularity & homogeneity is ensured by _framing fill_. to avoid it, box.
+* instead of traversing structures to extract substructures, in j we identify indices then apply some substructure primitive like _elements between_ or _elements at_ indices. everything in j is mask-oriented.
+* no particular boolean type
+* escape sequences are unsupported
+* *identifiers can be dynamic*
+* *verbs definitions are stored as text then evaluated at runtime!*
+* `x` & `y` are implicitly the names of the left & right operands respectively and can be referenced as such in a verb definition
+  ** *`y` is the identifier for unary verbs!*
+* private & public namespaces exist separately. like globals and `static` in c.
+* like scheme, all programs output their values. to output nothing, output a list with no output, namely `0 0$0`, which naturally does not even print a blank line.
+
+== syntax
+
+* `1 2` is an array but `a b` is not b/c words expand to their values in parens; `a b` = `(a) (b)` which is a syntax error.
+* `_2` for neg 2, not `-2`
+* `0.5` not `.5` (b/c dot is a special char)
+* 16b1f means `1F` in base 16
+* `_` is infinity. `__` is neg inf. `_.` is nan and should never be used in any program.
+* identifiers:
+  ** may not contain dot (.) nor colon (:)
+  ** must begin with `/[a-zA-Z_]/`
+  ** which end with `_` or begin with `__` have locale-specific behavior
+* strs delimited by `'`. `"` is the "rank" adverb. only string, no char literal syntax.
+
+=== definition
+
+the following is literally how verbs are ultimately defined but usually we use {{ }} to define verbs.
+
+[source,j]
+----
+a=.1+b=.5 NB. res: a=6,b=5
+x ; y =: toupper x=: 3 5 $ 97}.a. NB. =: is just another verb, not special syntax! this defines x then y in terms of that then returns x;y once y is defined.
+
+v:=[mon|dy]ad : '<def>' NB. define a monadic or dyadic verb
+NB. alt form:
+v:=[mon|dy]ad define
+<def>
+)
+
+NB. define a verb monadically & dyadically:
+v=:verb define
+monadic def
+: NB. colon starts the optional dyadic subclause; w/o it v would be monadic
+dyadic def
+)
+
+pi=:o. :([*[:o.]) NB. monadic is o. . dyadic is a fork which multiplies the left arg by (the right times pi). [:o.] can instead be written o.@]
+----
+
+==== caveats
+
+.static scoping, not lexical scoping
+
+[source,j]
+----
+substrc=:{{
+  't1 t2'=.x
+  a=.t1(E.i.1:)y
+  s2=.{{
+    b=.t2(E.i.1:)y NB. s2's y, not substrc's
+    if. b=#y do. '' else. (0,:b) ];.0 y end.
+}}
+  if. a=#y do. '' else. ((a+#t1),:_) s2;.0 y end.
+}}
+----
+
+defines successfully but fails during execution, citing that `E.` has no monadic valence in `b=.t2(E.i.1:)y`. the error here is that `t2` is not bound within `s2`. if i change `t2` to `x` and use `(t2&s2)` instead of s2 in `;.0 y` then `substrc` works correctly. of course making t2 global via `=:` would make it work but with the side effect of keeping `t1` & `t2` bound in the global environment after executing `substrc`.
+
+=== program execution
+
+verb has left noun: dyadic; no left noun: monadic, right operand. thus you must know whether a token is a noun or verb! i.e. `u v n` sees `v` as monadic on `n` and `n v m` sees it as dyadic on `n` & `m`. thus `u v n` is `u(v(n))` i.e. `(u . v) n`. the simple way to check is:
+
+. identify rightmost yet-unconsidered verb
+. is the word to its left a verb?
+. if no, then it's dyadic; else it's monadic and its result is passed to the verb on its left
+
+there are no nullary verbs. effectively nullary verbs must be given a dummy arg.
+
+== runtime (execution environment)
+
+programs:
+
+jconsole:: ordinary repl
+jhs:: j http server. enhanced browser-bound j repl/ide. uri `http://127.0.0.1:65001/jijx` by default. run in bg unless you want to send an interrupt signal to j. (but why not just use `jbrk` instead?)
+jqt:: Qt j ide. if it requires the `dev-qt/qtwebengine` ebuild (on gentoo) probably found by similar names in other repositories.
+
+apparently _somewhere_ there's an _execution window_, whose name ends with `.ijx`, that is basically like drracket:
+
+* accepts verbs to execute
+* displays a log
+* enables editing the running program's code
+
+windows for editing code that interact with the execution window are called _script windows_. an example interaction is sending code to the execution window via `Run > File | Selection | Window` from the script window's menu bar.
+
+to unset verbs, use `4!:55 <'expiredname'`.
+
+=== environment variables (envars)
+
+* var `ARGV` which is a boxed list of jconsole, script name, and arguments
+* unary `getenv`
+* unary `stdin` with dummy arg, and unary `stdout`, and `stderr` to read & write
+  ** stdin & stdout are obverses. e.g. `toupper&.stdin''` is a program which prints an uppercase version of stdin
+* `exit` takes a dummy arg
+
+NOTE: if you do not invoke `exit` then the script will end in the repl
+
+== misc
+
+* to write output like you'd get in a repl to a file, you must convert it to a list of bytes.
+* _fret_ refers to the item on an interval's boundary
+* file ext `.ijs` means _j script_, which is just a library, which is just some j code. verb `load` accepts a filepath to load (run/eval).
+  ** TODO: how to load a file's definitions into the scope that invokes `load`? this is probably a locale concern.
+* the notation `,0` refers to a (rank-1) empty list though an empty array is denoted `0,...` and an empty table as `0,c` (∀c)
+
+=== idioms
+
+|=========================================================
+| idiom                   | result
+| (/:m&i.)y               | sort y by collation sequence m
+| /:@i.{]                 | sort y by collating seq x
+| ((dom ,a.) i. y){cod,a. | tr
+| (#~p)                   | filter y by predicate p
+| 'colN' {{y{"1~ x i.~col1;col2;...}} T | index by column name by using headers
+| v&.>                    | <@v"0 but simpler
+| '-'E.a.                 | ascii code of '-'
+| (<:i){y                 | zeroes followed by a 1 at index i
+| f@]^:["_1               | apply f to items of y based on mask x e.g. `(3&<!@]^:["_1])i.6`-->0 1 2 3 24 120
+| (-:1&|.)                | test if all elts equal
+|=========================================================
+
+TODO: when to use `f@]^:["_1` instead of some kind of subset thing e.g.
+
+[source,j]
+----
+----
+
+it's also interesting to note that testing whether something is in an interval is a linear function: `(v,y,1) *./@:(0&<:)@:(+/) .* _1 1,1 _1,:a,b` tests whether `y` is on [v-a,v+b].
+
+the `(/:m&i.)y` idiom illustrated:
 
 ----
-   load'data/sqlite'
-   getbin_psqlite_''
-The data/sqlite binary has not yet been installed.
-
-To install,  run the getbin_psqlite_'' line written to the session.
-   getbin_psqlite_''
-Sqlite binary installed.
-   load'data/sqlite'
-db=: sqlopen_psqlite_'.ameritrade_auth.db'
-sqltables__db''
-┌───────────────┐
-│ameritrade_auth│
-└───────────────┘
-   sqlreads__db 'select name,expiration from ameritrade_auth'
-┌───────┬─────────────────────────────┐
-│name   │expiration                   │
-├───────┼─────────────────────────────┤
-│refresh│2023-02-12T15:37:19.086713623│
-│access │2022-11-14T16:51:09.661656738│
-└───────┴─────────────────────────────┘
+   (/:'aCcb'&i.)'cCbaaba'
+aaaCcbb
 ----
 
-BUG to report: u"id where id is an undefined symbol will do `u` w/o.r.t rank! u"(id+0) is a fix.
+the hook `(/:m&i.)y` expands to `y /: m i. y`. here, m i. y is 2 1 3 0 0 3 0.
 
-see that? installed a new package right from within the repl. didn't take a second, didn't need to restart the repl or anything to use the new package!
+''''
 
-j uses data instead of functions e.g. sort takes a datum literal rather than a λ; this datum is usually a computation of another datum
-  ** examples:
-    *** `y/:(-.2|y)`—notice how `y` appears twice! we can put that expression in λ double braces or express it tacitly: `/:([:-.2&|)`
-    *** `(#~(2|{."1))@:(,.~(i.@:#))` is equivalent to haskell `filter(odd.fst).zip[0..]`. the haskell is much more obvious to understand upon glancing it! why: //TODO: reshape i.n to #y. j, like digitstring programming, uses relation by common indices. reshape is closer to the actual meaning, too; it doesn't consider #y; like [0..] it extends. overtake fills w/0's which works well. consider how to exploit j's _semantics_—the implicit stuff! TODO: consider ANDing character sets expressed as bitvectors of length 26 (indices, not necessarily of the usual order) as form of set intersection. //TODO: again, part of exploiting verb agreement, framing, fill, replication, &c: exploit frame agreement (-#cf); i'd've probably not considered that, instead explicitly filling the arrays then matching them up!
-      **** infinite list `[0..]` is nicer than `[0.#y]`, expressed as `i.@:#`.
-        ***** j uses a hook to elegantly compute #y and zip with y, which in haskell would require a λ: `\y->zip[0..(length y)]y`; or maybe some clever applicative use of `(->a)` would work, albeit likely not too elegantly.
-      **** in j rather than using a filter function we map an array to a logical vector then take a subsequence; another hook is used here, as well as `{."1` instead of `fst` *inside* `filter`. j stays flat.
-      **** were j to use the same names as haskell, it'd be `(#~(odd@:{."1))@:(zip~(i.@:#))`. the code is ugly due to the hooks with selfies and fn composition symbol `@:`. `(#~(odd.{."1)).(zip~(i..#))`. the need to use `"1` seems ugly, too. it's specifies `map head` rather than merely `head`. this disambiguation is implicit in haskell because `filter` always works over an entire list.
-      **** so which is better semantically: j or haskell? the haskell version is nicer here because it exploits nested structure well. the haskell version is more optimzied; however, this comes at the cost of restriction. the j primitives generalize in many directions effortlessly whereas no such haskell hardly supports generalization, due to its nesting and black-boxing functions. let's generalize the program to `(#~(0=[:3&|{."1))@:(,.~(|.@:i.@:#))` in j and `\y->filter(\x->fst x`mod`3==0).zip[length y..0]y` in haskell. hmm...the haskell code here is still more elegant....
-        ***** in other words, j supports both a/symmetric relations by a common set of devices, whereas haskell supports them by different classes of devices and the devices don't elegantly relate across classes. not only that, but typcially symmetries are encoded by traversals which are encapsulated in functions. this produces a glut of functions that each works well but that orchestrate poorly.
-  ** fns suck b/c they're black boxes and require higher order fns and don't allow us things like decoupling y from a fn of y in this example; instead we could use some x and y. ad-hoc maps are more powerful b/c they support arbitrary relations! the idea of fns' power is that they operate independent of their input, but that means extra coupling!
+= old stuff
 
-j is terse but not as terse as a beginner might suppose. this is because j primitives combine with others and each primitive is, although powerful, not too specific, since that'd hinder combinability. j primitives are designed such that they avoid a pattern very common in other languages: complex functions that return extraneous information which is discarded by the caller. this is particularly enabled by j's array/index design. j is functional but unlike many functional languages, it uses arrays instead of linked lists, and its arrays are tuned. this means that we as j programmers do not consider "traversing structures to extract substructures"; instead we identify indices then apply some substructure primitive like _elements between_ or _elements at_ indices. *everything in j is mask-oriented.* this means more primitives but the input is decoupled logic. also most j primitives are 2 characters, not 1, thus nearly doubling the length that one would expect of an apl equivalent.
+== j's information structure: homogenously-typed arrays
 
-j has some special constraints that individually are not helpful, but altogether are extremely amazing:
+. like static c arrays, j's arrays are non-ragged & homogenously typed. think of arrays as n-dimensional subspaces.
+. _shape_ (aka, somewhat confusingly, _length_; it's a vector of lengths) is the sequence of _axes_ array dimensions e.g. shape 3 4 5 of an array corresponds to c array `int arr[3][4][5]`, which has 3 axes.
+  .. the number of axes is called the _rank_.
+  .. each axis' value is its length—the number of _items_ that it contains; this sees the axis a _list_ (aka _vector_) of its elements e.g. 3 4 5 is a 3-item list of (4 5)-_cells_; _cell_ is a term meaning _subarray_. each array can be split at any index/axis into a _frame_ and _cells_ (aka _suffix_) e.g. in 3 | 4 5, 3 is the frame. in 3 4 | 5, 3 4 is the frame and the last axis is a 1-cell (b/c 1 dimension) of length 5.
+    ... technically _frame_ refers to the shape of the array, but whatever. i'll use _frame_ to refer to either that shape or the array subset that has that shape, if it's ever sensible to do so.
+    ... n-cells index from the innermost (aka _trailing_) axis e.g. the 2-cells of 3 4 5 have shape 4 5.
+    ... _n-cells index from the outermost (aka _leading_) axis and *drop axes* e.g. the _2-cells of 3 4 5 have shape 5; we drop the 1st 2 axes.
+      .... lists are frames. relative to a frame/list, items are _1 cells
+    ... the 0th axis is not ever shown, and refers to the atoms independent of (excepting order) shape
+    ... technically, if it matters, "if n is negative in u"n, the actual rank of u"n will be infinite, but u"n will apply u to n-cells of the argument."
+. axes may be length 0
+. the items (e.g. the ints of `arr`) are called _atoms_. atoms have rank 0.
+  .. _non-atomic_ means _rank-1+_
+  .. an atom has one item: itself
+  .. an atom can be interpreted as a degenerate, rank-0 array with 0 items i.e. an empty rank-1 array
 
-* always uses primitives rather than defining "black box & knob" functions
-* binary or unary functions only
-* terse, namely that its primitives are 1 or 2 characters
+NOTE: scalars are isomorphic but not equivalent to singleton lists! they have different semantics! they're notationally ambiguous, so use monadic `$` to disambiguate.
 
-these mean that we can modify code most granularly rather than needing to hide complexity blobs in black boxes called _functions_ with accessor knobs called _arguments_. these black boxes cannot be opened, inspected, modified, nor partitioned. the only way to affect how they work is by using whatever knobs the function author has given. at its most granular, there'd be a knob for every aspect of the code, but at that point you should just be using the code inline anyway! (individual/separate) programs, being main functions, have the same design flaw. an example of the black box problem is if i want a function that computes an Lp norm but discards elements whose square is greater than some threshold. this would require putting a filter on a value computed intermediately within the function. the only way to do that is to either modify the function, which would likely require refactoring invocations of it; or to make a copy of it with _nearly_ the same definition. both solutions obviously suck. j avoids this problem by rarely defining functions; instead, it uses primitives. this is especially appropriate because the function definition is often shorter than what name its function form would have. furthermore some specialized functions' names are, even if long, not properly descriptive of their actual definitions simply because the definitions are so particular that the only proper way to describe it is by documentation.
+with this terminology and model understood, let's explore how we _program_—relate subsets, i.e. select subarrays then pass them as arguments to functions—in j:
 
-the use of binary or unary functions is appropriate because of the point given in the above paragraph, plus the fact that all relations must be unary (reflexive) or binary (generally associative.) in other words every 3+-arity function can be expressed in terms of some binary and unary ones. i'm unsure whether this fact applies to general relations (e.g. as are used in prolog.) multitudes can be expressed in arrays, and types enable function polymorphism. not only that, but again, j's primitives are not like functions as used in other langs! functions in other langs that take 3+ args usually use those args as knobs to control small variations of how the function runs; in j, the function definition is given inline and naturally such variations are variations in the inline definition.
+TODO: confirm my understanding while revising this whole section by reading <https://code.jsoftware.com/wiki/Vocabulary/FramingFill>
 
-== j vs sql
+.the truth
+----------
+consider x with shape 2 3 4 5, v with rank 1 3, and y with shape 2 3 4 5 6.
+then v breaks x & y into [2 3 4 | 5] & [2 3 | 4 5 6] respectively, taking the innermost 1-cell and 3-cell.
+then [2 3 | 4 | 5]     [2 3 | 4 5 6]
+     ----       -      ----   -----
+      cf       cell     cf     cell
 
-=== overview
+common prefix is useful only:
+. of argument shapes: that a verb is *valid* over them
+. of frames: the common frame after cells have been identified from verb rank
 
-* j is not declarative
-* _far_ terser syntax
-* sql is flat. j may be said to be flat excepting boxing. one may argue that j is not flat b/c arrays are k-cells and that each k-cell is an element of a list, hence being nested. though truely arrays' axes are ordered, there is no nesting, as demonstrated by how freely one can use `|:`.
-* arrays are numerically indexed than nominally; however, this isn't much difference if you use separate 1D arrays—the equivalent of many single-attribute relations—and reference them by linguistic identifiers (variable names).
-* rather than join, we've `i.`[TODO: is this all?] and ordered axes (and `"` & `|:` to access subsets). join works on predicates whereas rank is ordinal subsetting
+in this example, "1 3 pairs each of the 5 1-cells with each (4 5 6)-cell as per usual verb/noun agreement; the frame/cell breakdown is (2 3 4 | 5) & (2 3 | 4 5 6); their cf (prefix) is 2 3. this leaves cells 4 5 and 4 5 6, to which the verb is applied, and then the cf frames it.
+----------
+
+TODO: think about & discuss verbs as always being of two steps: 1. determine & 2. populate result arrays; all verbs can be represented by `$` and some other function, yeah?
+
+. every verb has a rank for its monadic argument and each of its dyadic args. these ranks determine how the argument arrays are each partitioned into frames & cells before the verb is applied to those cells.
+  .. for the monadic case, this is obvious
+  .. for the dyadic case:
+    ... the frame is the common shape prefix (called the _common frame_) of x & y e.g. if $x is 2 4 9 and $y is 2 4 5 8 then their common frame is 2 4; by this partition there remain what i'll here call _x-cells_ & _y-cells_—in this example's case, x has a 1-cell of length 9 and y has a 2-cell of length 5 8.
+    ... the x & y-cells are passed to the verb, and must _agree_ with the verb e.g. if the verb has dyadic rank 0 1 then the rank of the y-cells must be exactly 1 greater than that of the x-cells
+      .... agreement is considered after replicating or filling
+    ... whichever cell has a smaller rank is either:
+      .... replicated, if there's exactly one item in its list
+      .... filled otherwise
+      .... the fill-vs-replicate dynamic is demonstrated by +++'abc',:'*b'+++ vs +++'abc',:'*'+++
+
+verb's ranks can be amended (not overridden) by using the _rank conjunction, "_. v"r splits [partitions] an array into r-cells and a frame, then applies v to the r-cells, then combines that result with the frame.
+
+common prefix (aka frame) is required b/c that implies same number of items in both lists (n-cells & m-cells of x & y), which gives pointwise (1-to-1) relation between the set of m-cells & n-cells. example: in `4 2 5 6 v 4 2 8 9`, j matches 8 (5 6)-cells with 8 (8 9)-cells. technically j could more generally permit equal cardinality common frames, but that'd possibly put too much burden on the programmer to do the frame dissection & assembly.
+
+that cells must match dyadic rank makes reasoning easy; it's explicit! for example, v"1 2 explicitly tells that both args will have some common prefix followed by a 1-cell for x and a 2-cell for y.
+
+the rank used by a verb, given an arg or two, is min(verbrank,argrank,0). naturally this partitions into frame and cells. TODO: update this phrasing so that it doesn't bear mentioning, and more precisely & appropriately discuss negative ranks.
+
+NOTE: allow replication to be automatic! don't specify rank 0 if equivalent output would be inferred from replication. the interpreter only _usually_ optimizes that poor loop structure. see <https://code.jsoftware.com/wiki/Vocabulary/quote> point (5) about using floating point (e.g. `1.`) to force non-suppression of the rank conjunction.
+
+.when acting on each row might seem like acting on columns, which is an illusion
+----
+   i. 3 3
+0 1 2
+3 4 5
+6 7 8
+
+   }: i. 3 3 NB. seems to remove the last column but actually only effectively does so by literally removing the last element for each of the rows.
+0 1 2
+3 4 5
+
+   ]a=.2 3 $ 10 20 30 40 50 60
+10 20 30
+40 50 60
+   1 2 3 +"1 a NB. what appears to be summing over columns is actually summing 1-cells. also, "1 is short for "1 1.
+11 22 33
+41 52 63
+----
+
+.some simple rank examples
+----
+NB. ] prints `a` after assignment
+   ]a =. ? (2 3 4 $ 100) NB. parens for beginner's readability, not disambiguation
+40 81  5 54
+96 53 14 47
+78 93 89 42
+
+19 98 98 51
+20 85 90 58
+53 88 68 29
+
+   +/"1 a  NB. (40+81+5+54) ...; folds over 6 lists (specifically 2 3-lists each of length 4) of 0-cells
+180 210 302
+266 253 238
+
+   +/"_1 a NB. (40 81 5 54 + 96 53 14 47 + 78 93 89 42) ...; folds over 2 lists of 1-cells
+214 227 108 143
+ 92 271 256 138
+
+   +//. 4 4 $ i.3 NB. +//. is ((+)/)/. b/c adverb-verb binding is high precedence and left-associative.
+0 2 6 0 3 4 0
+
+   ]a =. 2 2 4 $ 0 0 1 1 0 0 0 1 0 1 0 0 0 0 1 0`
+0 0 1 1
+0 0 0 1
+ 
+0 1 0 0
+0 0 1 0
+
+   #.a NB. because #. accepts a list (rank 1 array), the frame is 2 2; thus the result is 2 2
+3 1
+2 4
+
+i.4 5
+ 0  1  2  3  4
+ 5  6  7  8  9
+10 11 12 13 14
+15 16 17 18 19
+
+   1 0 _1 0 |."0 1 i.4 5 NB. each atom of x corresponds to a row in y and tells how much to rotate that row. consequently $y must be 4 n.
+ 1  2  3  4  0
+ 5  6  7  8  9
+14 10 11 12 13
+15 16 17 18 19
+----
+
+.dyadic rank examples
+----
+   10 100 30 +"0 1 i. 3 4 NB. 3 & 3 4. common frame is 3 (rank 1); 0-cells & 1-cells respectively (as taken from shape arg to ") are of shape 3 & 4. 3 gets replicated into 3 4.
+ 10  11  12  13
+104 105 106 107
+ 38  39  40  41
+
+   10 100 30 +"1 1 i. 3 4 NB. 3 & 3 4. common frame is 3 (rank 1); remaining cells are rank 0, length 3, and rank 1, shape 4. 
+length error: frame mismatch: 3 vs 3 4
+
+   10 100 30 +"1 1 i. 4 3 NB. 3 & 4 3. common frame is 0,...; _1-cells are 3 and 3. result is 4 3.
+10 101 32
+13 104 35
+16 107 38
+19 110 41
+
+   10 100 30 +"0 1 i. 4 3
+length error: frame mismatch: 3 vs 4 3
+
+   10 100 30 +"0 1 i. 3 3
+ 10  11  12
+103 104 105
+ 36  37  38
+----
+
+=== deeply nested relations by repeated application of "
+
+i'll break down the example given at <https://code.jsoftware.com/wiki/Vocabulary/quote#More_Examples>:
+
+   gs=.;:'RA Ra rA ra'
+   ((<@:(/:'RrAa'&i.)@:,&:>)"0"0 1)~gs
+┌────┬────┬────┬────┐
+│RRAA│RRAa│RrAA│RrAa│
+├────┼────┼────┼────┤
+│RRAa│RRaa│RrAa│Rraa│
+├────┼────┼────┼────┤
+│RrAA│RrAa│rrAA│rrAa│
+├────┼────┼────┼────┤
+│RrAa│Rraa│rrAa│rraa│
+└────┴────┴────┴────┘
+
+always start with the outermost rank. v"0 1 matches atoms to rows: [(atom,row)]. then for each in that list, v"0 matches atoms with atoms, which, as demonstrated by `10 ,"0 (1 2 3 4)`, shows that it matches each atom with each item of each row: [(atom,[atom])] which is expressed flatly via distribution as [[(atom,atom)]]—rank 2. the distribution can be seen:
+
+   genotypes (,<)"0 1 genotypes
+┌──┬─────────────┐
+│RA│┌──┬──┬──┬──┐│
+│  ││RA│Ra│rA│ra││
+│  │└──┴──┴──┴──┘│
+├──┼─────────────┤
+│Ra│┌──┬──┬──┬──┐│
+│  ││RA│Ra│rA│ra││
+│  │└──┴──┴──┴──┘│
+├──┼─────────────┤
+│rA│┌──┬──┬──┬──┐│
+│  ││RA│Ra│rA│ra││
+│  │└──┴──┴──┴──┘│
+├──┼─────────────┤
+│ra│┌──┬──┬──┬──┐│
+│  ││RA│Ra│rA│ra││
+│  │└──┴──┴──┴──┘│
+└──┴─────────────┘
+
+obviously thereafter you can see how RA is combined with RA Ra rA ra, then Ra is combined with.... note that the 1-to-many relation makes replication occur.
+think of v"r as adding a traversal to v, e.g. `fmap@T v` for some T, except that T is here cells. repeated use of " is akin to nested fmap's or other traversals in haskell. the outer traversals are applied, leaving the inner traversals to associate subsets, and then for each subset we repeat.
+
+=== fills & replication
+
+* added during _assembly_, *after* a verb is applied to cells!
+
+'' or 0 is used as a dummy filler element in arrays that're "extended" to have shapes as large as the largest shape in that cell, to avoid producing ragged arrays.
+
+----
+   4 4 $ i.3
+0 1 2 0
+1 2 0 1
+2 0 1 2
+0 1 2 0
+----
+
+=== resultant shape
+
+process: split into frame f and cells -> replication -> pointwise association -> werb app -> extension -> padding -> result is framed by f.
+
+a: is the framing fill for boxed things. btw do not confuse _framing fill_ with the verb called fill, `!.f`.
+
+see https://code.jsoftware.com/wiki/Vocabulary/Agreement and https://code.jsoftware.com/wiki/Vocabulary/FramingFill for deets.
+
+1. consider x : 3 4 5 and y : 3 4 9 6. the cf is 3 4. this frames the output! it is just a shape! there's no data there! all the *data* are in the 5 and the 9 6! 3 4 just tells how many (and the shape) of the data (and the output!) there are 3×4 length-5 things pointwise associated with 3×4 9 6 matrices! so we associate each 5 with each 9 6, which works b/c there are the same number. ok, so what's the shape of the output? easy: it's 3 4 S where S is whatever the verb's output shape is! discussing frame as a shape really is perfectly apt! it FRAMES the data, and the data is in the cells!
+
+2. consider x:5 and y:9 6. then x v y will replicate *then* pad! they are not alternatives! here 5 becomes 9 5 via replication, then 9 6 via padding. replication ensures the correct number of *items*!
+
+NOTE: _extension_ is like 5 -> 1 5; a vacuous appending of singleton axes to increase rank.
+
+*padding* occurs exactly when some of the results of a verb being applied to cells have smaller lengths than other results.
+
+some part of extension entails the resultant shape being, for each axis, the max of each length e.g. 1 0 & 0 1 -> 1 1. all extended axes are filled.
+
+=== empty lists
+
+TODO: throughly discuss 0 vs empty list and singleton lists vs scalars both in theory and practice. similarly, `1 5 $ 1 10` is not equal to `5 $ 1 10` because `1 5` is not equal to `5`.
+* `$1` is an empty list yet `#1` is 1.
+
+* scalars' shapes are empty lists e.g. `$'a'` is the empty list. `$$'a'` is 0
+* the shape of an empty list is 0: `$''` is 0.
+* there are many shapes of empty list! the empty list is not a singleton category!
+* the _de facto_ empty list, when any empty list (of any type) suffices, is an empty list of characters, `''`.
+
+== specific functionalities
+
+=== filesystem
+
+use link:https://code.jsoftware.com/wiki/Standard_Library/dir[`dir`] e.g:
+
+[source,j]
+----
+   ,.5{.2 dir'codenotes/*.adoc'
+┌────────────────────────┬──────────────────┬──────┬───┬──────┬──────────┐
+│7z.adoc                 │2023 4 23 12 36 36│195   │rw-│------│-rw-rw-rw-│
+├────────────────────────┼──────────────────┼──────┼───┼──────┼──────────┤
+│README.adoc             │2023 4 23 12 36 36│10981 │rw-│------│-rw-rw-rw-│
+├────────────────────────┼──────────────────┼──────┼───┼──────┼──────────┤
+│ai.adoc                 │2023 4 23 12 36 41│1158  │rw-│------│-rw-rw-rw-│
+├────────────────────────┼──────────────────┼──────┼───┼──────┼──────────┤
+│best-paradigms-lang.adoc│2023 8 9 17 7 55  │72562 │rw-│------│-rw-rw-rw-│
+├────────────────────────┼──────────────────┼──────┼───┼──────┼──────────┤
+│best-paradigms.adoc     │2023 4 23 12 36 36│240491│rw-│------│-rw-rw-rw-│
+└────────────────────────┴──────────────────┴──────┴───┴──────┴──────────┘
+
+   ,.2{.1 dir'codenotes/*.adoc'
+┌─────────────────────┐
+│codenotes/7z.adoc    │
+├─────────────────────┤
+│codenotes/README.adoc│
+└─────────────────────┘
+----
+
+you can do `1 1 dir y` to include subdirectories, but it's not recursive; it lists the given directory's files & directories, and the directories' files & directories, i.e. `1 1 dir d` is like bash `find "$d" -maxdepth 1` except that, unlike `find`, `d` is not included in the result set. `dirtree` is recursive and produces the same result as `find(1)` *but excludes subdirectories* e.g. given the directory structure
+
+----
+ A
+├──  a1.txt
+├──  a2.txt
+├──  a3.txt
+├──  B
+│   ├──  b1.txt
+│   └──  C
+│       └──  c1.txt
+└──  D
+    ├──  d1.txt
+    └──  d2.txt
+----
+
+`find A` produces 11 results:
+
+----
+A
+A/a1.txt
+A/D
+A/D/d2.txt
+A/D/d1.txt
+A/B
+A/B/b1.txt
+A/B/C
+A/B/C/c1.txt
+A/a2.txt
+A/a3.txt
+----
+
+and `dirtree'A'` produces 7 results, lacking the input directory, `A`; and the subdirectories `A/B`, `A/B/C`, and `A/D`:
+
+----
+┌────────────┬──────────────────┬─┐
+│A/a1.txt    │2023 8 19 13 21 32│0│
+├────────────┼──────────────────┼─┤
+│A/a2.txt    │2023 8 19 13 21 33│0│
+├────────────┼──────────────────┼─┤
+│A/a3.txt    │2023 8 19 13 21 35│0│
+├────────────┼──────────────────┼─┤
+│A/D/d2.txt  │2023 8 19 13 21 18│0│
+├────────────┼──────────────────┼─┤
+│A/D/d1.txt  │2023 8 19 13 21 16│0│
+├────────────┼──────────────────┼─┤
+│A/B/b1.txt  │2023 8 19 13 21 28│0│
+├────────────┼──────────────────┼─┤
+│A/B/C/c1.txt│2023 8 19 13 21 51│0│
+└────────────┴──────────────────┴─┘
+----
+
+NOTE: despite the docs, at least on linux, filenames' cases are preserved, not converted to lowercase.
+
+== "relational j", and j vs sql (nonsense follows)
+
+example challenge: express `select x*y from x join y on x+y=7` in j:
+
+it was easy to build-up incrementally by usual repl-driven development: parenthecizing these trains then executing one at a time to see the result, then using the result as a hint about what to do next:
+
+. `+"0 _` each `x` plus all ``y``'sr
+. `7=+"0 _` convert to mask. same shape as `y`.
+. `((7=+"0 _)#])` parenthesize that then use it to select from `y`.
+. `((7=+"0 _)<@#])` those results had padding: either rows of zeroes, or some zeroes in given columns. box to avoid padding.
+. `([*&.>(7=+"0 _)<@#])` multiply `x` by the subsets of `y`, which naturally must be done under unbox. result is good except for aces (empty boxes).
+. `;@([*&.>(7=+"0 _)<@#])` raze away the aces.
+
+in factor it's `[ [ swap [ + 7 = ] curry filter ] keepd v*n ] curry map`. `curry` corresponds to each left/right.
+
+=== summary of j vs sql
+
+[options="header"]
+|========================================================================================================================
+| sql                                                    | j
+| declarative, readable, easy, verbose                   | terse, obscure, procedural
+| flat sets & join                                       | 1+-dimensional arrays & rank
+| join filters cartesian product by predicate on values  | predicates produce masks which are selection vectors
+| no support for sequence ops that change size           | sequence verbs that change size is fine, but may introduce fill
+| no lambdas. composed expressions only.                 | lambdas exist but are rare. usually just compose computations.
+| each column has its own type                           | each column in stored as a homogenous list
+| atomic strings                                         | strings are arrays of characters
+| one-to-many join flattens into a table e.g. `x join y` | rank preserves one-to-many relation e.g. `,"0 _`
+|========================================================================================================================
+
 * `A join B` can be expressed as `map (select from B [where] [group by] [order by]) A` where the selection is really of B's attributes (since all attrs are stored separately as vectors) so scoping is not an issue i.e. there's no need to union attribute sets. the result is a 3+ rank array which can be flattened or rearranged as desired. in fact, we can make this more efficient by filtering each of `A` & `B` before mapping selection.
   ** consider `A join B using (key)`, and assume that all of A's and B's attrs are stored in individual vectors, and that you want to union each row of `A` with a corresponding attribute from `B`. we have a "table" `A` which simply means that there are some vectors of the same lengths, where the nth row is given by vectors at the nth index. the vectors belong to a namespace; they are unordered and present exactly when referenced in an expression. *the point of join is that it turns non-1:1 maps into 1:1 maps.* following our individual vector attribute encoding, we desire a new vector whose values relate to `A`'s values by index equality. the solution is to represent `B(key,value)` as vectors `key_B_` and `value_B_`, then `value_B_ {~ key_B_ i. key_A_`.
     *** TODO: how does this generalize? `value_B_ {~ key_B_ i. key_A_` creates a new attribute vector whose values are effectively functions of `key_A_`: namely looking-up keys in a map key->value. this resultant attribute vector has the same length as `key_A_`. generally (in sql) `A join B` results in a table of count `A*&#B`, which is returned as a transient table. the only information that `join` adds to any other query is the map between rows of `A` with those of `B`. all queries are always only of the input attribute vectors; thus our concern of how to translate sql to j is, separately & orthogonally: 1. queries, and 2. a relation of `A`'s indices with those of `B`, which is generally represented as a table with a column for each table being joined. yes, the concept of tables still holds despite us using only individual attribute vectors! attribute vectors "being of a common table" is the fact of their data being related by common index. naturally it follows that the join among tables is itself a table: a matrix of indices where the column tells which attribute vector to index into.
       **** NB. can i use ~: instead to be more elegant?
     *** insofar as i'm using an array model instead of prolog, i'd like to represent joins as i would any other relation, elegantly, lazily, in terms of relations (of indices, to defer lookup and avoid any potential efficient data packing complications). i want the query and expressions of relations to be as implicit as they are in prolog, done as an (e)DSL in j.
-* sql has only strings, no characters; j has only characters & arrays. thus in j we need boxes to work with strings of various lengths. sql's design seems better here, at least for strings. however, generally boxes enable ragged arrays, which sql does not support. TODO: how would we equivalently encode ragged arrays in sql? is j's or sql's method better?
-* sqlite is dynamically typed and permits hetrogeneous relations; j forces homogenous arrays of flat arrays, but not boxed ones.
-* neither j nor sql has lambdas. both have higher-order functions (adverbs, conjunctions; `select` clauses like `group by`, `filter`, `sort by`, each of which accepts an expression, which is effectively a λ)
-* trying to work with sequences in sql is torturous/impractical
 
-.a reminder of flatness' goodness
-
-you know how it sucks when you want to look-over a source code repository but there are many subdirectories, so you need to look through them, and then _they_ have subdirectories, and so on, and you need to remember which files are in which subdirectory paths because you can't just view them all at once? and you know how it sucks when you want to want to run functions on the repository but can't just run them directly, but instead need to pass them as an argument to e.g. `find(1)`, usually with some quoting, and even then sometimes that's impossible due to how `find` works?
-
-or you know how you need to traverse a tree in a direction determined by the structure that it was arbitrarily defined by, usually top-down, except not actually because the only feasible way to traverse top-down elegantly is actually bottom-up because you need a right fold (more properly: evaluating the deepest/innermost parts of the structure before the outer layers)? or if you don't use a functional/catamorphic traversal, then you must keep a complex index of where you have been, are, and have yet to go, in iteratively traversing the tree or dag or whatever other structure you're working with?
-
-and you know how you must consider these things _for every structure that you use_: list, heap, binary tree, rose/finger tree, rope,...? and you know how you must convert among all the structures, and how that's usually a pain in the ass both on its own and especially when confounded by typing concerns? and you know how each structure usually has its own type and then one needs to write CRUD methods for each structure, usually as a horrible mess of ad-hoc polymorphism and monomorphic methods, and _it's still shit_ after painfully trying to make it more decent?
-
-yeah, fuck that load. just use flat arrays, like j does. a multidimensional array in j has order but no nesting. sql's relations are overall a poorer version, with sql tables being structurally equivalent to rank-2 arrays, and higher rank arrays being equivalent to joined tables. though practically unusable for sequence operations, sql is much better for set-theoretic operations than j, including efficient queries. that *permit* _multiple_ hierarchies.
-
-.what about boxes in j?
-
-boxes can be used to encode structure like algebraic datatypes do, but that's not how they're used in j; in j boxes are used merely to prevent framing fill.
-
-also files suck when they're small, because you must open/view each at a time; there are hardly any facilities to view multiple files simultaneously. tabs don't count; that's many _open_ simultaneously, not many _viewed_ simultaneously. again, it's better to have one large chuck of data, with elegant & powerful querying/indexing tools. this is common in j e.g. having a large array but using multiple, separate indexes (as integers or logical vectors) to query it, via e.g. `i.`, `;.n`, `{`.
-
-''''
-
-overall j is far better than sql, for working with data in-memory without ACID. j does not have indexes, which might appreciably affect efficiency when the table is modified in a way that changes its sort order. i imagine that j marks sorted arrays specially so that e.g. it uses binary search when appropriate, but this is of no help if e.g. a new element is added to the relation, because then the whole relation must be re-graded. unless you need extreme efficiency as achieved by indexes. however, TODO: perhaps jd handles such cases well. TODO: compare efficiency of sqlite vs j wrt selecting by index. also, j cannot open large databases because j reads in files entirely. also, j has no facility to modify a small part of a file; instead, it overwrites the entire file—much less efficient than sqlite!
-
-rarely are even 3D structures used in j. most commonly it's 1D or 2D.
+overall j bests sql for working with data in-memory without ACID. j does not have indexes, which might appreciably affect efficiency when the table is modified in a way that changes its sort order. i imagine that j marks sorted arrays specially so that e.g. it uses binary search when appropriate, but this is of no help if e.g. a new element is added to the relation, because then the whole relation must be re-graded. unless you need extreme efficiency as achieved by indexes. however, TODO: perhaps jd handles such cases well. TODO: compare efficiency of sqlite vs j wrt selecting by index. also, j cannot open large databases because j reads in files entirely. also, j has no facility to modify a small part of a file; instead, it overwrites the entire file—much less efficient than sqlite!
 
 === array-relation equivalence
+
+TODO: how do i relate relations and arrays? relations aren't as amenable to arithmetic. how do we express computations in j vs in sql and why & how do they differ?
 
 each axis corresponds to a sql attribute, and each corresponds to an axis of an n-dimensional space where n is the number of axes or attributes. attribute order is irrelevant in sql. axis order is considerable in j with k-cells corresponding to subspaces; however, axes can be freely permuted by `|:`, so the question is: how and in which contexts is axis order relevant? the answer is simple: rank. recall that rank is a property of verbs. therefore the axis order, though stored within the array, is merely an _accidental property of the array_, but is a _significant property of the verbs_ that act on the array! j supports tacit expressions, and indeed tacit is a preferred style. sql does not support tacit expressions; all expressions must explicitly reference attributes. sql hardly uses functions (with ordered parameters), instead using general expressions. in sql, the output expression does not use (ordered) sequences of (input) data; thus ordering the attributes would be insensible.
 
@@ -632,461 +1069,6 @@ a ([+[:i.-~)&(({&idx)@:(y&i.)) b
 ----
 
 TODO: cf I. & m&i. ; they both use efficient lookups.
-
-== io
-
-to write output like you'd get in a repl to a file, you must convert it to a list of bytes.
-
-== ergonomic j
-
-* syntax highlighting saves one from errors caused by e.g. using `=' when they'd meant `=.`
-* @: is two characters and visually confounding; middle dot is much visually clearer, allowing the visual cortex to see function sequence as a sequence; `@:` looks like any other j operator, so the brain tends to consider it as such, even though it really serves only to relate a sequence of functions symmetrically. much like how `(f g h)` is better than `f,g,h`, it's better than `f@:g@:h`, too. the brain is more likely to see `:` as delimiters. `f·g·h` is obviously clear. `@` may be used as it is, being one character and deserving special consideration; _it's more than a delimiter!_ imagine if we needed to use `@:` as the delimiter between numbers in a vector literal! `1@:2@:3` looks horrible compared to `1 2 3`! sequenced functions would ideally be delimited by whitespace, but unfortunately as per j's parsing rules, whitespace is insignificant and juxtaposed functions are trains.
-
-== misc
-
-* _fret_ refers to the item on an interval's boundary
-* file ext `.ijs` means _j script_, which is just a library, which is just some j code. verb `load` accepts a filepath to load (run/eval).
-  ** TODO: how to load a file's definitions into the scope that invokes `load`? this is probably a locale concern.
-* the notation `,0` refers to a (rank-1) empty list though an empty array is denoted `0,...` and an empty table as `0,c` (∀c)
-
-== j's information structure: homogenously-typed arrays
-
-. like static c arrays, j's arrays are non-ragged & homogenously typed. think of arrays as n-dimensional subspaces.
-. _shape_ (aka, somewhat confusingly, _length_) is the sequence of _axes_ array dimensions e.g. shape 3 4 5 of an array corresponds to c array `int arr[3][4][5]`, which has 3 axes.
-  .. the number of axes is called the _rank_.
-  .. each axis' value is its length—the number of _items_ that it contains; this sees the axis a _list_ (aka _vector_) of its elements e.g. 3 4 5 is a 3-item list of (4 5)-_cells_; _cell_ is a term meaning _subarray_. each array can be split at any index/axis into a _frame_ and _cells_ (aka _suffix_) e.g. in 3 | 4 5, 3 is the frame. in 3 4 | 5, 3 4 is the frame and the last axis is a 1-cell (b/c 1 dimension) of length 5.
-    ... technically _frame_ refers to the shape of the array, but whatever. i'll use _frame_ to refer to either that shape or the array subset that has that shape, if it's ever sensible to do so.
-    ... n-cells index from the innermost (aka _trailing_) axis e.g. the 2-cells of 3 4 5 have shape 4 5.
-    ... _n-cells index from the outermost (aka _leading_) axis and *drop axes* e.g. the _2-cells of 3 4 5 have shape 5; we drop the 1st 2 axes.
-      .... lists are frames. relative to a frame/list, items are _1 cells
-    ... the 0th axis is not ever shown, and refers to the atoms independent of (excepting order) shape
-    ... technically, if it matters, "if n is negative in u"n, the actual rank of u"n will be infinite, but u"n will apply u to n-cells of the argument."
-. axes may be length 0
-. the items (e.g. the ints of `arr`) are called _atoms_. atoms have rank 0.
-  .. _non-atomic_ means _rank-1+_
-  .. an atom has one item: itself
-  .. an atom can be interpreted as a degenerate, rank-0 array with 0 items i.e. an empty rank-1 array
-
-NOTE: scalars are isomorphic but not equivalent to singleton lists! they have different semantics! they're notationally ambiguous, so use monadic `$` to disambiguate.
-
-with this terminology and model understood, let's explore how we _program_—relate subsets, i.e. select subarrays then pass them as arguments to functions—in j:
-
-TODO: confirm my understanding while revising this whole section by reading <https://code.jsoftware.com/wiki/Vocabulary/FramingFill>
-
-.the truth
-----------
-consider x with shape 2 3 4 5, v with rank 1 3, and y with shape 2 3 4 5 6.
-then v breaks x & y into [2 3 4 | 5] & [2 3 | 4 5 6] respectively, taking the innermost 1-cell and 3-cell.
-then [2 3 | 4 | 5]     [2 3 | 4 5 6]
-     ----       -      ----   -----
-      cf       cell     cf     cell
-
-common prefix is useful only:
-. of argument shapes: that a verb is *valid* over them
-. of frames: the common frame after cells have been identified from verb rank
-
-in this example, "1 3 pairs each of the 5 1-cells with each (4 5 6)-cell as per usual verb/noun agreement; the frame/cell breakdown is (2 3 4 | 5) & (2 3 | 4 5 6); their cf (prefix) is 2 3. this leaves cells 4 5 and 4 5 6, to which the verb is applied, and then the cf frames it.
-----------
-
-TODO: think about & discuss verbs as always being of two steps: 1. determine & 2. populate result arrays; all verbs can be represented by `$` and some other function, yeah?
-
-. every verb has a rank for its monadic argument and each of its dyadic args. these ranks determine how the argument arrays are each partitioned into frames & cells before the verb is applied to those cells.
-  .. for the monadic case, this is obvious
-  .. for the dyadic case:
-    ... the frame is the common shape prefix (called the _common frame_) of x & y e.g. if $x is 2 4 9 and $y is 2 4 5 8 then their common frame is 2 4; by this partition there remain what i'll here call _x-cells_ & _y-cells_—in this example's case, x has a 1-cell of length 9 and y has a 2-cell of length 5 8.
-    ... the x & y-cells are passed to the verb, and must _agree_ with the verb e.g. if the verb has dyadic rank 0 1 then the rank of the y-cells must be exactly 1 greater than that of the x-cells
-      .... agreement is considered after replicating or filling
-    ... whichever cell has a smaller rank is either:
-      .... replicated, if there's exactly one item in its list
-      .... filled otherwise
-      .... the fill-vs-replicate dynamic is demonstrated by +++'abc',:'*b'+++ vs +++'abc',:'*'+++
-
-verb's ranks can be amended (not overridden) by using the _rank conjunction, "_. v"r splits [partitions] an array into r-cells and a frame, then applies v to the r-cells, then combines that result with the frame.
-
-common prefix (aka frame) is required b/c that implies same number of items in both lists (n-cells & m-cells of x & y), which gives pointwise (1-to-1) relation between the set of m-cells & n-cells. example: in `4 2 5 6 v 4 2 8 9`, j matches 8 (5 6)-cells with 8 (8 9)-cells. technically j could more generally permit equal cardinality common frames, but that'd possibly put too much burden on the programmer to do the frame dissection & assembly.
-
-that cells must match dyadic rank makes reasoning easy; it's explicit! for example, v"1 2 explicitly tells that both args will have some common prefix followed by a 1-cell for x and a 2-cell for y.
-
-the rank used by a verb, given an arg or two, is min(verbrank,argrank,0). naturally this partitions into frame and cells. TODO: update this phrasing so that it doesn't bear mentioning, and more precisely & appropriately discuss negative ranks.
-
-NOTE: allow replication to be automatic! don't specify rank 0 if equivalent output would be inferred from replication. the interpreter only _usually_ optimizes that poor loop structure. see <https://code.jsoftware.com/wiki/Vocabulary/quote> point (5) about using floating point (e.g. `1.`) to force non-suppression of the rank conjunction.
-
-.when acting on each row might seem like acting on columns, which is an illusion
-----
-   i. 3 3
-0 1 2
-3 4 5
-6 7 8
-
-   }: i. 3 3 NB. seems to remove the last column but actually only effectively does so by literally removing the last element for each of the rows.
-0 1 2
-3 4 5
-
-   ]a=.2 3 $ 10 20 30 40 50 60
-10 20 30
-40 50 60
-   1 2 3 +"1 a NB. what appears to be summing over columns is actually summing 1-cells. also, "1 is short for "1 1.
-11 22 33
-41 52 63
-----
-
-.some simple rank examples
-----
-NB. ] prints `a` after assignment
-   ]a =. ? (2 3 4 $ 100) NB. parens for beginner's readability, not disambiguation
-40 81  5 54
-96 53 14 47
-78 93 89 42
-
-19 98 98 51
-20 85 90 58
-53 88 68 29
-
-   +/"1 a  NB. (40+81+5+54) ...; folds over 6 lists (specifically 2 3-lists each of length 4) of 0-cells
-180 210 302
-266 253 238
-
-   +/"_1 a NB. (40 81 5 54 + 96 53 14 47 + 78 93 89 42) ...; folds over 2 lists of 1-cells
-214 227 108 143
- 92 271 256 138
-
-   +//. 4 4 $ i.3 NB. +//. is ((+)/)/. b/c adverb-verb binding is high precedence and left-associative.
-0 2 6 0 3 4 0
-
-   ]a =. 2 2 4 $ 0 0 1 1 0 0 0 1 0 1 0 0 0 0 1 0`
-0 0 1 1
-0 0 0 1
- 
-0 1 0 0
-0 0 1 0
-
-   #.a NB. because #. accepts a list (rank 1 array), the frame is 2 2; thus the result is 2 2
-3 1
-2 4
-
-i.4 5
- 0  1  2  3  4
- 5  6  7  8  9
-10 11 12 13 14
-15 16 17 18 19
-
-   1 0 _1 0 |."0 1 i.4 5 NB. each atom of x corresponds to a row in y and tells how much to rotate that row. consequently $y must be 4 n.
- 1  2  3  4  0
- 5  6  7  8  9
-14 10 11 12 13
-15 16 17 18 19
-----
-
-.dyadic rank examples
-----
-   10 100 30 +"0 1 i. 3 4 NB. 3 & 3 4. common frame is 3 (rank 1); 0-cells & 1-cells respectively (as taken from shape arg to ") are of shape 3 & 4. 3 gets replicated into 3 4.
- 10  11  12  13
-104 105 106 107
- 38  39  40  41
-
-   10 100 30 +"1 1 i. 3 4 NB. 3 & 3 4. common frame is 3 (rank 1); remaining cells are rank 0, length 3, and rank 1, shape 4. 
-length error: frame mismatch: 3 vs 3 4
-
-   10 100 30 +"1 1 i. 4 3 NB. 3 & 4 3. common frame is 0,...; _1-cells are 3 and 3. result is 4 3.
-10 101 32
-13 104 35
-16 107 38
-19 110 41
-
-   10 100 30 +"0 1 i. 4 3
-length error: frame mismatch: 3 vs 4 3
-
-   10 100 30 +"0 1 i. 3 3
- 10  11  12
-103 104 105
- 36  37  38
-----
-
-=== deeply nested relations by repeated application of "
-
-i'll break down the example given at <https://code.jsoftware.com/wiki/Vocabulary/quote#More_Examples>:
-
-   gs=.;:'RA Ra rA ra'
-   ((<@:(/:'RrAa'&i.)@:,&:>)"0"0 1)~gs
-┌────┬────┬────┬────┐
-│RRAA│RRAa│RrAA│RrAa│
-├────┼────┼────┼────┤
-│RRAa│RRaa│RrAa│Rraa│
-├────┼────┼────┼────┤
-│RrAA│RrAa│rrAA│rrAa│
-├────┼────┼────┼────┤
-│RrAa│Rraa│rrAa│rraa│
-└────┴────┴────┴────┘
-
-always start with the outermost rank. v"0 1 matches atoms to rows: [(atom,row)]. then for each in that list, v"0 matches atoms with atoms, which, as demonstrated by `10 ,"0 (1 2 3 4)`, shows that it matches each atom with each item of each row: [(atom,[atom])] which is expressed flatly via distribution as [[(atom,atom)]]—rank 2. the distribution can be seen:
-
-   genotypes (,<)"0 1 genotypes
-┌──┬─────────────┐
-│RA│┌──┬──┬──┬──┐│
-│  ││RA│Ra│rA│ra││
-│  │└──┴──┴──┴──┘│
-├──┼─────────────┤
-│Ra│┌──┬──┬──┬──┐│
-│  ││RA│Ra│rA│ra││
-│  │└──┴──┴──┴──┘│
-├──┼─────────────┤
-│rA│┌──┬──┬──┬──┐│
-│  ││RA│Ra│rA│ra││
-│  │└──┴──┴──┴──┘│
-├──┼─────────────┤
-│ra│┌──┬──┬──┬──┐│
-│  ││RA│Ra│rA│ra││
-│  │└──┴──┴──┴──┘│
-└──┴─────────────┘
-
-obviously thereafter you can see how RA is combined with RA Ra rA ra, then Ra is combined with.... note that the 1-to-many relation makes replication occur.
-think of v"r as adding a traversal to v, e.g. `fmap@T v` for some T, except that T is here cells. repeated use of " is akin to nested fmap's or other traversals in haskell. the outer traversals are applied, leaving the inner traversals to associate subsets, and then for each subset we repeat.
-
-=== fills & replication
-
-* added during _assembly_, *after* a verb is applied to cells!
-
-'' or 0 is used as a dummy filler element in arrays that're "extended" to have shapes as large as the largest shape in that cell, to avoid producing ragged arrays.
-
-----
-   4 4 $ i.3
-0 1 2 0
-1 2 0 1
-2 0 1 2
-0 1 2 0
-----
-
-=== resultant shape
-
-process: split into frame f and cells -> replication -> pointwise association -> werb app -> extension -> padding -> result is framed by f.
-
-a: is the framing fill for boxed things. btw do not confuse _framing fill_ with the verb called fill, `!.f`.
-
-see https://code.jsoftware.com/wiki/Vocabulary/Agreement and https://code.jsoftware.com/wiki/Vocabulary/FramingFill for deets.
-
-1. consider x : 3 4 5 and y : 3 4 9 6. the cf is 3 4. this frames the output! it is just a shape! there's no data there! all the *data* are in the 5 and the 9 6! 3 4 just tells how many (and the shape) of the data (and the output!) there are 3×4 length-5 things pointwise associated with 3×4 9 6 matrices! so we associate each 5 with each 9 6, which works b/c there are the same number. ok, so what's the shape of the output? easy: it's 3 4 S where S is whatever the verb's output shape is! discussing frame as a shape really is perfectly apt! it FRAMES the data, and the data is in the cells!
-
-2. consider x:5 and y:9 6. then x v y will replicate *then* pad! they are not alternatives! here 5 becomes 9 5 via replication, then 9 6 via padding. replication ensures the correct number of *items*!
-
-NOTE: _extension_ is like 5 -> 1 5; a vacuous appending of singleton axes to increase rank.
-
-*padding* occurs exactly when some of the results of a verb being applied to cells have smaller lengths than other results.
-
-some part of extension entails the resultant shape being, for each axis, the max of each length e.g. 1 0 & 0 1 -> 1 1. all extended axes are filled.
-
-=== empty lists
-
-TODO: throughly discuss 0 vs empty list and singleton lists vs scalars both in theory and practice. similarly, `1 5 $ 1 10` is not equal to `5 $ 1 10` because `1 5` is not equal to `5`.
-* `$1` is an empty list yet `#1` is 1.
-
-* scalars' shapes are empty lists e.g. `$'a'` is the empty list. `$$'a'` is 0
-* the shape of an empty list is 0: `$''` is 0.
-* there are many shapes of empty list! the empty list is not a singleton category!
-* the _de facto_ empty list, when any empty list (of any type) suffices, is an empty list of characters, `''`.
-
-== lang spec
-
-* neg nums are constants e.g. `_5`
-* no particular boolean type
-* `1 2` is an array but `a b` is not b/c words expand to their values in parens; `a b` = `(a) (b)` which is a syntax error.
-* `_2` for neg 2, not `-2`
-* `0.5` not `.5` (b/c dot is a special char)
-* 16b1f means `1F` in base 16
-* `_` is infinity. `__` is neg inf. `_.` is nan and should never be used in any program.
-* `'` & `"` like lua. only string, no char type.
-* escape sequences are unsupported
-* *identifiers can be dynamic*
-* identifiers:
-  ** may not contain dot (.) nor colon (:)
-  ** must begin with `/[a-zA-Z_]/`
-  ** which end with `_` or begin with `__` have locale-specific behavior
-* *verbs definitions are stored as text then evaluated at runtime!*
-* `x` & `y` are implicitly the names of the left & right operands respectively and can be referenced as such in a verb definition
-  ** *`y` is the identifier for unary verbs!*
-* private & public namespaces exist separately. like globals and `static` in c.
-* like scheme, all programs output their values. to output nothing, output a list with no output, namely `0 0$0`, which naturally does not even print a blank line.
-
-=== definition
-
-the following is literally how verbs are ultimately defined but usually we use {{ }} to define verbs.
-
-[source,j]
-----
-a=.1+b=.5 NB. res: a=6,b=5
-x ; y =: toupper x=: 3 5 $ 97}.a. NB. =: is just another verb, not special syntax! this defines x then y in terms of that then returns x;y once y is defined.
-
-v:=[mon|dy]ad : '<def>' NB. define a monadic or dyadic verb
-NB. alt form:
-v:=[mon|dy]ad define
-<def>
-)
-
-NB. define a verb monadically & dyadically:
-v=:verb define
-monadic def
-: NB. colon starts the optional dyadic subclause; w/o it v would be monadic
-dyadic def
-)
-
-pi=:o. :([*[:o.]) NB. monadic is o. . dyadic is a fork which multiplies the left arg by (the right times pi). [:o.] can instead be written o.@]
-----
-
-==== caveats
-
-.static scoping, not lexical scoping
-
-[source,j]
-----
-substrc=:{{
-  't1 t2'=.x
-  a=.t1(E.i.1:)y
-  s2=.{{
-    b=.t2(E.i.1:)y NB. s2's y, not substrc's
-    if. b=#y do. '' else. (0,:b) ];.0 y end.
-}}
-  if. a=#y do. '' else. ((a+#t1),:_) s2;.0 y end.
-}}
-----
-
-defines successfully but fails during execution, citing that `E.` has no monadic valence in `b=.t2(E.i.1:)y`. the error here is that `t2` is not bound within `s2`. if i change `t2` to `x` and use `(t2&s2)` instead of s2 in `;.0 y` then `substrc` works correctly. of course making t2 global via `=:` would make it work but with the side effect of keeping `t1` & `t2` bound in the global environment after executing `substrc`.
-
-=== program execution
-
-verb has left noun: dyadic; no left noun: monadic, right operand. thus you must know whether a token is a noun or verb! i.e. `u v n` sees `v` as monadic on `n` and `n v m` sees it as dyadic on `n` & `m`. thus `u v n` is `u(v(n))` i.e. `(u . v) n`. the simple way to check is:
-
-. identify rightmost yet-unconsidered verb
-. is the word to its left a verb?
-. if no, then it's dyadic; else it's monadic and its result is passed to the verb on its left
-
-there are no nullary verbs. effectively nullary verbs must be given a dummy arg.
-
-== runtime (execution environment)
-
-programs:
-
-jconsole:: ordinary repl
-jhs:: j http server. enhanced browser-bound j repl/ide. uri `http://127.0.0.1:65001/jijx` by default. run in bg unless you want to send an interrupt signal to j. (but why not just use `jbrk` instead?)
-jqt:: Qt j ide. if it requires the `dev-qt/qtwebengine` ebuild (on gentoo) probably found by similar names in other repositories.
-
-apparently _somewhere_ there's an _execution window_, whose name ends with `.ijx`, that is basically like drracket:
-
-* accepts verbs to execute
-* displays a log
-* enables editing the running program's code
-
-windows for editing code that interact with the execution window are called _script windows_. an example interaction is sending code to the execution window via `Run > File | Selection | Window` from the script window's menu bar.
-
-to unset verbs, use `4!:55 <'expiredname'`.
-
-=== environment variables (envars)
-
-* var `ARGV` which is a boxed list of jconsole, script name, and arguments
-* unary `getenv`
-* unary `stdin` with dummy arg, and unary `stdout`, and `stderr` to read & write
-  ** stdin & stdout are obverses. e.g. `toupper&.stdin''` is a program which prints an uppercase version of stdin
-* `exit` takes a dummy arg
-
-NOTE: if you do not invoke `exit` then the script will end in the repl
-
-=== filesystem
-
-use link:https://code.jsoftware.com/wiki/Standard_Library/dir[`dir`] e.g:
-
-[source,j]
-----
-   ,.5{.2 dir'codenotes/*.adoc'
-┌────────────────────────┬──────────────────┬──────┬───┬──────┬──────────┐
-│7z.adoc                 │2023 4 23 12 36 36│195   │rw-│------│-rw-rw-rw-│
-├────────────────────────┼──────────────────┼──────┼───┼──────┼──────────┤
-│README.adoc             │2023 4 23 12 36 36│10981 │rw-│------│-rw-rw-rw-│
-├────────────────────────┼──────────────────┼──────┼───┼──────┼──────────┤
-│ai.adoc                 │2023 4 23 12 36 41│1158  │rw-│------│-rw-rw-rw-│
-├────────────────────────┼──────────────────┼──────┼───┼──────┼──────────┤
-│best-paradigms-lang.adoc│2023 8 9 17 7 55  │72562 │rw-│------│-rw-rw-rw-│
-├────────────────────────┼──────────────────┼──────┼───┼──────┼──────────┤
-│best-paradigms.adoc     │2023 4 23 12 36 36│240491│rw-│------│-rw-rw-rw-│
-└────────────────────────┴──────────────────┴──────┴───┴──────┴──────────┘
-
-   ,.2{.1 dir'codenotes/*.adoc'
-┌─────────────────────┐
-│codenotes/7z.adoc    │
-├─────────────────────┤
-│codenotes/README.adoc│
-└─────────────────────┘
-----
-
-you can do `1 1 dir y` to include subdirectories, but it's not recursive; it lists the given directory's files & directories, and the directories' files & directories, i.e. `1 1 dir d` is like bash `find "$d" -maxdepth 1` except that, unlike `find`, `d` is not included in the result set. `dirtree` is recursive and produces the same result as `find(1)` *but excludes subdirectories* e.g. given the directory structure
-
-----
- A
-├──  a1.txt
-├──  a2.txt
-├──  a3.txt
-├──  B
-│   ├──  b1.txt
-│   └──  C
-│       └──  c1.txt
-└──  D
-    ├──  d1.txt
-    └──  d2.txt
-----
-
-`find A` produces 11 results:
-
-----
-A
-A/a1.txt
-A/D
-A/D/d2.txt
-A/D/d1.txt
-A/B
-A/B/b1.txt
-A/B/C
-A/B/C/c1.txt
-A/a2.txt
-A/a3.txt
-----
-
-and `dirtree'A'` produces 7 results, lacking the input directory, `A`; and the subdirectories `A/B`, `A/B/C`, and `A/D`:
-
-----
-┌────────────┬──────────────────┬─┐
-│A/a1.txt    │2023 8 19 13 21 32│0│
-├────────────┼──────────────────┼─┤
-│A/a2.txt    │2023 8 19 13 21 33│0│
-├────────────┼──────────────────┼─┤
-│A/a3.txt    │2023 8 19 13 21 35│0│
-├────────────┼──────────────────┼─┤
-│A/D/d2.txt  │2023 8 19 13 21 18│0│
-├────────────┼──────────────────┼─┤
-│A/D/d1.txt  │2023 8 19 13 21 16│0│
-├────────────┼──────────────────┼─┤
-│A/B/b1.txt  │2023 8 19 13 21 28│0│
-├────────────┼──────────────────┼─┤
-│A/B/C/c1.txt│2023 8 19 13 21 51│0│
-└────────────┴──────────────────┴─┘
-----
-
-NOTE: despite the docs, at least on linux, filenames' cases are preserved, not converted to lowercase.
-
-=== shebang scripting
-
-* the shebang line is itself a j sentence. it must not have side effects nor raise an error, which simply basically means that it should have no special characters aside from, for whatever reason, '/', even in the filepath of the shebang line i.e. the path to `jconsole`.
-* there is a command `echo` which is `stdout` but writes a trailing 0x10
-* like picolisp, unless you call `exit y` (y is an integer return code), the j repl will remain open after the script executes
-
-=== dynamicism
-
-* the ability to use `jbrk` w/or.t. a pid implies that j is one proc? then:
-  ** how to run multiple j progs and use `jbrk` on only one of them? 
-  ** how to modify a running j program?
-
-== debugging & inspection
-
-* monadic `;:` tells how a line is parsed into words, with one word per box
-* link:https://www.jsoftware.com/help/jforc/loopless_code_i_verbs_have_r.htm#_Toc191734338[fndisplay] outputs verb evaluation
-* link:https://code.jsoftware.com/wiki/Vocabulary/bdotu[`b.`] tells information about _verbs_ but not other parts of speech. e.g. it doesn't tell a train's resultant part of speech. that's fine, though; we can exploit that only verbs & nouns execute; e.g. `every each` in the repl shows their definition and `(every each) 0` says "syntax error, unexecutable fragment (adv noun) which tells us that `every each` is an adverb.
-* `3!:0` tells type
 
 == verbs
 
@@ -2322,39 +2304,6 @@ relating group ids by common indices is the single general way to relate data, w
 
 this constitutes the total theoretical set of loops/traversals.
 
-=== idioms
-
-|=========================================================
-| idiom                   | result
-| (/:m&i.)y               | sort y by collation sequence m
-| /:@i.{]                 | sort y by collating seq x
-| ((dom ,a.) i. y){cod,a. | tr
-| (#~p)                   | filter y by predicate p
-| 'colN' {{y{"1~ x i.~col1;col2;...}} T | index by column name by using headers
-| v&.>                    | <@v"0 but simpler
-| '-'E.a.                 | ascii code of '-'
-| (<:i){y                 | zeroes followed by a 1 at index i
-| f@]^:["_1               | apply f to items of y based on mask x e.g. `(3&<!@]^:["_1])i.6`-->0 1 2 3 24 120
-| (-:1&|.)                | test if all elts equal
-|=========================================================
-
-TODO: when to use `f@]^:["_1` instead of some kind of subset thing e.g.
-
-[source,j]
-----
-----
-
-it's also interesting to note that testing whether something is in an interval is a linear function: `(v,y,1) *./@:(0&<:)@:(+/) .* _1 1,1 _1,:a,b` tests whether `y` is on [v-a,v+b].
-
-the `(/:m&i.)y` idiom illustrated:
-
-----
-   (/:'aCcb'&i.)'cCbaaba'
-aaaCcbb
-----
-
-the hook `(/:m&i.)y` expands to `y /: m i. y`. here, m i. y is 2 1 3 0 0 3 0.
-
 === a basis
 
 | lookup by index   | i.
@@ -2487,7 +2436,7 @@ link:https://www.jsoftware.com/help/jforc/loopless_code_v_partitions.htm#_Toc191
 
 . verb `<@:~.@:;` exploits idempotence to effectively encode the conditional branches `c1:x->x;c2:x->f(x)`, namely where c1 is whether y is singleton and c2 is whether y is multiple. it thus avoids conditional devices `^:` or `@.`.
 
-== coding with vs without boxing
+== coding with, vs without, boxing
 
 === example 1
 
@@ -2595,114 +2544,6 @@ NOTE: `HTTP_Get` is, despite being in the j wiki, not available; it's deprecated
 * running gentoo, uses cURL, HTTP/1.1 (connecting to a local server that uses haskell's warp)
 * x=`'help'` just runs `curl --help category`. unfortunately specifying a category e.g. x=`'help http'` just fails to parse correctly; it tries to retrieve from a host called `http` rather than executing `curl --help http`.
 * x=`'file'` writes to a file whose name is the last segment of the uri's path. no directories are created. curl fails with error 23 if no path is provided. (so yes, the `gethttp'http://www.jsoftware.com'` example is incorrect!)
-
-=== link:https://code.jsoftware.com/wiki/Plot[plot]
-
-demos:
-* run `jhs` then select menu tour > plot.
-* `load'~addons/demos/wdplot/plotdemos.ijs'` then run `plotdemos n` where n is in [0,_]. this assumes that a file exists at `jpath'~addons/demos/wdplot/plotdemos.ijs'`, which should be present if you've installed <the right package via pacman>
-
-`viewmat` displays a matrix where each item is displayed as a box, with a bijection between colors and element equality.
-
-useful verbs:
-[source,j]
-----
-steps=: {. + (1&{ - {.) * (i.@>: % ])@{:
-NB. e.g. `hues 5r6 * (i.%<:) n` for n colors from hue 0 to 1.
-hues=: 3 : 0
-h=. 255 * |."1 #: 7 | 3^i.7
-y=. y * <: #h
-b=. h {~ <. y
-t=. h {~ >. y
-k=. y - <.y
-(t*k)+b*-.k
-)
-----
-
-TODO:
-* what's a stick plot? i see that it uses `bandcolor` (multiple colors)
-* what's a symbol plot?
-* `forecolor` doesn't set the forecolor. report bug.
-
-notes:
-* `type hilo` plots require 2 rows and disregard all excess rows. it's irrelevant which row is the higher or the lower; hilo should be called "interval"
-* `type marker` appears to strictly generalize `type dot` to geometries other than circles (diamonds by default; specify by `markers`)
-* `type line,stick` is valid! apparently some comma-delimited combinations of types are valid!
-* `forecolor` does not work for the axis! use `axiscolor` explicitly!
-* it's easiest to not use `keycolor`; just let the color automatically match w/e its plotted graphic's color.
-* multiple keys are specified by juxtaposition delimited by whitespace e.g. `key k1 k2` where each key is implicitly related by index with rows of data
-
-specifying x axis display:
-* options are those beginning with "x", and those beginning with "tic"
-* you must use `xticpos` sensibly e.g. your tick positions should all be within `xrange`.
-* `xtic 10 5` puts major tics at every 10 and evenly spaces 5 minor tics on every major interval; b/c `10%5=2` `xtic 10 5` puts minor tics at every 2 x values.
-* `xint` seems to do nothing; idk what it'd do anyway, since we've already `xrange` to set the starting (leftmost) x value. idek what shape of parameter `xint` accepts. i've tried giving `xint 10 20 30 40` and got no error nor effect.
-* `xticpos` enables irregularly spaced (major) tics.
-* common pattern: `pd'xlabel ',l[pd'xticpos ',l[l=.":steps a,b,n` for x range [a,b] with number of tics n
-* `xlabel` accepts space separated items or comma-delimited double-quoted strings. there must be exactly as many xlabels as xticpos
-  ** TODO: how can i use xlabel w/o xticpos?
-* consider the composite `'type line; xticpos 10 12 15 18 25;xtic _ 3;xrange 6 28'plot i.30` which specifies irregular major axes, then puts 3 minor tics on each major interval, and displays only values on the x interval [6,28]. note that if you specify `xticpos` then the major value of `xtic` is not used; i used infinity as my own convention.
-* these options do not apply to types bar, fbar, sbar, radar, nor pie. i haven't tested them with 3d plots. the type whitelist is: line, area, dot/point, hilo, marker, poly, stick.
-  ** actually `xticpos` affects bar charts but insensibly so
-* bar charts' xtics work properly precisely when the number of xtics is the number of data. perhaps this says something about the advantage that bar charts provide compared to the rest. bars enable grouped bars, for which this tic/data-matching behavior is obviously desired & particular. for simple or stacked or floating bars, however, i can't say that this behavior is appropriate; it's quite conceivable that one would want stacked bars with evenly spaced tics & labels.
-
-==== examples
-
-render some vertical bars with a horizontal line at 40 and a vertical line at 13.5:
-
-[source,j]
-----
-require'plot'
-
-n=:70 NB. num data points
-max=:50 NB. data (y) values are on [0,50]
-
-pd'type bar'
-pd'xticpos 0;xlabel " "' NB. bar charts don't display xtics well, so i'll just remove all the xtics that i can, which means that i'll have one xtic.
-pd ?n$n NB. bar takes a list of values. x values are implicitly assumed to be input indices
-pd'type line'
-pd (1,n);2$40 NB. our horizontal line. here we're specifying line segment points (1,40) & (n,40) manually; the x values are here explicitly marked by our code, rather than assumed by array indices
-pd (2$13.5);0,max NB. our vertical line. for some reason it plots the line at 14 instead of 13.5.
-pd (?(3,n)$10)+n$"0]15 25 35 NB. some line data. demonstrates that each row is a separate line. 3 rows, 3 lines.
-pd'show'
-----
-
-`plotdemos 13`—demonstrates varieties of bar charts, and multigraph:
-[source,j]
-----
-dat=. 0.6 0.8 1* >:?.3#,:3 3 4 7 7
-xlab=. '"2001" "2002" "2003" "2004" "2005"'
-
-pd 'sub 2 2'
-
-pd 'new'
-pd 'type bar'
-pd 'ytic 1 0'
-pd 'xlabel ',xlab
-pd 'title Simple Bars'
-pd {.dat
-
-pd 'new'
-pd 'type bar'
-pd 'ytic 1 0'
-pd 'xlabel ',xlab
-pd 'title Grouped Bars'
-pd dat
-
-pd 'new'
-pd 'type sbar'
-pd 'ytic 2 0'
-pd 'xlabel ',xlab
-pd 'title Stacked Bars'
-pd dat
-
-pd 'new'
-pd 'type fbar'
-pd 'ytic 2 0'
-pd 'xlabel ',xlab
-pd 'title Floating Bars'
-pd dat
-----
 
 === link:https://code.jsoftware.com/wiki/Addons/tables/dsv[csv/dsv]
 
@@ -3498,34 +3339,6 @@ if i'd wanted all to be capital then i should properly code it as a fact of all 
 
 these pairs are similar to the fold, but instead of relating an accumulator to the current item, it relates the next item to the current one.
 
-== BUGS
-
-i'm using j9.0.4
-
-   (,&'(')`]`(,&')')"1|:(<"0'fgh'),.(<'5'),.<"0'abc'
-JE has crashed, likely due to an internal bug.  Please report the code which caused the crash, as well as the following printout, to the J programming forum.
-0000000000403132: ?:0:	sigsegv
-00007fa02407f60f: ?:0:	?
-00007fa01f8cd2d7: ?:0:	jtincorp
-00007fa01f8d72ca: ?:0:	jtaro
-00007fa01f8d7242: ?:0:	jtaro
-00007fa01f8d7898: ?:0:	jtarep
-00007fa01f8a7de6: ?:0:	jteformat
-00007fa01f88ac9d: ?:0:	jtrank1ex
-00007fa01f893363: ?:0:	cycr1
-00007fa01f8d18c2: ?:0:	jtparsea
-00007fa01f8d112c: ?:0:	jtparse
-00007fa01f8d64e9: ?:0:	jtimmex
-00007fa01f8c16bf: ?:0:	jdo
-00007fa01f8c14b1: ?:0:	JDo
-000000000040306f: ?:0:	main
-00007fa02406a909: ?:0:	?
-00007fa02406a9c4: ?:0:	__libc_start_main
-00000000004024ed: ?:0:	_start
-ffffffffffffffff: ?:0:	?
------------------------------------------------------------------------------
-Aborted
-
 === json
 
 NOTE: dictionaries are itemized e.g. `$1{::dec_json'{"y":10}'` --> 1 instead of (0$0)
@@ -3901,3 +3714,34 @@ i'm putting this section here because it was mentioned in <https://code.jsoftwar
 == link:https://code.jsoftware.com/wiki/JAL/User_Guide[the j application library (jal)]
 
 * link:https://code.jsoftware.com/wiki/Vocabulary/Libraries[install libraries]
+
+=== bugs (or what should be bugs)
+
+* u"id where id is an undefined symbol will do `u` w/o.r.t rank! u"(id+0) is a fix.
+
+in j9.0.4:
+
+[source,j]
+-----------------------------------------------------------------------------
+   (,&'(')`]`(,&')')"1|:(<"0'fgh'),.(<'5'),.<"0'abc'
+JE has crashed, likely due to an internal bug.  Please report the code which caused the crash, as well as the following printout, to the J programming forum.
+0000000000403132: ?:0:	sigsegv
+00007fa02407f60f: ?:0:	?
+00007fa01f8cd2d7: ?:0:	jtincorp
+00007fa01f8d72ca: ?:0:	jtaro
+00007fa01f8d7242: ?:0:	jtaro
+00007fa01f8d7898: ?:0:	jtarep
+00007fa01f8a7de6: ?:0:	jteformat
+00007fa01f88ac9d: ?:0:	jtrank1ex
+00007fa01f893363: ?:0:	cycr1
+00007fa01f8d18c2: ?:0:	jtparsea
+00007fa01f8d112c: ?:0:	jtparse
+00007fa01f8d64e9: ?:0:	jtimmex
+00007fa01f8c16bf: ?:0:	jdo
+00007fa01f8c14b1: ?:0:	JDo
+000000000040306f: ?:0:	main
+00007fa02406a909: ?:0:	?
+00007fa02406a9c4: ?:0:	__libc_start_main
+00000000004024ed: ?:0:	_start
+ffffffffffffffff: ?:0:	?
+-----------------------------------------------------------------------------

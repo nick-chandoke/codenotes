@@ -79,7 +79,7 @@ verbs in j but not k:
 * key (group by): `{(!x),'.x}@="hello"`
 * rotate & shift are in k3 but not k6. rotate: `{,/|![#y;0,x]_y}`
 * k has no support for complex numbers? kinda whack. `%-2` gives `-0n`.
-* no `E.`. in k: `E:{((#y)':x)?y}`. (ratpack) parsers are better, though, since they generalize from mere equality to powerful patterns.
+* no `E.`. in k: `E:{((#y)':x)~\:y}`. (ratpack) parsers are better, though, since they generalize from mere equality to powerful patterns.
 
 === implementations
 
