@@ -30,18 +30,20 @@ incrementals work on streams, which are effectively scans/folds; we consider one
 * index of (`i.`) of course just returns the loop number upon meeting a predicate of the loop state
 * `e.` is linear or binary search
 
-`E.` can be implemented as `{((#y)':x)~\:y}`, which is basically, but more efficiently, expressed in c++ as
+NOTE: the whole following `E.` section is actually `E.~`; `x` is the search space and `y` the query.
+
+`E.` can be implemented as "match each y-sized substring of x against y", `{((#y)(y~)':x)}`. this is usually nearly optimal, except for when you want to search for a long string most of whose initial characters repeat e.g. `'ccccccccccd'E.'cccccccccxdcccccccccceccccccccccc'`. the truly optimal version, in c++, is:
 
 [source,cpp]
 -----------------------------------------------------------------------------------------------------------
 for(char e,i=0,k=0,n=sizeof(y)-1;i<sizeof(x)-1;i++)if((e=y[k]==x[i])&((k=e*(k+e)%n)==0))v.push_back(i+1-n);
 -----------------------------------------------------------------------------------------------------------
 
-this method isn't designed to work when `1=#y`; that special case can be computed more efficiently (namely by `e.` or `i.`) and is a degenerate case of `E.`.
+btw, this method isn't designed to work when `1=#y`; that special case can be computed more efficiently (namely by `e.` or `i.`) and is a degenerate case of `E.`.
 
 TIP: the minus one's of the length are b/c c strs are null-terminated and so have extra length to account for, unlike other c array literals
 
-except that the c++ version returns integers instead of a mask, which is more efficient b/c fewer data to accumulate, but also it's easier since we know to push `i` only at the ``i+n-1``th index. an efficient version that produces a mask is similar, but on each iteration pushes `k`, then iterates backwards through that result to replace substrs of 1 2 3...n by 1 0 0...0:
+except that the c++ version returns integers instead of a mask. an efficient version that produces a mask is similar, but on each iteration it pushes `k`, then iterates backwards through that result to replace substrs of 1 2 3...n by 1 0 0...0:
 
 [source,c]
 -----------------------------------------------------------------------------------------------------------
@@ -61,17 +63,32 @@ NOTE: `v` is now `char z[sizeof(x)-1]`
 
 assessment:
 
+* if we were to mark the end index of matches then the code would be one very simple loop.
 * `f` ("flag") is a loop-scoped var that changes only on some iterations. it passes info among iterations, and thus, to express the loop functionally would require a fold or stateful map.
 * despite what i'd said about "you may as well use a parser at this point", perhaps not; this is a simple, efficient, common case.
 * it's beautifully simple & efficient c code. c makes easy the semi-regular relationship of pointers—for example here, that i relate `x[i]` & `y[k]`, where `k` obeys a simple arithmetic update expr per iteration, but where i must specify that update expr. you won't find a combinator that supports this kind of relation! it's so simple & direct, though. that's what's good about c: it allows natural directness to remain direct, whereas anything more complex or contrived (e.g. apl, factor, haskell, or even java, since java doesn't use ℤ/2 for bools) doesn't support expressing directly; their more-complex primitives necessarily mean more-roundabout expressions! well, this is actually not necessarily true; it could be that you use more-complex primitves, but fewer of them. this is common in j compared to c. to succeed in coding this requires knowing how to convert between c & j, which requires knowing the computation's information [info theory]. i'm sure that i could find many examples that are elegant in sql & c, though obviously sql has _very_ few primitives,...and frankly, none of them is complex!
 * i'm curious to compare this definition to the one currently used in j.
 * if we're not using the value of `x` again, then we can simply overwrite `x`, never needing to allocate for `z`
+* it's very neat that i can use numbers to measure the extent of equality, with `k==n` being total equality. using "count of equality" is much easier than saying "these elements equal" b/c it has less info, and thus less info to worry about preserving. i clearly don't concern the elements after i've tested them for equality.
+* the `for` loop can, but i want to prove that it never should, have wild traversals e.g. by, even in addition to the usual `i++` in the header, in the body, conditionally resetting `i` to 0 or incrementing it again, so that some loops we effectively do `i+=2`.
+
+translating this efficient code into k:
+
+the fact of pushing `k` unconditionally on every iteration while updating `k` makes this easily represented by a scan...of _two_ iteration variables. so i don't want to use scan to represent this in k. indeed, "big loops" are ugly in k; so i'll just let the arithmetic guide me: `e=y[k]==x[i]`. without yet considering how `i` or `k` update, but knowing their range (`i.#x` & `i.#y`), i'll assume all their values. thus the information for `e` is contained in `x=\:y`, and hopefully this computation preserves information needed to distinguish any distinct subsets. i'll call this informational superset of `e` _ε_. `k` is defined in terms of `e`, so i can compute it from ε. that `k` is defined in terms of itself implies that we must at least fold, but i'll use a scan because i know that i want all k values through all iterations. i see that k increments by `e` (whose range is [0,1]) and is multipled thereby, so 1. k is a natural number, and 2. k only increases or resets to 0. anyway, that leaves us with `e{x*y+x}\0`. ah, it's `{x*y+x}\` yet again!
+
+having identified all the facts, it's time to figure-out how to code this, starting with how to convert ε to `e`. ε is a table, not a vector, so i can't just run `{x*y+x}\` on it. i need a variant: with fold var `a` starting at 0, and with `y` being the current row, `a:e*a+e:a=y a`; `{0{e*x+e:y x}\x=\:y}` produces e.g. 0 0 1 2 0 0 0 0 0 0 1 2 3 4 0 0 0 0 0 0 0 0 0 1 2 3 4 5 6 7 8 9 0N 0 0 0 0 0 0. this corresponds to the first c loop. note the `0N` btw; k's treatment of nulls sees the code work without me having to account for oob/modulus. cool.
+
+to translate the 2nd loop, `case n` can't elegantly be put in a k scan since there `f`, the scan's control argument, differs from the output value (iirc this wouldn't be an issue for j's `F.`). so we'll have to do something other than just a fold. `f` & `z[i]` are defined in terms of each other. when it comes to rephrasing, it's often best to think about fresh solutions that preserve the essential invariants, which in this case is that we must mark 1's followed by ``#y``'s differently from other 1's. and again, we must use a scan for this because we're relating elements of the same array. a little pondering and i find that `|0{(L=y)|(y>0)&x}\|` (where L is the length of the query) produces runs of 1's where there are matches. to select only the first of each run, do `0>':`. in total, the whole c solution is thus expressed in k: `{0>':|0{(z=y)|(y>0)&x}[;;#y]\|0{e*x+e:y x}\x=\:y}`.
+
+array langs have no idiomatic way to relate 3+ things—here, `x`, `y`, & `k`; i must break the relation into binary ones then relate those relations, which means that i must break `k` into multiple variables, each containing a partition of ``k``'s information. i must break `k` because it alone—actually, specifically `e`—is already _defined_ in terms of `x`, `y`, & `k`! i must break `e`. it seems that there was no way to avoid starting from something as crude (containing extraneous information) as `x=\:y`.
+
+summary and lessons learned: _translating_ sucks, but _converting_ is fine; one should practice the skill of recognizing the essential computational information of data & traversals: uniqueness, characteristic information (which distinguishes it apart from others), ranges, and order. forget the _variables_; see only this _information_ then code it elegantly per your coding system of choice.
 
 TODO: #/2 &, related, I./1
 
 so for the most part, we can well express all computations as a loop whose state is a treeset with optional associated values (for nub, grade, key, bins), the current element(s) (multiple if iterating over multiple streams together i.e. `neach`), and the current iteration number.
 
-TODO: consider how j's `^:` is used for both while and if. this is natural, and in prolog they're one form, but in non-declarative style, to express while as if is nice.
+TODO: consider how j's `^:` is used for both while and if. this is natural, and in prolog they're one form, but in non-declarative style, to express while as if is nice. it's b/c in prolog, everything is `until`; `until` is the same as `if` if it satisfies on the first iteration. `if` supports `else`, but i don't confidently recall any language supporting `until...else`, though it easily could. in most langs that wouldn't be useful control flow, but it's perfect for prolog which uses backtracking to match a predicate until it's satisfied or exhausted.
 
 so to convert between the array and loop models simply requires knowing their underlying truths:
 

@@ -63,14 +63,14 @@ link:https://code.jsoftware.com/wiki/Vocabulary/SpecialCombinations[special comb
 
 sql's calculus is simple yet very efficient & expressive, and its semantics doesn't even concern arrays (like prolog, it concern sets; still, i'd call it a "plural" language if not an "array" language), so of course it's feasible for an array language to be efficient. however, all other functional languages (excepting factor, perhaps), assuming that you're using their functional devices which differ them from c, execute quite inefficiently because they do exactly what you tell them to rather than optimizing. no _language runtime_ can afford to optimize like an array language can, because array langs are composed of a small set of known primitives. all non-array languages place the burden of optimization on the programmer. sometimes efficient code is clean, and sometimes not. honestly, i think my efficient c & factor code plain & direct; however, it's never as terse as j! also, yes, c compilers "optimize", but they do so by parsing a far more complex, less regular/constrained language (syntax & semantics) than j; thus c optimizers frequently optimize or not based on arbitrary things such as order of operations or how a computation is expressed. granted, also j requires that computations be expressed particularly, but it simply lists these short expressions in one html page. c code complects many data altogether, whereas (tacit) j sequences verbs.
 
-a particular example is in j how `#\y` is _faster_ than `>:@i.@#y`. in _any other language_ the former would be astoundingly brash, greatly sacrificing performance for brevity.
+a showcase example is in j how `#\y` is _faster_ than `>:@i.@#y`. in _any other language_ the former would be astoundingly brash, greatly sacrificing performance for brevity, and i'm betting that no c compiler can even recognize the "prefixes" pattern in code, let alone parse it thoroughly & intelligently enough to use such an optimization!
 
 basically to code perfectly is to use sql/j operations/relations but store information as numbers and use S/MIMD.
 
 .j vs sql
 [options="header"]
 | j             | sql
-| `e./2`,`i./2` | in, where (`in` is used only for a search space of constants)
+| `e./2`,`i./2` | in, where (`in` is used only for a search space of literal values specified at parse time)
 | `I./2`        | where (binary search on indexed data)
 | `I./2`        | join on < (take range)
 | `#/2`         | where (general predicate)
@@ -99,6 +99,10 @@ my model for all computation:
 `I./2` is the only other particularly "array" verb in j; the rest are common to most programming languages, but where most languages use built-in syntaxes which complect a computation and an action on its result, j has you perform a computation to produce an index or mask, then separately pass that index or mask to a "control flow" verb. much of how j uses arithmetic is how early programmers did, when hand-coding assembly was common, and which techniques were brought into coding in c, a language that practically consists only of `for`/`while` (jump backward), `if`/`switch` (jump forward), arithmetic, and pointer dereferencing & inc/decrementing. however, unlike other languages, apls are suggestive, and they suggest to use integers almost entirely. the only reason that coders used integers so ubiquitously for prior computations is that it's all that they could afford to compute and the languages hardly supported anything else.
 
 NOTE: reflect on how elegant c uses only `for`, `switch`, arithmetic, `*` (lea), and `=` (mov). everything that makes c suck is about its runtime, such as linking, or inconsistent or insanely complicated portability constraints. to call c portable is like calling a house portable. just because it's doable and commonly done by some few companies doesn't make it portable compared to, say, a cheeseburger.
+
+ARRAY OPS EXPRESSED IN TERMS OF FOR (i.), SWITCH (@.), ARITHMETIC (NAMELY WRT RANGES), AND UPDATING ARRAYS:
+
+[NEXT]
 
 | j verb  | j version                            | common version
 | `F:` &c | like haskell, only one loop variable | loop syntax
