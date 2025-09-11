@@ -2,6 +2,31 @@
 notes by nicholas chandoke
 :toc:
 
+personal refcard (arities omitted when obvious. 3 means both monadic & dyadic):
+
+-----------------------------------------------------------------------------------
+uniqueness: =/2 ~:/3 ~. -./2 /. e.
+order: < > <: >: (lte,gte)
+add: + +. >: , 
+sub: -    <: -.
+mul: * " *. I./1 #/2
+norm: | # *.
+div: %
+iso: #. #:
+  index transform: |.[!.f] |: $
+discrete math: +. *. (gcd,lcm; also used for +*/2) | p: q: A. C.
+real math: ^ ^. %. p. o.
+ℂ: +/1 (real & imag) *./1 (len & angle) r. (angle) j.
+indices/intervals & order: <. >. (floor,ceil) * (sgn, ℝ only) I./2 ;.12 /: i.:/3 E.
+short-circuiting & deferral: i.[1] ^: F. ` `: @. ".
+-----------------------------------------------------------------------------------
+
+[1] `i.` is `{.@I.@=` but stops early. `e.` is the set-theoretic version.
+
+NOTE: `I.@E.` is `i.` but matches substrs instead of elts.
+
+NOTE: just as factor's stack checker enforces symmetry of branches, so should you code s.t. you don't need to branch; rather than selecting from multiple operations, express them as values passed to a least greater super-operation, usually leveraging identities and nullity e.g. conditionally printing a value can be expressed as printing a value or the empty string. this might not be a good example, since it's io, but w/e.
+
 [TODO]
 * syntax highlighting in kak for idioms; each idiom gets a different color depending on the kind of idiom [functionality].
 * j ought to be more interactive. graphical tiered display of modifier trains, with annotations of the kind of modtrain pattern it is e.g. AAV, VVV, or VV. b/c trying to parse-out nested parens and break <code strings which represent trains> into parts is horrible. ofc we'd need a good interface for modifying these structures. for starters, though, just having adjacent displays of code and a tree would be amazingly helpful already. afterward we can have a fully opengl environment with keybinds for selecting subexprs.
