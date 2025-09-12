@@ -10,9 +10,9 @@ order: < > <: >: (lte,gte)
 add: + +. >: , 
 sub: -    <: -.
 mul: * " *. I./1 #/2
-norm: | # *.
+norm: | # *. I.^:_1
 div: %
-iso: #. #:
+iso: #. (namely #.^:_1) #:
   index transform: |.[!.f] |: $
 discrete math: +. *. (gcd,lcm; also used for +*/2) | p: q: A. C.
 real math: ^ ^. %. p. o.
@@ -22,6 +22,8 @@ short-circuiting & deferral: i.[1] ^: F. ` `: @. ".
 -----------------------------------------------------------------------------------
 
 [1] `i.` is `{.@I.@=` but stops early. `e.` is the set-theoretic version.
+
++++#/1+++ is odd. `+/` over a mask seems much more natural. i suppose that +++#+++ exists just for when a set has already been filtered i.e. all in the set obey the predicate that collected them into that set. ideally +++#+++ would not exist; wherever it would be used, we can just count elements satisfying a predicate as we filter for them.
 
 NOTE: `I.@E.` is `i.` but matches substrs instead of elts.
 
