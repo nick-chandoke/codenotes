@@ -737,6 +737,9 @@ these are contrasted with non-special builtins; these builtins are not useful in
 * browser keybinds: //note: mac uses use command key instead of alt
   ** alt-f: focus search bar
   ** ctrl-k: open "jump to" dialog
+* listener keybinds
+  ** supports ^p & ^n. up & down arrows only move through multiline text buffer. shift+enter starts a new line.
+  ** ^h opens the help browser to the word under the cursor
 * *just because a program runs in the listener does not mean that it is correct*. e.g. `f [ 1 ] unless` runs but trying to get its stack effect produces a stack effect mismatch error! replacing it by `unless*` runs the same as `unless` but has a correct stack effect.
 * set font: e.g. `"monospace" 20 set-listener-font`. you can `save` the image or put in `~/.factor-rc`
   ** btw the browser font size is *not* adjusted by using ctrl-- & ctrl-+, despite what's been said in the mailing list
@@ -745,7 +748,6 @@ these are contrasted with non-special builtins; these builtins are not useful in
 * the `refresh-all` word reloads all loaded source files. unlike clojure/cider, reloading the file does not merely execute statements; suppose that a file defines a word; then that file is loaded, modified to have the word definition removed, then reloaded; the word is no longer defined in the listener.
   ** TODO: determine when/how/why `refresh-all` fails. never trust it too much.
 * supports tab completion
-* supports ^p & ^n but not up & down arrows
 * runs as a gui rather than cli program
 * is a client that connects to a repl server
 * tracks the stack for you, which makes easy both working with state and debugging
