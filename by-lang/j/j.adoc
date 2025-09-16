@@ -18,16 +18,52 @@ discrete math: +. *. (gcd,lcm; also used for +*/2) | p: q: A. C.
 real math: ^ ^. %. p. o.
 ℂ: +/1 (real & imag) *./1 (len & angle) r. (angle) j.
 indices/intervals & order: <. >. (floor,ceil) * (sgn, ℝ only) I./2 ;.12 /: i.:/3 E.
-short-circuiting & deferral: i.[1] ^: F. ` `: @. ".
+short-circuiting & deferral: i. ^: F. ` `: @. ".
 -----------------------------------------------------------------------------------
 
-[1] `i.` is `{.@I.@=` but stops early. `e.` is the set-theoretic version.
+it would be nice if +++#+++ & `{:` had similar symbols, since they both concern extent/norm. then again, it'd be nice to have elegant enough code that we don't need `{:`, that we'd just use `(<:@#{])`, but b/c of 0-indexing, there's that ugly asymmetry of needing `<:`.
 
-+++#/1+++ is odd. `+/` over a mask seems much more natural. i suppose that +++#+++ exists just for when a set has already been filtered i.e. all in the set obey the predicate that collected them into that set. ideally +++#+++ would not exist; wherever it would be used, we can just count elements satisfying a predicate as we filter for them.
+NOTE: `i.` is `{.@I.@=` but stops early. `e.` is the set-theoretic version.
+
++++#/1+++ is strange; `+/` over a mask seems much more natural. i suppose that +++#+++ exists just for when a set has already been filtered i.e. all in the set obey the predicate that collected them into that set. ideally +++#+++ would not exist; wherever it would be used, we can just count elements satisfying a predicate as we filter for them.
 
 NOTE: `I.@E.` is `i.` but matches substrs instead of elts.
 
+TIP: `m&i.` internally generates indexing schemes (e.g. hashes, trees) for `m`. so bind (curry) to `i.` then use repeatedly for fast lookup through a search space! study link:https://code.jsoftware.com/wiki/Vocabulary/SpecialCombinations[special combinations] carefully; they are how to get tuned efficiency like a c or assembly coder would want! this design is arguable. using covert special syntaxes is bad b/c they're covert; but explicit tends to sacrifice brevity. having the internals use e.g. hash maps or trees, whereas the lang model is of arrays, is also questionable. perhaps, simply, the model should be described not quite as "arrays" but rather multidimensionally-indexed sets. any non-array lang programmer would assume that j arrays are basically arrays like in other languages (e.g. c). one wouldn't mistake so for sql b/c sql is declarative, so obviously it handles all the query planning efficiently (though ofc uses hints from the user). at least syntax highlighting should be used to highlight special combinations so that the viewer actually knows what's happening, rather than just what's _virtually_ or _effectively_ happening. it's important, when learning j, to never associate an algorithm with any primitive; `I./2` is not necessarily binary search, nor is `i./2` necessarily linear search! j is not declarative, but neither is it literal! also some behavior is a bit hidden by being available only as inverses e.g. `I.^:_1`.
+
+_progressive index of_ is an example of a computation easily expressed in c that can't be expressed so efficiently in j, even with all of j's use of avx & special combinations.
+
 NOTE: just as factor's stack checker enforces symmetry of branches, so should you code s.t. you don't need to branch; rather than selecting from multiple operations, express them as values passed to a least greater super-operation, usually leveraging identities and nullity e.g. conditionally printing a value can be expressed as printing a value or the empty string. this might not be a good example, since it's io, but w/e.
+
+in `x u/.y`, `x` is a vector of uids; they group `y`. `u` is monadic. for `u/..`, `u` is dyadic.
+
+.`b.` reference
+----------------------------------------------
+     m        Ravelled Table   Function
+ 0  _16   16     0 0 0 0     0
+ 1  _15   17     0 0 0 1     x *. y
+ 2  _14   18     0 0 1 0     x > y (x&~y)
+ 3  _13   19     0 0 1 1     x
+ 4  _12   20     0 1 0 0     x < y (y&~x)
+ 5  _11   21     0 1 0 1     y
+ 6  _10   22     0 1 1 0     x ~: y
+ 7   _9   23     0 1 1 1     x +. y
+ 8   _8   24     1 0 0 0     x +: y
+ 9   _7   25     1 0 0 1     x = y
+10   _6   26     1 0 1 0     -. y
+11   _5   27     1 0 1 1     x >: y
+12   _4   28     1 1 0 0     -. x
+13   _3   29     1 1 0 1     x <: y
+14   _2   30     1 1 1 0     x *: y
+15   _1   31     1 1 1 1     1
+          32                 rotate
+          33                 shift
+          34                 signed shift
+----------------------------------------------
+
+btw, `{.` head; `}.` tail; `{:` last; `}:` but last.
+
+`u^:v1`v2` performs `u` to `(v2 y)` `(v1 y)` times; in this gerund form, `y` is not in the output; `(v2 y)` is. `u^:v` acts on `y`. the gerund & verb forms differ; they are not alternatives!
 
 [TODO]
 * syntax highlighting in kak for idioms; each idiom gets a different color depending on the kind of idiom [functionality].
@@ -55,6 +91,10 @@ TODO: consider `<jdir>/system/extras/util/boot.ijs` & `<jdir>/system/extras/conf
 * interpreted, dynamic, yet efficient. b/c j primitives are semantic objects, they can be reasoned about and combined s.t. e.g. `|.@:|.` evaluates to `]`. this does not actually happen in j9.0.4, but it could, and there was at least one variety of combined primitives that, to my pleasant surprise, evaluated to `]`.
 * portable & easy to install (except that when i compile it, the repl starts but malfunctions; and when i download the prebuilt zip, i must run `execstack -c` on the shared object file(s) listed when i try running `jconsole.sh` but it fails with "cannot enable executable stack as shared object requires: Invalid argument"). i can't find any info on where execstack exists (though there's an aur package for it) except that it's written by jakub jelinek at redhat.
   ** upon first launch of repl, run `load'pacman'` then `'install' jpkg '*'`. see <https://code.jsoftware.com/wiki/Pacman>.
+
+examples of arrays serving as alternatives to combinators:
+
+* `[:%/({:,>./)-<./` instead of `[ last ] [ maximum ] [ minimum [ - ] curry ] tri bi@ /`. rather than `curry` & `bi@`, the implicit rank means that i don't need to specify `\:` or `/:`. `bi@` is needed only b/c `curry` yields a quotation. finally, i can treat the 2-array as being not in an array by using `/` (insert).
 
 == debugging & inspection
 
@@ -160,7 +200,7 @@ sadly, some j verbs, like `u;.0` (or maybe that's the only one, idk) break j des
 
 == semantics
 
-* scopes don't nest
+* scopes don't nest; each lambda, regardless of its context, has its own exclusive namespace
 * verbs (fns):
   ** stored as strings. evaluated only upon invocation. e.g. `{{2 + f y}}` is `3 : '2 + f y'`. `f` needs to be defined only when `g` is invoked.
   ** functions are passed by name but values are passed by value. e.g.
@@ -182,7 +222,11 @@ sadly, some j verbs, like `u;.0` (or maybe that's the only one, idk) break j des
 * `1 2` is an array but `a b` is not b/c words expand to their values in parens; `a b` = `(a) (b)` which is a syntax error.
 * `_2` for neg 2, not `-2`
 * `0.5` not `.5` (b/c dot is a special char)
-* 16b1f means `1F` in base 16
+* <a>p<b>: <a>×<b>^π
+* <a>r<b>: ratio: integer A divided by integer B with remainder e.g. 6r2 is 3 but 6r4 is 3r2
+* <n>b[01]+: base-n literal e.g. `2b1101` or `16b1f`
+* `u` & `v` represent any part of speech, though `m` & `n` must be nouns
+
 * `_` is infinity. `__` is neg inf. `_.` is nan and should never be used in any program.
 * identifiers:
   ** may not contain dot (.) nor colon (:)
@@ -215,25 +259,6 @@ dyadic def
 pi=:o. :([*[:o.]) NB. monadic is o. . dyadic is a fork which multiplies the left arg by (the right times pi). [:o.] can instead be written o.@]
 ----
 
-==== caveats
-
-.static scoping, not lexical scoping
-
-[source,j]
-----
-substrc=:{{
-  't1 t2'=.x
-  a=.t1(E.i.1:)y
-  s2=.{{
-    b=.t2(E.i.1:)y NB. s2's y, not substrc's
-    if. b=#y do. '' else. (0,:b) ];.0 y end.
-}}
-  if. a=#y do. '' else. ((a+#t1),:_) s2;.0 y end.
-}}
-----
-
-defines successfully but fails during execution, citing that `E.` has no monadic valence in `b=.t2(E.i.1:)y`. the error here is that `t2` is not bound within `s2`. if i change `t2` to `x` and use `(t2&s2)` instead of s2 in `;.0 y` then `substrc` works correctly. of course making t2 global via `=:` would make it work but with the side effect of keeping `t1` & `t2` bound in the global environment after executing `substrc`.
-
 === program execution
 
 verb has left noun: dyadic; no left noun: monadic, right operand. thus you must know whether a token is a noun or verb! i.e. `u v n` sees `v` as monadic on `n` and `n v m` sees it as dyadic on `n` & `m`. thus `u v n` is `u(v(n))` i.e. `(u . v) n`. the simple way to check is:
@@ -263,6 +288,8 @@ windows for editing code that interact with the execution window are called _scr
 to unset verbs, use `4!:55 <'expiredname'`.
 
 === environment variables (envars)
+
+TODO: how to actually _specify_ some goddamn cmdline args to j?
 
 * var `ARGV` which is a boxed list of jconsole, script name, and arguments
 * unary `getenv`
@@ -1300,13 +1327,6 @@ NOTE: ; and ,: both preserve original inputs to some extent
 reshaping;
 , linearize
 ,. tabularize
-
-special syntaxes:
-
-* <A>p<B>: <A>×exp(π,<B>)
-* <A>r<B>: integer A divided by integer B with remainder e.g. 6r2 is 3 but 6r4 is 3r2
-* 0b[01]+: bitwise literal
-* `u` & `v` represent any part of speech, though `m` & `n` must be nouns
 
 ==== linguistic devices & metaprogramming
 

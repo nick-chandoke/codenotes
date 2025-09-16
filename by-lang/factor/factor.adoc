@@ -715,8 +715,6 @@ nb. i use _cuc_ to mean "code under cursor in input field."
 * see `DEFER:` for mutual recursion
 * scope is not often a consideration. however, `set` is scoped only within a source file (b/c files are parsed with `with-scope`)
 * strings are sequences of unicode code points, not of bytes. factor supports encodings well. writing bytes is merely a matter of using the correct encoding (namely the `binary` encoding)
-  ** bitstring literals are enterable by `B{`, the byte array literal syntax. you can use `B{` with `write` e.g. `path binary [ B{ 96 0xa 65 } write ] with-file-writer`
-    *** `0x` syntax is directly supported by factor. no need for even number of hex digits, btw.
 * pushing quotations does not use memory
 * `f` is the false value; all others are truthy
   ** `t` is the canonical truthy value
@@ -772,6 +770,10 @@ furthermore factor beats lisp(s except picolisp and possibly some other uncommon
 NOTE: primitive words are marked by featuring the `PRIMITIVE:` word in their definitions e.g. `datastack-for` in `kernel.private` vocab.
 
 the _continuation implementation details_ page is very refreshingly overtly simple: "a continuation is simply a tuple holding the contents of the five stacks: [... each of which] can be read and written." no black box. no trepidation about internal complexity, and certainly no external complexity. maybe i've been scarred by racket's docs on continuations, but i know that all languages besides factor that i've encountered have even attempted to be so clean.
+
+* bitstring literals are enterable by `B{`, the byte array literal syntax. you can use `B{` with `write` e.g. `path binary [ B{ 96 0xa 65 } write ] with-file-writer`
+* `0x` syntax is directly supported by factor. no need for even number of hex digits, btw.
+* `0/0.` is (positive) floating-point NaN. useful when you want all ordinal comparisons to fail. it is syntax recognized by the parser, not a word. see "Float syntax" in the docs.
 
 == oop / generics / ad-hoc polymorphism
 
@@ -1128,6 +1130,7 @@ code in the listener that uses `if` may successfully or unsuccessfully run despi
 
 == tricks
 
+* if you have e.g. a stack of `a b c w x y z C` and you want to compute on `a b c C`, then you can just `curry 4dip`
 * `USE: math.ranges CHAR: a CHAR: z [a,b]` works b/c characters are integers
 * `USING: math.parser random ; "(ddd) ddd-dddd" [ { { CHAR: d [ 10 random number>string ] } [ 1string ] } case ] { } map-as concat`
 * `USING: calendar calendar.format ; now 1 months time+ { YYYY " " MONTH " " DD " " hh ":" mm ":" ss "\n" } formatted`. `formatted` is a macro.

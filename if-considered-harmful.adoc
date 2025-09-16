@@ -1,4 +1,4 @@
-.`if` considered harmful
+== `if` considered harmful
 
 use `case`/`switch` instead. in a nutshell, `switch` is declarative and `if`/`cond` is procedural.
 
@@ -94,3 +94,61 @@ yet if i change the 2nd `2drop` to `drop`, and move the other `drop` into the pr
 if you keep your wits about you, then this is obvious, but it's easy to become awash in code and start becoming hazy and start making mistakes like this, confusing the stack effect for a branch/body clause with the stack effect of the test clause which leaves data on the stack for the next test.
 
 `switch` is cool because it re-expresses many things as equality. for example, `5 >` is now a boolean, a bit in a number, which we test for equality. if we have many such cases of greater/less than, then link:https://code.jsoftware.com/wiki/Vocabulary/icapdot#dyadic[bins] gives an integer corresponding to the range, which we can `switch` on.
+
+== a related example
+
+TODO: find a more-complex version; this one is too simple to demonstrate.
+
+suppose that i want to perform some operations on filepaths (two of them, as it were: a source & destination), but only if they exist and are directories. we must check that they exist first, else we get an exception. being sensible programmers who provide helpful, complete error messages, we want to say which of the paths didn't exist, or if it did, whether it was not a directory.
+
+.the naive, inelegant way
+[source,python]
+---------------------------------------------------------------
+if not os.path.exists(src):  exit(src  + " does not exist")
+if not os.path.exists(dest): exit(dest + " does not exist")
+if not os.path.isdir(src):   exit(src  + " is not a directory")
+if not os.path.isdir(dest):  exit(dest + " is not a directory")
+---------------------------------------------------------------
+
+this exploits that `exit` short-circuits. it is verbose, repetitive, and *uses booleans*. sounds like `cond`. let's use *integers* (`switch`-like). first, note that integers generalize booleans (link:https://en.wikipedia.org/wiki/Boolean_ring[ℤ/2]). rather than two possible values, we have multiple. however, we still want to decide whether to exit or not; we must have a partition fn that returns 0 or 1 from any of the integer cases that we may produce.
+
+[source,factor]
+---------------------------------------------------------------------------------------------------
+{ src dst } [ file-exists? ] reject [ ] [ [ " does not exist" append print ] each 2 exit ] if-empty
+---------------------------------------------------------------------------------------------------
+
+it's off to a good start: we tell about all troublesome paths, but yet insofar as "trouble" means "doesn't exist." we want to add another condition (boolean), for which we could use the above scheme, but here we must check the second boolean only if not the first! this is the pattern of finding the earliest predicate that fails.
+
+[source,factor]
+--------------------------------------------------------------------------------------
+[ { [ file-exists? not ] [ directory? not ] } swap [ swap call ] curry find drop ] map
+--------------------------------------------------------------------------------------
+
+produces `f`, `0`, or `1` for an extant directory, a non-existant file, or a extant non-directory. then we just need to filter-out the falses (since they've no error), then print the corresponding error:
+
+[source,factor]
+-------------------------------------------------------------------------------------------------
+[ dup { [ file-exists? not ] [ directory? not ] } swap [ swap call ] curry find drop 2array ] map
+[ second ] filter [ first2 { "does not exist" "is not a directory" } nth " " glue ] each
+-------------------------------------------------------------------------------------------------
+
+and we're all set. the ``not``'s & ``swap``'s uglify, but this is only because i'm using `find` counter to its usual design; i'm using `find` like `cond`. its expression in j is (almost) much more elegant simply because of argument ordering and that we can use either `1:` or `0:`, or `i.` or `i:`. sadly, we must pretend that j has higher-order fns, that +++`:0+++ takes `m` as a left arg.
+
+[source,j]
+--------------------------------------------------------------------------------------------------------------
+,/@:>"_1(]#~0<#@>@{:"1)paths,.(' is not a directory';' does not exist';''){~fexists`isdir(`:0 i.0:)"0 _1 paths
+--------------------------------------------------------------------------------------------------------------
+
+which would be great except for the weird padding and, again, that we can't just fill arbitrary arguments of adverbs or conjunctions, namely +++`:+++, here.
+
+good, but how to express non-functionally? in c we can't put predicates into an array; we must sequence them in code i.e. unroll `find`, which would be `cond` expanding to `if`'s except storing the branch number. yet for this simple example, since the case number is only used to lookup a string, we can just use the string directly, and because there are only two predicates where one depends on the other, we _must_ use one branch, but once we've done that, we already are finished, so i guess this is too simple an example to well demonstrate the general case:
+
+[source,factor]
+-------------------------------------------------------------------------------------------------
+dup [ dup file-exists? [ directory? f "is not a directory" ? ] [ drop "does not exist" ] if ] map
+[ [ " " glue print ] [ drop ] if* ] 2each
+-------------------------------------------------------------------------------------------------
+
+(written in factor b/c the linux api is unusable.)
+
+still, this code is cleaner & shorter than the functional variant!
