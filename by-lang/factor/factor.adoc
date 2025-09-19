@@ -3009,6 +3009,8 @@ another stack checking defect:
 
 `"" <get-request> [ drop ] do-http-request [ ] with-stream` works fine but if we re-express by changing argument order and using swap—`[ ] "" <get-request> [ drop ] do-http-request swap with-stream`—then we get the "call/run-time computed" error. if we use `dip` instead of `swap`, then there's no error: `[ ] [ "" <get-request> [ drop ] do-http-request ] dip with-stream`. this seems to be due to the combination of `do-http-request` being inline recursive and with-stream using continuations (and being inline). i guess this b/c `"" ascii [ ] "" <get-request> [ drop ] do-http-request swap with-file-writer` (or file reader) errors but `"" ascii [ ] "" <get-request> [ drop ] do-http-request swap 0 "" with-variable` works, and the difference between `with-input-stream` and `with-variable` is `with-disposal`, which uses continuation words.
 
+actually, i've now found a simpler example: `[ ] f [ ] sort-by swap find` errors: "cannot apply 'call' to a run-time computed value, but `[ ] [ f [ ] sort-by ] dip find` is fine, as is `[ ] f sort swap find`. 
+
 === factor as (part of) a computer interface
 
 i don't write many programs. usually i use my programming knowledge for everyday tasks, where i write code on the fly, tailored to each situation—basically like how people use bash, except i use factor and kakoune for interactive data munging, so it's actually nice instead of a headache. these, a little bash, and the yazi file browser, and firefox are the majority of how i interact with my computer.

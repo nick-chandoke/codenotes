@@ -210,6 +210,7 @@ features/example capabilities:
 
 case studies for implicit iteration:
 
+* `q group-by 0 [ + ] reduce` does not group then apply the fold (sum); it creates a hash table, then iterates over each element, computing its group id, then adding it to the corresponding value. the computation is more properly expressed as `q [ + ] <by-group>` where `: <by-group> ( q: ( x -- id ) r: ( a b -- c ) -- by-group )`. this "per-datum" style is much better than the "packing" style since, aside from inherently being better b/c it allows us to specify computation facts independently, often the packing isn't as we'd like so we must unpack or change the data structure. in j, `x u/.y` properly separates the grouping operation from the aggregate fn `u` by not even concerning the grouping operation; instead, `x` is the result of the operation. the only difference from my "per datum" version is that `y` is traversed twice instead of once.
 * join/intersperse can be expressed well by a virtual sequence: if the index's lsb (parity) is set, then return the join element; else return seq[i/2] (i.e. seq @ i >> 1).
   ** ofc if you're going to take many arbitrary subseqs, then you'd want a literal join, since accessing contiguous memory is faster than going through index de-virtualization functions then accessing multiple unrelated sectors of memory.
 * inner or outer join
