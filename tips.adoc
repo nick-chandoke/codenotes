@@ -1,0 +1,151 @@
+= miscellaneous tips & wisdoms
+:toc:
+
+== vectors are better than structs
+
+consider a loop over high-low bars. were i to use a tagged union, e.g. `TUPLE: hl h l ;`, then i'd need to use accessors `h>>` & `l>>` in the loop body. if i wanted to support single data points, which are degenerate hl bars where h=l, then i'd have to change the loop definition. if instead i define the loop over vectors `highs lows`, then i can run the same exact loop on `values dup`:
+
+[source,factor]
+--------------------------------------------------------------------------------------------------------
+USING: grouping sequences.generalizations generalizations ;
+20 100 randoms dup                                    ! degenerate highs & lows
+dup 4 <clumps> [ [ maximum ] keep minimum ] 1 2 mnmap ! highs & lows
+[ [ [ 50 > ] filter ] dip [ 20 < ] filter ] 2bi@      ! same quotation, ( highs lows -- ), works on both
+[ ... ] 4 call-n
+--------------------------------------------------------------------------------------------------------
+
+output:
+
+---------------------------------------------------
+{ 15 15 15 15 19 19 19 19 }
+{ 92 92 92 92 88 92 92 92 92 89 89 97 99 99 99 99 }
+{ 15 19 }
+{ 85 92 88 64 60 92 89 97 99 }
+---------------------------------------------------
+
+vectors decouple attributes. were i to iterate through a single sequence and assume that my data had both a high & low attribute (regardless of whether i put them together into a duple, or a tagged union with those attributes), then to convert a sequence of single-value data, i'd have to do `[ dup hl boa ] map` or `[ dup 2array ] map` instead of just `dup`. also, inside a loop body, i'd have to extract the attributes using `h>>` & `l>>` or `first2`, unable to just use e.g. `2each`.
+
+== searches
+
+`i:/2` (`find-last`) is just a convenient form of what's basically linear search under reverse. `i./2` is useful doing a binary search but when you don't want to do a binary serach for some reason, e.g. having a list of duples but wanting to test only on one of the elements. `find-last` runs in O(n):
+
+.the greatest element of the "b" class whose value is less than 17
+[source,factor]
+---------------------------------------------------------------------------------------
+"abaabc" { 10 11 15 18 25 49 } zip [ first2 [ CHAR: b = ] dip 17 <= and ] find-last nip
+---------------------------------------------------------------------------------------
+
+`{ 98 11 }`. had i only `find`, and neither `find-last` nor `reverse`, i'd have to keep the latest-yet-encountered element of the "b" class, then test the current value to see whether it's greater than 17, and if so, then exit the loop:
+
+[source,factor]
+----------------------------------------------------------------
+"bbaabc" { 10 11 15 18 25 49 } zip
+f swap ! init state: latest-yet-encountered elt of the "b" class
+[ dup first2
+  { { [ 17      > ] [ 2drop t ] }
+    { [ CHAR: b = ] [ nip f ] }
+    [ drop f ]
+  } cond
+] find 2drop
+----------------------------------------------------------------
+
+granted, if i accept a `filter`, then of course i'd just use binary search afterward, which is very simple code:
+
+[source,factor]
+--------------------------------------------------------------------------------------------------
+17 "abaabc" { 10 11 15 18 25 49 } zip [ first CHAR: b = ] [ second ] filter-map natural-search nip
+--------------------------------------------------------------------------------------------------
+
+which correctly gives 11. were i to filter then linear search:
+
+[source,factor]
+----------------------------------------------------------------------------
+"abaabc" { 10 11 15 18 25 49 } zip [ first CHAR: b = ] [ second ] filter-map
+[ [ [ 17 <= not ] find drop ] keep length or 1 - ] keep nth
+----------------------------------------------------------------------------
+
+which sucks b/c i must find the earliest element that fails to match the predicate, then get its predecessor.
+
+all this to say: `i:/2` has its place; it's not simply an alternative to `i.@|.`. reversing a list still retains the same information which requires us to offset the found index by 1.
+
+lessons learned:
+
+* binary search is good, and is particularly afforded when we store data separately, relating them by indices only whenever necessary
+* a stateful traversal was expressed statelessly by reversing the traversal direction; or
+* the need to offset a stateless traversal's output was avoided by reversing the traversal direction
+
+granted, had the list been ordered descending, then i'd've just used `find` instead of `find-last` in the first place.
+
+yet, even all this said, were i to run this search on an ascending sequence (17, then 19, then 20, 21, 26,...), then i cannot use `i:`, since the found index will increase, not decrease! still, the answer to this is to use bins, namely where its right argument is recognized to be an ascending array. were bins to operate on each of its right items independently, it would be very inefficient!
+
+*perhaps best would be to grade & sort the right argument, use the specialized search, then use that same sorting grade backwards to match the result set to the original pre-sorted sequence. i see this as being a similar advantage to linear serach under reverse: we use "under" to normalize data so that it's suseptible to performant algorithms. i wonder how few algorithms we need if we use them together like this. how efficient can it be to normalize data so that it permits specialized algorithms, all the while retaining association with the arbitrarily-ordered/shaped data? indeed, all data may be considered as an indexed set, and sets aren't ordered, which means that they're equivalent under ordering, so if we can exploit this for computation's sake, then why not. at every step between computations, each datum input can be associated with any output set: a->b => b->a; a->[b] => [b]->a (e.g. `(],.i.)`); and [a]->b => b->[a] (e.g. `(],.+/@:])@i.`). this all is possible if we have built-in support for indices. obviously duplicate values out of context cannot uniquely be mapped to a preimage, but they of course can if we retain indices, since for every domain, indices are bijective with elements!*
+
+== comparisons
+
+* x is 0 or length: `x length mod 0 =`; i say "length" here b/c this method assumes that x must be less than `2*length`
+
+== simd interval index
+
+NB. i'm using factor here only b/c: 1. it's one of my preferred lang for expressing algorithms; 2. its `uint-4` type is specifically for simd.
+
+[source,factor]
+------------------------------------------
+: I. ( n -- idx )
+  [ > ] curry
+  { ... } ! a monotonically increasing seq
+  [ swap find drop ] keep length or ;
+------------------------------------------
+
+this is a linear search rather than a binary one, but for such small sizes, linear is probably faster. only for such small sizes does the following optimization exist anyway:
+
+[source,factor]
+-----------------------------
+: I. ( n -- idx )
+  4 swap <repetition> >uint-4
+  uint-4{ ... } ! you may need to pad right side with max uint4 value, 0xffffffff
+  v>= vcount ;
+-----------------------------
+
+the benefit is the ability to use simd when there's a simd instruction for "count" but not for "first set index". the simd version obviosuly limits the traversal space's length, but uses only 2 cycles and no looping.
+
+the actual version that i used in production code was:
+
+[source,factor]
+-------------------------------------------------------------------------------------------------------------------------------------
+: mins-since-00  ( millis -- mins   ) 86400000 rem 60000 /i ; inline
+: millis>session ( millis -- s∈[0,3] ) mins-since-00 4 swap <repetition> >uint-4 uint-4{ 420 570 960 0xffffffff } v>= vcount ; inline
+-------------------------------------------------------------------------------------------------------------------------------------
+
+which converts a millisecond timestamp into one of 4 stock market sessions. the `uint-4` values are minutes since the start of the day (i.e. midnight): 07:00, 09:30, 20:00, and, lastly, a number guaranteed to be greater than all others (actually, anything greater than or equal to 1440 would do, here); `uint-4` mandates that i specify exactly 4 values, so it's a dummy. this is equivalent to j code `0 420 570 960&I.`.
+
+TIP: i can store sessions as 23 bits: 21 msb's for jdn which has a value range of [1029/09/15,6771/07/06], and 2 lsb's for the session number. such values' order equals temporal order.
+
+== rounding (positive numbers) to an arbitrary increment
+
+* given a unix timestamp, to truncate all seconds since the start of the day: `86400000 [ /i ] keep *` where `/i` is integer division i.e. division with truncation and 86400000 is the number of seconds in a day.
+* rounding is the same as truncation except that instead of division with truncation, we divide to produce the dividend and remainder, then add 1 to the dividend if the remainder is at least half of the divisor: `86400000 [ /mod ] keep [ 2/ >= 1 0 ? + ] keep *` where `2/` is division by two accomplished by simply shifting an integer down one bit. in languages where 0 is falsy and all other numbers are truthy, `1 0 ?` is not needed.
+  ** if you're working with reals (floats or rationals), then you can add 1/2 then take the floor e.g. `86400000 [ / 1/2 + floor ] keep *`.
+
+== avoiding higher-order functions
+
+TODO: merge with ramble in link:./incremental.adoc[incremental.adoc]
+
+of course we can inline what would otherwise be a lambda. (TODO: give example here) however, i came across a pattern where, rather than passing a referentially transparent function to a higher-order function and having the h.o.f. use its output then e.g. collect it into an output data structure, we define the function to accept a pointer to the output, then have the function mutate the output, and call this function from within a loop.
+
+link:https://gist.github.com/bmccormack/d12f4bf0c96423d03f82[this github gist for incremental moving averages] (which i've re-expressed much more tersely here) in c demonstrates that we can pass an array to a moving average function, and use it in a loop, rather than passing the array & function-as-a-lambda to a loop. in this example, said function is `movingAvg`, `buf` is a loop state, and `sum` is a pointer to an output value. rather than the output being collected, it's put into stdout.
+
+[source,c]
+-------------------------------------------------------------------------------------
+#include <stdio.h>
+#define k 5
+int movingAvg(int*buf,int*sum,int j,int x){*sum=*sum-buf[j]+x;buf[j]=x;return *sum/k;}
+int main(int argc, char *argv[]) {
+  int xs[] = {50, 10, 20, 18, 20, 100, 18, 10, 13, 500, 50, 40, 10};
+  int buf[k] = {0}; // effectively a ring buffer
+  for(int i=0,sum=0;i<sizeof(xs)/sizeof(int);i++){
+    printf("new avg: %d\n",movingAvg(buf,&sum,i%k,xs[i]));
+  } return 0;
+}
+-------------------------------------------------------------------------------------
+
+actually, obviously this corresponds to inlining: whatever mutations would be inlined can be passed by reference to a separate function. any functionality (mutation & arithmetic) can be factored-out into a separate function and all concerned data may be passed as parameters thereto.
