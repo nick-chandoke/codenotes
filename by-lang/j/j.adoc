@@ -289,7 +289,7 @@ to unset verbs, use `4!:55 <'expiredname'`.
 
 === environment variables (envars)
 
-TODO: how to actually _specify_ some goddamn cmdline args to j?
+you seemingly can give cmdline args to a j script; there's no way to start a repl without a script and pass cmdline args e.g. `j 1 2` is illegal but `j /home/nic/myscript.ijs 1 2` is fine. beware that the way to run j (jconsole.sh) is provided as a posix script that changes to the j instal directory, so you must specify an absolute path to your script! or you could modify the script to be easier, by using some bash fu, which i've seen be done, but this "run the script in this directory so that all the dependencies are satisfied but after loading them, change to the directory whence the script was invoked" is common in the unix world and is a really obvious, recurrent, stupid problem. hopefully there's a non-janky fix.
 
 * var `ARGV` which is a boxed list of jconsole, script name, and arguments
 * unary `getenv`
@@ -3414,6 +3414,8 @@ dec_json'{"x":3,"y":[1,20,6],"z":{"A":[[10,20,30],[45,55,65],[80,95,99]]}}'
 │ │        │└──────────────────────────────────┘│
 └─┴────────┴────────────────────────────────────┘
 ----
+
+idek how i'd select key x or, if missing, return a default value.
 
 a dict is an alist: a list of labeled data, whereas a sequence [list] is a sequence of unlabeled data. just as lists (type `[a]`) can describe trees (as done in lisp and haskell), described as type `Tree a`, then we can use alists to get a type `Tree (label,a)`. when each datum is considered as either a list with or without a header/label, this means that we can use nested tables rather than trees to represent trees; this fact implies describes the graph theoretic nature of trees: connected & acyclic. furthermore, we see that a more constrained variant of that—the _rooted tree_, a directed graph—is isomorphic with [the concept of] nesting! _nesting_ is actually just another term for recursion. arrays are recursive: elements may be arrays. thus they support nesting and are alternatives to trees proper.
 
