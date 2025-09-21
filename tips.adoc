@@ -1,30 +1,6 @@
 = miscellaneous tips & wisdoms
 :toc:
 
-== vectors are better than structs
-
-consider a loop over high-low bars. were i to use a tagged union, e.g. `TUPLE: hl h l ;`, then i'd need to use accessors `h>>` & `l>>` in the loop body. if i wanted to support single data points, which are degenerate hl bars where h=l, then i'd have to change the loop definition. if instead i define the loop over vectors `highs lows`, then i can run the same exact loop on `values dup`:
-
-[source,factor]
---------------------------------------------------------------------------------------------------------
-USING: grouping sequences.generalizations generalizations ;
-20 100 randoms dup                                    ! degenerate highs & lows
-dup 4 <clumps> [ [ maximum ] keep minimum ] 1 2 mnmap ! highs & lows
-[ [ [ 50 > ] filter ] dip [ 20 < ] filter ] 2bi@      ! same quotation, ( highs lows -- ), works on both
-[ ... ] 4 call-n
---------------------------------------------------------------------------------------------------------
-
-output:
-
----------------------------------------------------
-{ 15 15 15 15 19 19 19 19 }
-{ 92 92 92 92 88 92 92 92 92 89 89 97 99 99 99 99 }
-{ 15 19 }
-{ 85 92 88 64 60 92 89 97 99 }
----------------------------------------------------
-
-vectors decouple attributes. were i to iterate through a single sequence and assume that my data had both a high & low attribute (regardless of whether i put them together into a duple, or a tagged union with those attributes), then to convert a sequence of single-value data, i'd have to do `[ dup hl boa ] map` or `[ dup 2array ] map` instead of just `dup`. also, inside a loop body, i'd have to extract the attributes using `h>>` & `l>>` or `first2`, unable to just use e.g. `2each`.
-
 == searches
 
 `i:/2` (`find-last`) is just a convenient form of what's basically linear search under reverse. `i./2` is useful doing a binary search but when you don't want to do a binary serach for some reason, e.g. having a list of duples but wanting to test only on one of the elements. `find-last` runs in O(n):
