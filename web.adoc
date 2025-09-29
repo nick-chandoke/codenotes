@@ -26,6 +26,7 @@ to echo http requests, simply run `netcat -l -p 8080` then after it echoes, do ^
 
 example cgi vars set by althttpd:
 
+-------------------------------------------------------------------------------------------------------------------------
 DOCUMENT_ROOT=.
 GATEWAY_INTERFACE=CGI/1.0
 HTTP_ACCEPT_ENCODING=gzip, deflate, br, zstd
@@ -45,6 +46,7 @@ SERVER_NAME=localhost
 SERVER_PORT=8080
 SERVER_PROTOCOL=HTTP/1.1
 SERVER_SOFTWARE=althttpd 2.0
+-------------------------------------------------------------------------------------------------------------------------
 
 i used this simple cgi script to produce the vars subsequence:
 
@@ -76,7 +78,7 @@ https support must be compiled-in: download the source tarball, extract, `cd`, `
 
 ===== chroot
 
-althttpsd runs only inside a chroot for security purposes, which is severely limiting and cumbersome, so we must accont for these:
+althttpsd runs only inside a chroot for security purposes, which is severely limiting and cumbersome, so we must account for these:
 
 . b/c chroot's whole purpose is to restrict filesystem access, you must set-up a copy of a subset of the filesystem hierarchy (namely `/usr/bin`, `/usr/lib`, and `/lib64`). from within a chroot, you cannot access these crucial directories.
 . you cannot execute http requests from any program called by althttpsd; the chroot messes with dns resolution, certificate management, and who-knows-what-else
@@ -86,7 +88,7 @@ therefore it's easiest to have althttpsd be a reverse proxy; put only the minimu
 
 anyway, althttpsd isn't the only server that requires a chroot, so it's good to know how to setup one.
 
-you can read manpages `ldd(1)` and `ld.so(8)`—ignore `vdso(7)`—but the gist is that, of `ldd`'s output, ignore `linux-vdso`, then copy dependencies to `lib64` (or `lib` if you're on a 32-bit architecture). `ld.so(8)` gives an exact description of resolving shared object dependencies to absolute paths.
+you can read manpages `ldd(1)` and `ld.so(8)`—ignore `vdso(7)`—but the gist is that, of ``ldd``'s output, ignore `linux-vdso`, then copy dependencies to `lib64` (or `lib` if you're on a 32-bit architecture). `ld.so(8)` gives an exact description of resolving shared object dependencies to absolute paths.
 
 TODO: it's been suggested that one can somehow, inside chroot, `mount -o bind` instead of copying.
 
@@ -120,7 +122,7 @@ $> ldd /usr/bin/{bash,netcat}
 	/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007c9733956000)
 ---------------------
 
-according to `ld.so(8)`'s manpage, on my 64-bit system, dependencies without slashes are resolved to `/lib64` or `/usr/lib64` (which on my system are the same; both are symlinks to `/usr/lib`). thus the general method to determine paths is:
+according to ``ld.so(8)``'s manpage, on my 64-bit system, dependencies without slashes are resolved to `/lib64` or `/usr/lib64` (which on my system are the same; both are symlinks to `/usr/lib`). thus the general method to determine paths is:
 
 . read `ld.so(8)` to determine how executables' linkers are determined (they're in the executable's `.interop` section), and how the default linker interprets/resolves dependencies' paths, and where dependencies are located (again, usually in `/lib64` or `/usr/lib64`; or `/lib` or `/usr/lib`).
 . check that libs are where you think that they are (e.g. i check that `libc.so.6` is in `/lib64`)
@@ -263,13 +265,13 @@ the cert (file) is like a public key plus metadata.
 
 NOTE: for oauth, if your provider disallows "localhost" (or "::1"), then add a dummy to "/etc/hosts" to direct to localhost, then supply that dummy to the oauth callback url.
 
-.mkcert vs link:https://github.com/jsha/minica[minica] vs. link:https://github.com/OpenVPN/easy-rsa[easy-rsa]
+==== creating & installing certs
+
+===== mkcert vs link:https://github.com/jsha/minica[minica] vs. link:https://github.com/OpenVPN/easy-rsa[easy-rsa]
 
 says minica's author:
 
 "mkcert is better suited for certificates for local development. minica is suited for certificates for rpcs, or test harnesses, or general internal-only services that don't need an external ca. it's better to write in the current directory rather than always to a dotfile directory in the user's home because each project or use case should probably have its own ca. if we default to putting things in people's homedir, i think that encourages reusing the same ca across multiple projects, which increases the risk of mistakes."
-
-==== creating & installing certs
 
 ===== mkcert
 
@@ -303,67 +305,3 @@ next, import `~/.easyrsa/pki/ca.crt` into your browser's ca list, then create a 
 -------------------------------------------------------
 
 cert & key files are created at `~/.easyrsa/pki/{issued/localhost.crt,private/localhost.key}`.
-
-'''''''''''''''''''''
-
-junk below to revise
-
-== servers
-
-my requirements:
-
-* only features are http standards e.g. parsing & validating http requests, tls, resuming response from a given byte offset, setting automatic http response headers like Accept-Encoding, mime, Last-Accessed, etc
-  ** no custom config formats; any of the following suffices: json, yaml, or just simple, custom sequences of whitespace-separated statements
-  ** must not support any particular proglang; this implies bloat and needless, asymmetric design
-* efficient, simple, secure
-* simple codebase. few, small dependencies, if any. in particular, mustn't require any large runtimes e.g. JVM
-* link:https://en.wikipedia.org/wiki/Simple_Common_Gateway_Interface[SimpleCGI (SCGI)], or at least FastCGI, i.e. pass request via stdin/envars to a bg server proc (called the "cgi server") which generates a response on stdout
-  ** or easily hackable to support w/e lang you like
-  ** a web server using cgi is thus a _reverse proxy_: a server that sits between another server (here, the cgi server) and the client (usually a web browser)
-
-the following servers suck because they're large, complicated, and/or force you to use their own specific config formats: apache, nginx, tomcat, lighttpd.
-
-the existence of multiple webservers is as stupid as multiple versions of `ls(1)`. it's nothing more than an implementation of a standard; being one standard, there should be only few implementations. currently, there should be one, written in rust or go.
-
-contenders listed in order of goodness (currently, none is ideal):
-
-. link:https://caddyserver.com/docs/[caddy]. requires go runtime, but go is more secure than c. supports hot-modding server config. easy https! supports all 3 http versions. has both json and link:https://caddyserver.com/docs/caddyfile/concepts[custom] config formats
-. link:https://redmine.lighttpd.net/projects/lighttpd/wiki/Docs[lighttpd]. has custom config format. otherwise, small, no runtime (written in c).
-. a mod of redbean that uses k instead of lua would be good
-
-''''
-
-* `const x = JSON.parse(jsonLiteral)` is considerably faster than `const x = jsonLiteral` for literals 6MB
-
-== local storage
-
-* useful for caching requests or responses
-* store small records in local storage (insecure) or as a cookie (secure), rather than in a db. more over the wire, but no db lookup or management.
-* in local storage, useful for cors. cookies don't support cors.
-
-questions:
-
-* can jwts be encrypted & decrypted by the *browser*, to ensure secure local storage, but putting the crypto computation on the browser rather than the server?
-* if stored in local storage, then how does the browser know when to send which objects over the wire?
-
-== jwt
-
-auth0: an authentication scheme: generate jwt, then sign with HMAC or RSA256.
-
-== Q: so what do http servers do? [todo: merge w/applicative-routes]
-
-A: they merely pass HTTP requests expressions over a database, and return the result---nothing more.
-
-see applicative-routes for exact details on such a server definition.
-
-''''
-
-given that every application can be serverized, and every server uses a db, **every** interaction with a computer should be through a server. server ≡ db iface.
-
-db: category
-server: morphisms (often *templates*, which are a particular variety of morphism from an alist to populate a t, producing another t)
-
-
-''''
-
-communicate via websockets. all operations that change server state should be idempotent.

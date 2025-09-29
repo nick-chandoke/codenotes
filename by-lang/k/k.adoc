@@ -664,6 +664,8 @@ these symbols are used by cast ($/2) and type (@/1).
 
 === syntax
 
+`[]` evaluates to `::`. to check the type returned by `[]`, we use `@`, but `@[]` evals to `(::)@`. we want unary `@`, `@:`. but wait, wouldn't `:[]` first be interpreted as the "conditional" syntactic form? apparently not! it seems that colon has a tighter binding to verbs than to brackets. `@::[3;4;6]` returns +++`i+++.
+
 * right-associative
 * conditional branching: `:[p1;f1;p2;f2;...;else]`
   ** dollar sign may be used instead of colon
@@ -687,6 +689,7 @@ these symbols are used by cast ($/2) and type (@/1).
   ** function:
     *** *multi-line lambdas' last line must be prefixed with `:` in order for it to return that value; else it returns nothing*
     *** nullary lambdas must be invoked by using m-expr syntax with an empty arg list e.g. `myNullaryFn[]`
+      **** k actually doesn't have nullary functions; if you have a lambda but don't use `x` then the lambda is assumed unary. when using a map (fn or array, syntax being `@` or juxtaposition), wherever you leave an argument blank, the identity fn, `::`, is assumed. thus `(3 3#!9)[1;]` is syntactic sugar for `(3 3#!9)[1;::]`, but different from `(3 3#!9)[1;0N]`, which gives 0N b/c it's accessing the ``0N``th element of the middle row. other examples: `{x}[]` shows no output, just as evaluating `::` alone does. `{1^x}[]` & `{1^x}[0N]` both give `1`, but `{x}[]` gives nothing whereas `{x}[0N]` gives `0N`. `{@x}[]` returns +++`u+++, which is how i know that `::` is assumed.
     *** `{[arg1;...] definition}`
     *** in ngn/k, to bind to a symbol (single non-ascii character, it seems) to a definition, parenthesize it e.g. `(⁂):(10+)` which can be invoked like `⁂!6`. afaik you cannot define ambivalent functions. however, there is special support for defining 2-character symbols where the 2nd symbol is `:` but this has nothing to do with arity. e.g. `(⁂):(10+);(⁂:):{%x%y}` to define an inline monad, `⁂`, and an inline dyad `⁂:` invokable as e.g. `20⁂:10` or `⁂4`. of course, conventionally you'd define verbs ending in `:` as monadic, and a corresponding non-`:` one as dyadic.
     *** `{...}`. unary fns arg (on the right side) is called `x`, but in binary functions, `y` is the right arg, and `x` is the left! if you use `z` then you must invoke by an argument vector anyway e.g. in `{z%y+x}[30;20;10]`, `x`=30, `y`=20, `z`=10.

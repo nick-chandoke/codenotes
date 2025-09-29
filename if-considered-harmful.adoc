@@ -37,7 +37,7 @@ if(!y) {
 }
 -----------------------------------------------------------------
 
-TIP: AND is the natural joining method; "it's raining. it's cold." is the same as "it's raining and it's cold." or (disjoint union) is a less-common case. 
+TIP: AND is the natural joining method; "it's raining. it's cold." is the same as "it's raining and it's cold." _or_ (disjoint union) is a less-common case. 
 
 i advocate `switch` instead of `cond` because it's flat: branch order is meaningless (except fall-throughs) and each case value contains all the information so you don't have to look elsewhere nor track which conditions failed or succeeded by the time that you test the case. if you use `cond` such that order is irrelevant (i.e. each cond test clause contains all data used across all test cases, explicitly including whether each is true vs false) then it's just as well to use cond. the switch technique certainly works well for 3 or fewer booleans, which is a common scenario.
 
