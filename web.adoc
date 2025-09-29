@@ -1,0 +1,369 @@
+= web notes
+
+* maybe embedding your request handlers into the server code itself is fastest, but scgi shouldn't be much less efficient, but is more flexible logistically, such as supporting arbitrary runtimes, languages, and can even be run on separate machines.
+
+== servers
+
+to echo http requests, simply run `netcat -l -p 8080` then after it echoes, do ^C to close the connection.
+
+* link:https://github.com/fastly/pushpin[pushpin] is a reverse proxy for api push requests
+* busybox's httpd. dunno about this, since documentation is little, but it's an option that's worth remembering in case it becomes useful.
+* link:https://acme.com/software/thttpd/[thttpd (by acme)]. dead-simple config. it's not supported; link:https://github.com/blueness/sthttpd[sthttpd] is a fork that supposedly exists to be active, fixing bugs/vulnerabilities as they're found. however, it has open prs and the last commit was a pr merge in 2017.
+* althttpd (link:https://sqlite.org/althttpd/info?name=tip[download] | link:https://sqlite.org/althttpd/doc/trunk/althttpd.md[readme]) is made by the authors of sqlite. it's plainly capable, easy to use, has no dependencies (except `libssl` and `libcrypto` when https is needed), and compiles in a second! yay!
+  ** no config file; cmdline opts only.
+  ** statically serves files unless theey're executable, in which case they're used as cgi
+* lighttpd. probably very good. has a custom config syntax, which is small and link:https://redmine.lighttpd.net/projects/lighttpd/wiki/Docs_Configuration[simply documented]. cgi is weird e.g. wtf is `cgi.assign = ( "" => "" )` about?
+* link:https://skarnet.org/software/tipidee/[tipidee] is small but seems to have a clumsy, disintegrated, though perhaps interesting-to-study design.
+* link:https://github.com/civetweb/civetweb[civet] is a fork of mongoose before they dual-licensed. MIT license. has many features that i don't understand/need.
+* redbean is worth study for developing a web server
+* https://lwan.ws/[lwan] sounds like the best thing ever, for what it is: a web server implementing a subset of HTTP/1.0 & HTTP/1.1 without a security focus, but with such good code that security is implicit. made as a product of exploration of / experimentation with low-level apis to see how tuned a web server could be. it doesn't prioritize features.
+* link:https://github.com/caddyserver/caddy[caddy]'s main feature is that it uses tls by default and makes doing so easy. otherwise, though large, seems not only sensibly designed, but _well_ designed.
+
+=== cgi scripts
+
+* envars corresponding to request params are set. any POST body is on stdin.
+* output must be headers\n\nbody, and headers cannot be empty.
+
+example cgi vars set by althttpd:
+
+DOCUMENT_ROOT=.
+GATEWAY_INTERFACE=CGI/1.0
+HTTP_ACCEPT_ENCODING=gzip, deflate, br, zstd
+HTTP_ACCEPT=text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8
+HTTP_HOST=localhost:8080
+HTTP_SCHEME=http
+HTTP_USER_AGENT=Mozilla/5.0 (X11; Linux x86_64; rv:129.0) Gecko/20100101 Firefox/129.0
+PATH_INFO=
+QUERY_STRING=k=v&stuff
+REMOTE_ADDR=127.0.0.1
+REQUEST_METHOD=GET
+REQUEST_URI=/mypath
+SCRIPT_DIRECTORY=.
+SCRIPT_FILENAME=./mypath
+SCRIPT_NAME=/mypath
+SERVER_NAME=localhost
+SERVER_PORT=8080
+SERVER_PROTOCOL=HTTP/1.1
+SERVER_SOFTWARE=althttpd 2.0
+
+i used this simple cgi script to produce the vars subsequence:
+
+.mypath
+[source,sh]
+---------------------------------------
+echo -ne "Content-Type: text/plain\n\n"
+env|sort
+---------------------------------------
+
+the script is has filepath `mypath`, so when the uri path `/mypath` is requested, `mypath` is run. if you want cgi for uri path `/` or the empty uri path, then name your cgi script `index.html`
+
+==== althttpd
+
+thoroughly read `althttpd.md` (comes in the src tarball) and the initial comments in `althttpd.c` before continuing!
+
+* serves static files or cgi. cmdline example: `althttpd -p 8080`. the optional `-root` flag specifies basically the dir to `cd` to before running. *the path must be absolute.* if you specify `-root`, then you must specify `-port`. somehow, even though port is assumed to be 8080 when you don't specify it, if you specify `-root`, then...idk it just fuck-up. whatever, who knows.
+* loads script per request; you can edit the script without having to concern the running server proc.
+
+https support must be compiled-in: download the source tarball, extract, `cd`, `make althttpsd`. https seems to require that you use the "multiple domains" scheme. excepting just using `default.website`, naturally your domains must match those specified in your https certificate. to serve one site when access from multiple domains, just putting the one site in `default.website` suffices. keep your pem files in the same directory that contains `default.website` e.g. i have the following directory structure:
+
+-----------------------
+./ # this is my web root (param that i pass to althttpsd's -root command line parameter)
+├── default.website
+│   └── index.html
+├── localhost+2-key.pem
+└── localhost+2.pem
+-----------------------
+
+===== chroot
+
+althttpsd runs only inside a chroot for security purposes, which is severely limiting and cumbersome, so we must accont for these:
+
+. b/c chroot's whole purpose is to restrict filesystem access, you must set-up a copy of a subset of the filesystem hierarchy (namely `/usr/bin`, `/usr/lib`, and `/lib64`). from within a chroot, you cannot access these crucial directories.
+. you cannot execute http requests from any program called by althttpsd; the chroot messes with dns resolution, certificate management, and who-knows-what-else
+. you must run `althttpsd` as the root user (just as `chroot` generally runs only for root) and use its `-user` cmdln parameter to downgrade to a less-powerful user. use a user that's used only for this outward-facing server process; the whole point of all this hassle is limiting the permessions of the althttpsd process as much as possible, to limit the damage that an attacker could do should they fully exploit the process. ever being root totally goes against this intent, but it's needed to bind to ports under 1024. seems pretty stupid, but whatever. it is what it is.
+
+therefore it's easiest to have althttpsd be a reverse proxy; put only the minimum functionality in cgi scripts: passing envars set by althttpsd to a separate "application" server, which does the actual computation and sends a response to althttpsd. there may be easier reverse proxies available. i like althttpsd because it's small, simple, easy to learn how to use, and already serves static files, too. this being said, it'd probably be just as easy to use an app server, squid, and darkhttpd.
+
+anyway, althttpsd isn't the only server that requires a chroot, so it's good to know how to setup one.
+
+you can read manpages `ldd(1)` and `ld.so(8)`—ignore `vdso(7)`—but the gist is that, of `ldd`'s output, ignore `linux-vdso`, then copy dependencies to `lib64` (or `lib` if you're on a 32-bit architecture). `ld.so(8)` gives an exact description of resolving shared object dependencies to absolute paths.
+
+TODO: it's been suggested that one can somehow, inside chroot, `mount -o bind` instead of copying.
+
+====== example
+
+i need bash & netcat for my cgi script. assume that i'm in the directory in which i'll run althttpsd.
+
+[source,sh]
+---------------------
+# init dirs
+$> mkdir -p usr/bin
+
+# find binaries' locations
+$> whereis {bash,netcat}
+bash: /usr/bin/bash /usr/lib/bash /usr/include/bash /usr/share/man/man1/bash.1.gz /usr/share/info/bash.info.gz
+netcat: /usr/bin/netcat /usr/share/man/man1/netcat.1.gz /usr/share/info/netcat.info.gz
+
+# copy bins
+$> cp -a /usr/bin/{bash,netcat} ./usr/bin/
+
+$> ldd /usr/bin/{bash,netcat}
+/usr/bin/bash:
+	linux-vdso.so.1 (0x00007f37b0dfd000)
+	libreadline.so.8 => /usr/lib/libreadline.so.8 (0x00007f37b0c5e000)
+	libc.so.6 => /usr/lib/libc.so.6 (0x00007f37b0a6d000)
+	libncursesw.so.6 => /usr/lib/libncursesw.so.6 (0x00007f37b09fe000)
+	/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007f37b0dff000)
+/usr/bin/netcat:
+	linux-vdso.so.1 (0x00007c9733954000)
+	libc.so.6 => /usr/lib/libc.so.6 (0x00007c973372a000)
+	/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007c9733956000)
+---------------------
+
+according to `ld.so(8)`'s manpage, on my 64-bit system, dependencies without slashes are resolved to `/lib64` or `/usr/lib64` (which on my system are the same; both are symlinks to `/usr/lib`). thus the general method to determine paths is:
+
+. read `ld.so(8)` to determine how executables' linkers are determined (they're in the executable's `.interop` section), and how the default linker interprets/resolves dependencies' paths, and where dependencies are located (again, usually in `/lib64` or `/usr/lib64`; or `/lib` or `/usr/lib`).
+. check that libs are where you think that they are (e.g. i check that `libc.so.6` is in `/lib64`)
+. copy those files (usually links) (e.g. `cp -a /lib64/libc.so.6 ./lib64/`)
+. use `realpath(1)` to search for symlinks. you may search either the source (e.g. `/lib64/`) or destination (e.g. `./lib64/`) for the files, since they're the same.
+. for those that are symlinks, copy the files to which they link
+
+determining then recreating bash's dependencies:
+
+[source,sh]
+-----------
+# copy links
+$> cp -a /lib64/{libreadline.so,libc.so.6,libncursesw.so.6,ld-linux-x86-64.so.2} lib64
+$> stat lib64/* | grep File
+  File: lib64/ld-linux-x86-64.so.2
+  File: lib64/libc.so.6
+  File: lib64/libncursesw.so.6 -> libncursesw.so.6.5
+  File: lib64/libreadline.so -> libreadline.so.8
+
+# files that i still need to copy
+$> while read -d $'\n' x; do if test ! -e "$x"; then echo "$x"; fi; done <<< "$(realpath lib64/*)" | sort -u
+/home/nic/webProject/usr/lib/libncursesw.so.6.5
+/home/nic/webProject/usr/lib/libreadline.so.8.2
+
+# copy symlinks' destinations. note that lib64 is my destination b/c it's just a symlink to usr/lib
+$> cp -a /lib64/{libncursesw.so.6.5,libreadline.so.8} lib64
+
+# check again for files that i still need to copy; repeat this and the copying of said files until this
+# command line prints no more files.
+$> while read -d $'\n' x; do if test ! -e "$x"; then echo "$x"; fi; done <<< "$(realpath lib64/*)" | sort -u
+/home/nic/webProject/usr/lib/libreadline.so.8.2
+
+$> cp -a /lib64/libreadline.so.8.2 lib64
+
+# check again...
+$> while read -d $'\n' x; do if test ! -e "$x"; then echo "$x"; fi; done <<< "$(realpath lib64/*)" | sort -u
+
+# no output, so finally we're ready to chroot!
+sudo chroot . usr/bin/bash
+-----------
+
+if netcat had dependencies that bash hadn't had, then we'd include those dependencies in this process; copy all executables' dependencies altogether in this one step, rather than doing all this for each executable. and because althttpsd is not running in the chroot (it only creates a chroot as a child process), we don't need to copy libcrypto nor libssl.
+
+TIP: why not to just copy the dependencies to their resolved paths is that possibly many executables refer to common shared objects by different names. we can have multiple links all of different names that point to one common file, and this is better than keeping multiple copies of the same file each having different names.
+
+NOTE: the below process is supposed to work, but didn't work for me; apparently there are dependency library files that aren't mentioned in `ldd`? i conclude this because i found success when i copied the _entirety_ of the lib dirs:
+
+[source,sh]
+------------------------
+cp -a /lib{,64} .
+cp -a /usr/lib{,64} usr/
+------------------------
+
+the `-a` flag of `cp` is needed b/c it preserves symlink structure and permissions ("stat" type data, plus some extra things e.g. "xattrs", "security context") across dirs.
+
+TIP: althttpsd's `-jail 0` sounds nice, but it apparently somehow fucks-up ssl (`SSL_ERROR_RX_RECORD_TOO_LONG`), so just forget about it.
+
+the following is apparently-incorrectly supposed by many people to work:
+
+.`ldd k`
+-----------------------------------------------------------------------------------
+linux-vdso.so.1 (0x000075f6e108a000)
+libm.so.6 => /usr/lib/libm.so.6 (0x000075f6e0f20000)
+libc.so.6 => /usr/lib/libc.so.6 (0x000075f6e0d2f000)
+/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x000075f6e108c000)
+-----------------------------------------------------------------------------------
+
+the 1st item doesn't concern us, because it has no filepath. for the others, we must copy those files to our web root dir:
+
+[source,sh]
+-----------------------------------------------
+mkdir -p usr/lib usr/lib64
+cp -a /usr/lib/lib{m,c}.so.6 usr/lib
+cp -a /usr/lib64/ld-linux-x86-64.so.2 usr/lib64
+cp -a ~/.local/bin/k .
+-----------------------------------------------
+
+althttpd returns 0B if you request a cgi page that fails to run properly, which is totally unhelpful. to debug, it's useful to be able to run your cgi scripts in a terminal, under chroot, so that you can actually see the output. idk, maybe i can get althttpd's logging to, yk, _actually log_, instead of doing literally nothing about it. anyway, to get your favorite shell (or whatever the hell shell you happen to have), we repeat the process:
+
+. `whereis bash` tells `/usr/bin/bash`, `/usr/lib/bash`, and others which i don't need: includes, and man & info pages. `ldd /usr/bin/bash` gives:
+
+-----------------------------------------------------------------------------------
+linux-vdso.so.1 (0x00007d9b06d0d000)
+libreadline.so.8 => /usr/lib/libreadline.so.8 (0x00007d9b06b7d000)
+libc.so.6 => /usr/lib/libc.so.6 (0x00007d9b0698c000)
+libncursesw.so.6 => /usr/lib/libncursesw.so.6 (0x00007d9b0691d000)
+/lib64/ld-linux-x86-64.so.2 => /usr/lib64/ld-linux-x86-64.so.2 (0x00007d9b06d0f000)
+-----------------------------------------------------------------------------------
+
+so i copy those files plus the bash executable plus its libs:
+
+[source,sh]
+--------------------------------------------------------------------
+cp -a /usr/bin/bash usr/bin
+cp -a /usr/lib/{libreadline.so.8,libc.so.6,libncursesw.so.6} usr/lib
+cp -a /usr/lib64/ld-linux-x86-64.so.2 usr/lib64
+--------------------------------------------------------------------
+
+NOTE: the `-a` flag copies links as links rather than following them. `-a` has been used in some people's examples, but not everyone's.
+
+NB. all procs executed in the chroot child procs thereof.
+
+NOTE: chroot can be run only by root, so chroot can't be a problem when running `althttpd` as a non-root user; however, in this case you must use a port above 1024, which is unsupported often, such as if you want to use localhost as an oauth2 callback uri and your oauth service doesn't support ports in the uri.
+
+one more note before we run our server! althttpsd will refuse to run a cgi program if it's writable by users other than its owner. this is considerable because the cgi will run as the user specified in the `-user` option. this user cannot write to the filesystem if those permissions are not set! e.g. in my root i have both the webserver directory structure as well as some code that i as my normal `nic` user (GID 1000) run. when i'm running things manually, i'm `nic`, and, being that `nic` is the owner of the directory (because it's in my home folder), by default only `nic` can modify the filesystem there. thus when i ran my cgi script, i got an io error b/c it didn't have permission to write to a new file. i tried `chomd -R o+rwX <webroot>` but that produced the "cgi program is writable by users other than its owner" error; `chmod o-w <cgiScript>` fixed that problem, but even better would be to have nothing writable by the wub user (e.g. `nobody` or `www`) except for specific directories/files which you know that the cgi scripts should be able to modify.
+
+so finally, run `sudo althttpsd -port 443 -user nobody --cert localhost+2.pem --pkey localhost+2-key.pem`. choose a username that isn't running any other proccesses, since any process run by a given user can affect other procs run by that user. `nobody` is fine for me, but if you're running other procs as `nobody`, then you should create an account, e.g. `www`, exclusively for running your web server.
+
+you may want to `mkdir dev; mknod dev/null c 1 3; chmod 666 dev/null`
+
+TODO: are the following necessary for althttpd? why (not)?
+
+[source,sh]
+--------------------------------------------------
+cp -r /etc/ssl /chroot/httpd/etc/
+chmod 600 /chroot/httpd/etc/ssl/certs/ca.crt
+chmod 600 /chroot/httpd//etc/ssl/certs/server.crt
+chmod 600 /chroot/httpd/etc/ssl/private/ca.key
+chmod 600 /chroot/httpd/etc/ssl/private/server.key
+--------------------------------------------------
+
+== certificates
+
+=== https localhost
+
+self-signed certs are just a worse method than creating your own root ca then issuing _end-entity_ (aka "leaf") certs. i'll discuss only the latter method.
+
+there are a few solutions, and they work for (and should be used for, for consistency's sake) local testing/development, running a local services (e.g. using for oauth):
+
+* create a cert then add it to your known certs and give your web server the cert & private key .pem files.
+* leave your server unencrypted, instead having a tunnel handle encryption
+
+self-signed certs may satisfy some needs, but don't work either at all, or at least not well/easily for actual local hosting such as using localhost with oauth—or even generally. it's as troublesome as trying to hack around CORS: it's just easier to support proper security protocols, at least technically, if not in spirit.^*^ for true local hosting, you should create your own certificate authority (aka a "root") then  the easiest way to do this is to use link:https://mkcert.dev[`mkcert`] (also in arch official repo).
+
+if you want to run your app on many trusted machines, then installing a common root ca to each machine can be cumbersome, and is risky anyway: the ca has the authority to issue a cert for any site, so many users having the same ca root increases odds of a mitm attack, if someone should attain a copy of the root ca then use it to issue their own certs. it's better to have each user being their own ca. staging should run on a public domain with a real cert, btw.
+
+the cert (file) is like a public key plus metadata.
+
+^*^ some commonly forbidden operations: a webpage served over https loading js served over http; xhr or ws requests to http from a webpage served over https, called "mixed content blocking". technically, xhr is fine to request from `127.0.0.1`; idk if it's fine for `localhost`, or which of these is supported by websockets. see <https://www.w3.org/TR/secure-contexts/#is-origin-trustworthy>.
+
+NOTE: for oauth, if your provider disallows "localhost" (or "::1"), then add a dummy to "/etc/hosts" to direct to localhost, then supply that dummy to the oauth callback url.
+
+.mkcert vs link:https://github.com/jsha/minica[minica] vs. link:https://github.com/OpenVPN/easy-rsa[easy-rsa]
+
+says minica's author:
+
+"mkcert is better suited for certificates for local development. minica is suited for certificates for rpcs, or test harnesses, or general internal-only services that don't need an external ca. it's better to write in the current directory rather than always to a dotfile directory in the user's home because each project or use case should probably have its own ca. if we default to putting things in people's homedir, i think that encourages reusing the same ca across multiple projects, which increases the risk of mistakes."
+
+==== creating & installing certs
+
+===== mkcert
+
+[source,sh]
+-------------------------------------------------------
+mkcert -install # installs the ca to your system
+mkcert localhost 127.0.0.1 ::1 # create one cert for these domains
+-------------------------------------------------------
+
+then move the to the web root folder or wherever your web server can use them. remember that certificates expire!
+
+===== easyrsa
+
+[source,sh]
+-------------------------------------------------------
+# install easyrsa
+mkdir -p ~/.easyrsa &&
+  curl -L https://github.com/OpenVPN/easy-rsa/releases/download/v3.1.2/EasyRSA-3.1.2.tgz |
+  tar xzvf - --strip-components=1 -C ~/.easyrsa
+
+# create ca
+cd ~/.easyrsa
+./easyrsa init-pki
+echo Local CA "$(hostname -f)" | ./easyrsa build-ca # nopass # better to omit the nopass option so that, if someone unauthorized obtains your ca, then they can't use it to issue certs unless they also know a password
+-------------------------------------------------------
+
+next, import `~/.easyrsa/pki/ca.crt` into your browser's ca list, then create a cert for localhost:
+
+-------------------------------------------------------
+./easyrsa --days=3650 "--subject-alt-name=IP:127.0.0.1,DNS:localhost" build-server-full localhost nopass
+-------------------------------------------------------
+
+cert & key files are created at `~/.easyrsa/pki/{issued/localhost.crt,private/localhost.key}`.
+
+'''''''''''''''''''''
+
+junk below to revise
+
+== servers
+
+my requirements:
+
+* only features are http standards e.g. parsing & validating http requests, tls, resuming response from a given byte offset, setting automatic http response headers like Accept-Encoding, mime, Last-Accessed, etc
+  ** no custom config formats; any of the following suffices: json, yaml, or just simple, custom sequences of whitespace-separated statements
+  ** must not support any particular proglang; this implies bloat and needless, asymmetric design
+* efficient, simple, secure
+* simple codebase. few, small dependencies, if any. in particular, mustn't require any large runtimes e.g. JVM
+* link:https://en.wikipedia.org/wiki/Simple_Common_Gateway_Interface[SimpleCGI (SCGI)], or at least FastCGI, i.e. pass request via stdin/envars to a bg server proc (called the "cgi server") which generates a response on stdout
+  ** or easily hackable to support w/e lang you like
+  ** a web server using cgi is thus a _reverse proxy_: a server that sits between another server (here, the cgi server) and the client (usually a web browser)
+
+the following servers suck because they're large, complicated, and/or force you to use their own specific config formats: apache, nginx, tomcat, lighttpd.
+
+the existence of multiple webservers is as stupid as multiple versions of `ls(1)`. it's nothing more than an implementation of a standard; being one standard, there should be only few implementations. currently, there should be one, written in rust or go.
+
+contenders listed in order of goodness (currently, none is ideal):
+
+. link:https://caddyserver.com/docs/[caddy]. requires go runtime, but go is more secure than c. supports hot-modding server config. easy https! supports all 3 http versions. has both json and link:https://caddyserver.com/docs/caddyfile/concepts[custom] config formats
+. link:https://redmine.lighttpd.net/projects/lighttpd/wiki/Docs[lighttpd]. has custom config format. otherwise, small, no runtime (written in c).
+. a mod of redbean that uses k instead of lua would be good
+
+''''
+
+* `const x = JSON.parse(jsonLiteral)` is considerably faster than `const x = jsonLiteral` for literals 6MB
+
+== local storage
+
+* useful for caching requests or responses
+* store small records in local storage (insecure) or as a cookie (secure), rather than in a db. more over the wire, but no db lookup or management.
+* in local storage, useful for cors. cookies don't support cors.
+
+questions:
+
+* can jwts be encrypted & decrypted by the *browser*, to ensure secure local storage, but putting the crypto computation on the browser rather than the server?
+* if stored in local storage, then how does the browser know when to send which objects over the wire?
+
+== jwt
+
+auth0: an authentication scheme: generate jwt, then sign with HMAC or RSA256.
+
+== Q: so what do http servers do? [todo: merge w/applicative-routes]
+
+A: they merely pass HTTP requests expressions over a database, and return the result---nothing more.
+
+see applicative-routes for exact details on such a server definition.
+
+''''
+
+given that every application can be serverized, and every server uses a db, **every** interaction with a computer should be through a server. server ≡ db iface.
+
+db: category
+server: morphisms (often *templates*, which are a particular variety of morphism from an alist to populate a t, producing another t)
+
+
+''''
+
+communicate via websockets. all operations that change server state should be idempotent.
