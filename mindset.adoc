@@ -1,0 +1,6 @@
+NB. this is...a stub? it seems complete (and even redundant) in its expression of my intended ideas, but perhaps it needs more elaboration, examples, or explanation.
+
+computing & coding are important techniques for thinking. they concern the meaning/interpretation of things, their information content, and their representations (namely by symbols). code must be exact in order to execute properly, and so coding is a practice in exactness, organization, neatness—similarly, also in robustness and consistency.
+
+any time that anyone ever wants to do anything that involves thought, they're computing. most people think in a very vague, inefficient, error-prone way because they are not methodical—in computing parlance, their thinking isn't _algorithmic_. an algorithm is merely a structure (practically always refined for minimal memory & computation) of reasoning about a given problem. to study coding & computing is to study meaning, thought, & reason, in a principled, clear way; and to have a computer to check your code is a blessing that keeps us consistent and humble. to refactor code & muse about how to code elegantly is exactly to do the same for the ideas by which we interpret all; and so for devising algorithms & thinking!
+.

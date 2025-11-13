@@ -1,0 +1,269 @@
+== special notes on installing arch linux
+
+my opinionated guide, with special considerations for virtualbox.
+
+
+TODO: virtualization softwares other that virtualbox, e.g. _GNOME Boxes_ and _virt-manager_
+
+NOTE: if installing in VirtualBox, after creating the VM, go to the side panel: _Settings_ → _System_ → _Motherboard_ tab → check the _Enable EFI_ checkbox under _Extended Features_
+
+. first, setting the keyboard to dvorak (if needed):
+  . `localectl set-keymap dvorak-programmer` (on arch linux arm, if localectl fails, then just set `/etc/vconsole.conf` to `KEYMAP=dvorak-programmer`)
+  . `localectl set-x11-keymap us pc105 dvp` # needed only if using x. i use sway now.
+. apparently pacstrapping `linux` (later) emits an error if `/etc/vconsole.conf` doesn't exist, so write it now
+  .. ok, apparently even writing to the file, i still get the error about it not existing. wtf ever.
+. check uefi bitness: `cat /sys/firmware/efi/fw_platform_size`; if no such file, then it's bios, not uefi.
+
+. pacman & gpg keys:
+  .. `pacman-key --init;pacman-key --populate; pacman-key --refresh-keys`. prevents "signature is unknown trust" `pacstrap` error. see <https://wiki.archlinux.org/title/Pacman/Package_signing> if needed.
+  .. `gpg --refresh-keys` isn't helpful for the arch install, but it may be useful during normal use after the install
+. network:
+  .. dhcpcd should already be running. otherwise use any `ip` commands that you need.
+  .. test: `ping ping.archlinux.org`
+. `timedatectl`
+. `fdisk`. you need:
+  .. needed partitions:
+    ... a uefi system partition (assuming non-bios; it's nearly 2026, after all). if the disk already has a uefi system partition, retain it as-is.
+    ... a root partition
+  .. optional partitions:
+  ... swap (alternatively, link:https://wiki.archlinux.org/title/Zram#Usage_as_swap[zram])
+
+TODO: learn about partition alignment & device sector size per device (e.g. nvme), and learn about modern filesystems, to choose a replacement for ext4. iirc, the competitors are bcachefs, btrfs, xfs, and zfs.
+
+. mount root partition to `/mnt`, `mkdir /mnt/boot`,  mount efisyspart to `/mnt/boot`, then `arch-chroot` into it
+.
+. `pacstrap -K /mnt base linux linux-firmware` # don't put any more packages here; this step might fail (see next, lower bullet point), and it re-downloads packagse each time, so we want that to be quick. besides, it's better to install packages inside the chroot soon, by using `pacman` as usual, instead of `pacstrap`.
+  .. according to link:https://wiki.gentoo.org/wiki/Btrfs[gentoo wiki], `fsck.btrfs` should *not* be run upon each boot. thus if you chose btrfs, then ignore any initramfs warnings about no fsck being found...i think?
+  .. according to link:https://wiki.archlinux.org/title/Btrfs[arch wiki], as of 2025 nov, "btrfs is under heavy development" and `btrfs check` is dangerously immature. i'm not up on btrfs, but this seems dated.
+  .. if using an NVMe SSD, you'll need to boot via `systemd-boot(7)` (not a separate package; it's just part of systemd) or `grub`
+  .. otherwise, if using rEFInd EFI bootloader, you'll need `refind-efi`
+    ... depends on `efibootmgr` & `efivar`—two packages needed for any EFI bootloader
+  .. if installing arch to bare metal, include `linux-firmware`; if installing to a container or VM, then omit it.
+. `genfstab -U /mnt >> /mnt/etc/fstab`
+. `arch-chroot /mnt /bin/bash`
+. `xargs -a pkgs.txt pacman -S` # where pkgs.txt is a newline-separated list of packages to install
+  .. ENSURE THAT YOU INSTALL THE FOLLOWING AT LEAST: sudo, dhcpcd, efibootmgr, wpa_supplicant & rfkill (if you've a wifi card), less, man, man-db, man-pages, fsck, openssh for headless systems
+  .. for certain hw, you may want to install `amd-ucode` or `intel-ucode` 
+. `ln -sf /usr/share/zoneinfo/.../... /etc/localtime`
+. `hwclock --systohc`
+. uncomment desired locales in `/etc/locale.gen`
+. `locale-gen`
+. `echo ... > /etc/hostname`
+. add to `/etc/hosts`:
+
+--------------------------------------------
+127.0.0.1	localhost
+::1		localhost
+127.0.1.1	myhostname.localdomain	myhostname
+--------------------------------------------
+
+where `myhostname` isn't literal, but `.localdomain` is.
+
+. `passwd`
+. `useradd -md /home/yourname -G wheel,video -s /bin/bash yourname`. `video` is needed for sway, or was it generally for wayland...? hopefully you've a better shell than bash.
+. `EDITOR=... visudo` # uncomment the wheel group thing
+. install bootloader
+  .. if using rEFInd, see _§rEFInd bootloader_
+  .. if using grub, see _§grub bootloader_
+  .. for systemd-boot (previously called gummiboot), you must run `arch-chroot -S /mnt [shell_path]`, then do `bootctl install`, then run `bootctl` (no args) to check that systemd-boot will parse it properly. if it looks good, then edit `esp/loader/loader.conf` to have the line "default <CONF_FILE>" where `<CONF_FILE>` is given by `bootctl`. next you must add a loader in `esp/loader/entries/<CONF_FILE>` to have the following contents:
+
+---------------------------------------------------------
+title   Arch Linux
+linux   /vmlinuz-linux
+initrd  /initramfs-linux.img
+options root=UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx rw
+---------------------------------------------------------
+
+. exit chroot
+. `umount /mnt/boot /mnt`
+. if on bare metal, `reboot`; if on VM, `shutdown now` (since you'll want to remove the boot media before restarting)
+
+== rEFInd bootloader
+
+NOTE: `esp` is wherever you mount your esp—commonly `/boot`.
+
+. when you install `linux` as part of `pacstrap`, it'll run a `mkinitcpio` hook that creates `esp/vmlinuz-linux` and `esp/initramfs-linux.img`
+. continue through the remainder of the install script
+. run `refind-install`. if it fails to make an efimanager entry, create one yourself:
+
+    efibootmgr --create --disk /dev/sda --part 1 \ # the boot partition
+               --loader /EFI/refind/refind_x64.efi --label rEFInd --verbose
+
+NOTE: that that line did not mention the esp!
+
+. finally, edit `$esp/EFI/refind/refind.conf` to ensure that it has these lines:
+
+    scanfor internal,external,manual
+
+    menuentry "Arch Linux" {
+        icon     /EFI/refind/icons/os_arch.png
+        volume   "Arch Linux"
+        loader   /vmlinuz-linux
+        initrd   /initramfs-linux.img
+        # obviously this UUID is just an example; it should be populated with the correct root patition one already!
+        # you MUST set the UUID! the one that's already there is just a dummy! `lsblk -o +UUID | grep sda2` will tell you
+        # ALSO: the default example has PARTUUID rather than UUID! remember to make it UUID!
+        options  "root=UUID=8dcbe4f0-743d-425c-a741-ffdc900df067 rw add_efi_memmap"
+        submenuentry "Boot using fallback initramfs" {
+            initrd /boot/initramfs-linux-fallback.img
+        }
+        submenuentry "Boot to terminal" {
+            add_options "systemd.unit=multi-user.target"
+        }
+        # ensure that the disabling line is gone
+    }
+
+you'll notice that these lines are basically already in there; we simply ensured that
+
+. `manual` is in the `scanfor` list
+. the _Arch Linux_ `menuentry`'s `loader` and `initrd` are not prefixed with `/boot`
+. in the `menuentry`'s `options` value, we use `UUID` rather than `PARTUUID`
+
+after installing rEFInd, edit `$(find $esp -type f -name refind.conf)`, and set the timeout. you don't need to do anything other than edit & write the config file; rEFInd will reflect the changes on next boot.
+
+=== grub bootloader
+
+----
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=grub
+# if that fails b/c there are too many boot entries, then remove some via efibootmgr
+kak /etc/default/grub
+grub-mkconfig -o /boot/grub/grub.cfg
+----
+
+=== after-install adjustments
+
+now that the system is installed & bootable, reboot. now's the time to adjust some default config files and enable some services.
+
+make these files as you want, then copy them to a backup location. after a fresh arch install, restore them from that backup location to their original location.
+
+. edit
+  . /etc/systemd/logind.conf
+  . /etc/wpa_supplicant.conf
+  . /etc/pulse/default.pa
+. make `/etc/systemd/system/*wpa_supplicant*.service` have the following contents:
+
+----
+[Service]
+ExecStart=wpa_supplicant -i wlp64s0 -c /etc/wpa_supplicant.conf
+[Install]
+WantedBy=multi-user.target
+----
+
+. `systemd {enable,start} dhcpcd`
+. if using VirtualBox, keep the VM's optical drive. boot the VM, then go to VirtualBox's _Devices_ menu → _Insert Guest Additions CD image..._. `lsblk` should show an non-zero optical drive. mount it, then execute `VBoxLinuxAdditions.run &>1 | less`, which is located in the mountpoint.
+  . `sudo usermod -aG vboxsf $(whoami)`
+. set keyboard layout
+  . `localectl set-keymap dvorak-programmer`
+  . `localectl set-x11-keymap us pc105 dvp`
+
+.to mount virtualbox shared folders
+
+first you need to set folders: in the virtual machine's options, go to _shared folders_, and add a folder.
+
+.options
+folder path:: the path on the physical machine to mount
+folder name:: an arbitrary identifier for this (make one up here; you'll use it later)
+mount point:: a folder that must be present in the virtual machine. if path is relative, then it's assumed relative to the user's home directory.
+make permenant:: idk
+
+you can `sudo mount -t vboxsf <folder name> <mountpoint>` or instead put them in `fstab`:
+
+----
+# <folder name> <mountpoint>
+home /home/nic/nixos-home vboxsf rw,suid,exec,auto 0 0
+----
+
+where folder name is as specified in virtualbox's shared folders option dialog. btw, in the option dialog, do not check auto-mount; it's better for fstab to handle that.
+
+=== package managers
+
+you'll probably want to install `yay-bin` from the AUR. `yay` installs AUR packages à la `pacman`.
+
+. programs that will be run by root
+. programs that have to do with system services (like wpa_supplicant)? or should these all be done by nix as well? i like nix' xorg config more than xorg's usual config structure. applying such changes requires root access, yes? can i then just use smth like `sudo nix-install`?
+. package managers
+. fonts (though there's no real reason for this. i just feel like it.)
+
+following these rules, the root partition should be only 11GB.
+
+nix: general stuff. usual nix problems apply. but at least we get nixpkgs.
+guix: general stuff. prob. better than nix, but just speculation.
+pip: python
+
+=== running on VirtualBox
+
+if running arch vbox w/guest additions (which are already a part of nixos' virtualbox attribute), then you'll need to (in the vm):
+
+[source,sh]
+----
+mkdir mp
+version=(curl http://download.virtualbox.org/virtualbox/LATEST.TXT)
+wget http://download.virtualbox.org/virtualbox/$version/VBoxGuestAdditions_$version.iso
+sudo mount -tiso9660 VBoxGuestAdditions_$version.iso mp
+sudo mp/VBoxLinux*.run
+----
+
+arch is on kernel 5.9. nixpkgs has vbox 6.1.6, whose default guest additions need a patch for 5.9.
+
+i haven't gotten auto-mount w/read-only to work properly. recommend not setting read-only b/c many programs need access, e.g. `racket`, which, when used as a repl, at termination time, writes its shell commands to a history file.
+
+auto-mount w/full access does not work: i have auto-mount set for `/home/nic` on nixos to mount to `/home/nic` on arch, but when i login as "nic" on arch, i'm in the empty folder `/home/nic` on arch as though nothing had been mounted. however, if i login as `root`, then `ls /home/nic`, then i see all the expected files as contained in my nixos home.
+
+thus all i can do is disable both auto-mount & read-only, start the vm, login as root, `mount -t vboxsf nic /home/nic`, ^D, then login as nic.
+
+to improve upon the default 1024x1068 resolution:
+
+. set allotted video memory to 128MB
+. if the resolution isn't automatically adjusting to the window size, do `VBoxManage setextradata $vm_name VBoxInternal2/EfiGraphicsResolution 1920x1080`.
+
+==== running headless
+
+if you don't need a graphics environment on your arch machine, then you can run it headless, then ssh into it. now you can run an arch terminal without needing to worry about keyboard & pointer device capture or virtual display resolution.
+
+.on your host os
+
+in the virtualbox manager, go to your arch vm's settings → _Network_, and add a new network adapter with _Attached to_ field as _Host-only adapter_. now when the hosts starts, assuming that dhcpcd is running on it, when you do `ip a` on it, you'll get a ip address that you can ssh into from your host os. the NAT adapter gets you the host's internet connection, and the host-only adapter gets an ip address that you can ssh into from the host.
+
+.on arch
+
+. install `openssh`
+. you may want the line `PermitRootLogin yes` to be present in `/etc/ssh/sshd_config` (if you're too lazy to set up ssh keys, like i am)
+. if you're sharing folders with your host os, add such lines to `/etc/fstab`: `<folder name> <mountpoint> vboxsf rw,suid,exec,auto,nofail 0 0`
+
+now you can basically run arch as though it were its own shell, inside the comfort of your usual terminal!
+
+to start your VM from a terminal: `VBoxManage startvm <arch vm name> --type headless`. to get the ip address that you'll ssh into, run `ip a` on the host os, and you should see a virtualbox device (e.g. `vboxnet0`); use its ip address.
+
+NOTE: you'll probably want to change your prompt string (`PS1` in bash) to show that the shell session is of the VM instead of the host
+
+= current concerns
+
+* apparently there's a strong need to use x config files rather than manually using xinput, since these settings are apparently reset _sometimes_
+
+== cf other oses
+
+* why arch instead of a containerized distro?
+* rancheros is built on docker, running it as PID1. docker replaces systemd here.
+  * cf fedore coreos (the successor to the now unmaintained coreos). all containerized distros are specialized to be run in clusters, yeah?
+  * how's gnu shepard coming along? 
+* cf bsds
+  * linux binary compatibility...or not?
+  * openbsd
+    * openbsd is unfathomably complicated to install
+    * complete lack of locale support? lacking utf8 support? wtf?
+  * freebsd
+    * holy fuck the default shell SUCKS! no tab completion nor readline!?
+  * freebsd & netbsd support ALL the architectures!
+  * bsds are like less-tinker-happy, simpler linux. thus if you want to be able to run all manner of tinkerware (esp hw support), then linux is a much better idea.
+  * not rolling release
+  * both arch & freebsd are minimal
+* i've heard that netbsd is simpler than arch (though more difficult to install). surely it's minimal, fast, and still supports all the same ports, right?
+
+= considering the nature & design of package management
+
+* why have a package manager? packages should install themselves and tell their own dependencies! (prob. using PKGBUILD format, since that's the bare minimum needed to describe a package.) what if we had _dynamic installation_? instead of knowing deps up-front, run a program; if it tries invoking a program that doesn't exist, look it up in an index (not repo: _index_); then download and build it right there from the index. NOTE: this argument against this is faulty: "then we won't know if it works or not" because there's no knowing whether a program works until you run it anyway. shit fails to start, or do its single function, all the time!
+* surely the stupidest shit i've ever heard is making a package manager for a particular distribution or programming language. what the FUCK does the nature of the packages have to do with package management?
+
+shell must have a _topic_ like in the Japanese language. operations will be about the topic; they will be logged, then can be saved, then generalized into a script that can be mapped over other such topics, matching given predicates, etc.
+
+you should never trust an aur or pacman package to build, run, or run properly. nix packages usually fully succeed. thus use nix by default, then arch whenever nix fails. write a script to remove arch packages that you didn't explicitly install, to keep free disk space.
