@@ -2,14 +2,16 @@
 
 * maybe embedding your request handlers into the server code itself is fastest, but scgi shouldn't be much less efficient, but is more flexible logistically, such as supporting arbitrary runtimes, languages, and can even be run on separate machines.
 
-== servers
+== web servers
 
-to echo http requests, simply run `netcat -l -p 8080` then after it echoes, do ^C to close the connection.
+TIP: instead of using one web server, you can use two: one that specializes in being a web server, and one available in your programming language of choice in which you code the actual logic. the web server forwards the requests to the application server, and the application server gives back to the web server; thus the web server is acting as a proxy. however, the user is unaware of it, and the server is; this is the opposite of the usual use of a proxy; hence the web server is called a _reverse proxy_. and the other is called an _application server_. this is basically the same as `inetd(8)`.
+
+to echo http requests, simply run netcat as a server (`netcat -l -p 8080`) then use an http client to send a request to `localhost:8080`; netcat will print the request, then you can ^C to close the connection.
 
 * link:https://github.com/fastly/pushpin[pushpin] is a reverse proxy for api push requests
 * busybox's httpd. dunno about this, since documentation is little, but it's an option that's worth remembering in case it becomes useful.
 * link:https://acme.com/software/thttpd/[thttpd (by acme)]. dead-simple config. it's not supported; link:https://github.com/blueness/sthttpd[sthttpd] is a fork that supposedly exists to be active, fixing bugs/vulnerabilities as they're found. however, it has open prs and the last commit was a pr merge in 2017.
-* althttpd (link:https://sqlite.org/althttpd/info?name=tip[download] | link:https://sqlite.org/althttpd/doc/trunk/althttpd.md[readme]) is made by the authors of sqlite. it's plainly capable, easy to use, has no dependencies (except `libssl` and `libcrypto` when https is needed), and compiles in a second! yay!
+* althttpd (link:https://sqlite.org/althttpd/info?name=tip[download] | link:https://sqlite.org/althttpd/doc/trunk/althttpd.md[readme]) is made by the authors of sqlite. it's plainly capable, easy to use, has no dependencies (except `libssl` and `libcrypto` when https is needed), and compiles in a second! yay! only supports HTTP/1.1, though.
   ** no config file; cmdline opts only.
   ** statically serves files unless theey're executable, in which case they're used as cgi
 * lighttpd. probably very good. has a custom config syntax, which is small and link:https://redmine.lighttpd.net/projects/lighttpd/wiki/Docs_Configuration[simply documented]. cgi is weird e.g. wtf is `cgi.assign = ( "" => "" )` about?
@@ -17,15 +19,26 @@ to echo http requests, simply run `netcat -l -p 8080` then after it echoes, do ^
 * link:https://github.com/civetweb/civetweb[civet] is a fork of mongoose before they dual-licensed. MIT license. has many features that i don't understand/need.
 * redbean is worth study for developing a web server
 * https://lwan.ws/[lwan] sounds like the best thing ever, for what it is: a web server implementing a subset of HTTP/1.0 & HTTP/1.1 without a security focus, but with such good code that security is implicit. made as a product of exploration of / experimentation with low-level apis to see how tuned a web server could be. it doesn't prioritize features.
-* link:https://github.com/caddyserver/caddy[caddy]'s main feature is that it uses tls by default and makes doing so easy. otherwise, though large, seems not only sensibly designed, but _well_ designed.
+* link:https://github.com/caddyserver/caddy[caddy]'s main feature is that it uses tls by default and makes doing so easy. otherwise, though large, seems not only sensibly designed, but _well_ designed. supports HTTP/1-2-3.
+* openbsd's httpd. i haven't learned about it but i hear that it's very good.
 
 === cgi scripts
 
 * envars corresponding to request params are set. any POST body is on stdin.
 * output must be headers\n\nbody, and headers cannot be empty.
 
-example cgi vars set by althttpd:
+this simple cgi script, `mypath`, lists envars set by `althttpd`:
 
+.`mypath`
+[source,sh]
+---------------------------------------
+echo -ne "Content-Type: text/plain\n\n"
+env|sort
+---------------------------------------
+
+the script is has filepath `mypath`, so when the uri path `/mypath` is requested, `mypath` is run. if you want cgi for uri path `/` or the empty uri path, then name your cgi script `index.html`.
+
+.``mypath``'s output
 -------------------------------------------------------------------------------------------------------------------------
 DOCUMENT_ROOT=.
 GATEWAY_INTERFACE=CGI/1.0
@@ -48,17 +61,6 @@ SERVER_PROTOCOL=HTTP/1.1
 SERVER_SOFTWARE=althttpd 2.0
 -------------------------------------------------------------------------------------------------------------------------
 
-i used this simple cgi script to produce the vars subsequence:
-
-.mypath
-[source,sh]
----------------------------------------
-echo -ne "Content-Type: text/plain\n\n"
-env|sort
----------------------------------------
-
-the script is has filepath `mypath`, so when the uri path `/mypath` is requested, `mypath` is run. if you want cgi for uri path `/` or the empty uri path, then name your cgi script `index.html`
-
 ==== althttpd
 
 thoroughly read `althttpd.md` (comes in the src tarball) and the initial comments in `althttpd.c` before continuing!
@@ -78,13 +80,13 @@ https support must be compiled-in: download the source tarball, extract, `cd`, `
 
 ===== chroot
 
-althttpsd runs only inside a chroot for security purposes, which is severely limiting and cumbersome, so we must account for these:
+althttpsd runs only inside a chroot for security purposes, which is cumbersome:
 
-. b/c chroot's whole purpose is to restrict filesystem access, you must set-up a copy of a subset of the filesystem hierarchy (namely `/usr/bin`, `/usr/lib`, and `/lib64`). from within a chroot, you cannot access these crucial directories.
-. you cannot execute http requests from any program called by althttpsd; the chroot messes with dns resolution, certificate management, and who-knows-what-else
+. b/c chroot's whole purpose is to restrict filesystem access, you must set-up a copy of a subset of the filesystem hierarchy (namely `/usr/bin`, `/usr/lib`, and `/lib64`), since within a chroot you cannot access these crucial directories, so we must re-create them within the chroot.
+. the chroot messes with dns resolution, certificate management, and who-knows-what-else, so trying to work around properly setting-up a chroot isn't easy, if possible at all.
 . you must run `althttpsd` as the root user (just as `chroot` generally runs only for root) and use its `-user` cmdln parameter to downgrade to a less-powerful user. use a user that's used only for this outward-facing server process; the whole point of all this hassle is limiting the permessions of the althttpsd process as much as possible, to limit the damage that an attacker could do should they fully exploit the process. ever being root totally goes against this intent, but it's needed to bind to ports under 1024. seems pretty stupid, but whatever. it is what it is.
 
-therefore it's easiest to have althttpsd be a reverse proxy; put only the minimum functionality in cgi scripts: passing envars set by althttpsd to a separate "application" server, which does the actual computation and sends a response to althttpsd. there may be easier reverse proxies available. i like althttpsd because it's small, simple, easy to learn how to use, and already serves static files, too. this being said, it'd probably be just as easy to use an app server, squid, and darkhttpd.
+i'm assuming that you'll use althttpsd as a reverse proxy by using cgi, fastcgi, or scgi, which means having your "application" server/program(s) use envars set by althttpsd to compute a response for althttpsd to serve. there may be easier reverse proxies available. i like althttpsd because it's small, simple, easy to learn how to use, and already serves static files, too. this being said, it'd probably be just as easy to use an app server, squid, and darkhttpd.
 
 anyway, althttpsd isn't the only server that requires a chroot, so it's good to know how to setup one.
 
@@ -94,7 +96,7 @@ TODO: it's been suggested that one can somehow, inside chroot, `mount -o bind` i
 
 ====== example
 
-i need bash & netcat for my cgi script. assume that i'm in the directory in which i'll run althttpsd.
+suppose that i need bash & netcat for my cgi script. assume that i'm in the directory in which i'll run althttpsd, namely `/home/nic/webProject/`.
 
 [source,sh]
 ---------------------
@@ -130,19 +132,23 @@ according to ``ld.so(8)``'s manpage, on my 64-bit system, dependencies without s
 . use `realpath(1)` to search for symlinks. you may search either the source (e.g. `/lib64/`) or destination (e.g. `./lib64/`) for the files, since they're the same.
 . for those that are symlinks, copy the files to which they link
 
-determining then recreating bash's dependencies:
+i'll proceed by recreating bash's dependencies first:
 
 [source,sh]
 -----------
-# copy links
+# copy filesystem objects (namely files or symlinks)
+# the paths are the left side of the =>'s in ldd's output
 $> cp -a /lib64/{libreadline.so,libc.so.6,libncursesw.so.6,ld-linux-x86-64.so.2} lib64
+
+# the -a option was important! observe that some of the files that we copied were symlinks:
+# the `-a` flag copies links as links rather than following them
 $> stat lib64/* | grep File
   File: lib64/ld-linux-x86-64.so.2
   File: lib64/libc.so.6
   File: lib64/libncursesw.so.6 -> libncursesw.so.6.5
   File: lib64/libreadline.so -> libreadline.so.8
 
-# files that i still need to copy
+# list broken symlinks; i must copy the corresponding files from actual root directories into my "fake" root, so that the links are no longer broken.
 $> while read -d $'\n' x; do if test ! -e "$x"; then echo "$x"; fi; done <<< "$(realpath lib64/*)" | sort -u
 /home/nic/webProject/usr/lib/libncursesw.so.6.5
 /home/nic/webProject/usr/lib/libreadline.so.8.2
@@ -164,11 +170,15 @@ $> while read -d $'\n' x; do if test ! -e "$x"; then echo "$x"; fi; done <<< "$(
 sudo chroot . usr/bin/bash
 -----------
 
-if netcat had dependencies that bash hadn't had, then we'd include those dependencies in this process; copy all executables' dependencies altogether in this one step, rather than doing all this for each executable. and because althttpsd is not running in the chroot (it only creates a chroot as a child process), we don't need to copy libcrypto nor libssl.
+if netcat had had dependencies that bash hadn't had, then we'd include those dependencies in this process; copy all executables' dependencies altogether in this one step, rather than doing all this for each executable. and because althttpsd is not running in the chroot (it only creates a chroot as a child process), we don't need to copy libcrypto nor libssl.
 
 TIP: why not to just copy the dependencies to their resolved paths is that possibly many executables refer to common shared objects by different names. we can have multiple links all of different names that point to one common file, and this is better than keeping multiple copies of the same file each having different names.
 
-NOTE: the below process is supposed to work, but didn't work for me; apparently there are dependency library files that aren't mentioned in `ldd`? i conclude this because i found success when i copied the _entirety_ of the lib dirs:
+====== appendix: variants of this process that have been supposed to work, but don't
+
+before i developed the above method, i first tried to learn from others. here are some solutions that i was told work, but didn't.
+
+apparently there are dependency library files that aren't mentioned in `ldd`? i conclude this because i found success when i copied the _entirety_ of the lib dirs:
 
 [source,sh]
 ------------------------
@@ -200,7 +210,7 @@ cp -a /usr/lib64/ld-linux-x86-64.so.2 usr/lib64
 cp -a ~/.local/bin/k .
 -----------------------------------------------
 
-althttpd returns 0B if you request a cgi page that fails to run properly, which is totally unhelpful. to debug, it's useful to be able to run your cgi scripts in a terminal, under chroot, so that you can actually see the output. idk, maybe i can get althttpd's logging to, yk, _actually log_, instead of doing literally nothing about it. anyway, to get your favorite shell (or whatever the hell shell you happen to have), we repeat the process:
+althttpd returns the empty response if you request a cgi page that fails to run properly, which is totally unhelpful. to debug, it's useful to be able to run your cgi scripts in a terminal, under chroot, so that you can actually see the output. idk, maybe i can get althttpd's logging to, yk, _actually log_, instead of doing literally nothing about it. anyway, to get your favorite shell (or whatever the hell shell you happen to have), we repeat the process:
 
 . `whereis bash` tells `/usr/bin/bash`, `/usr/lib/bash`, and others which i don't need: includes, and man & info pages. `ldd /usr/bin/bash` gives:
 
@@ -221,13 +231,9 @@ cp -a /usr/lib/{libreadline.so.8,libc.so.6,libncursesw.so.6} usr/lib
 cp -a /usr/lib64/ld-linux-x86-64.so.2 usr/lib64
 --------------------------------------------------------------------
 
-NOTE: the `-a` flag copies links as links rather than following them. `-a` has been used in some people's examples, but not everyone's.
-
-NB. all procs executed in the chroot child procs thereof.
-
 NOTE: chroot can be run only by root, so chroot can't be a problem when running `althttpd` as a non-root user; however, in this case you must use a port above 1024, which is unsupported often, such as if you want to use localhost as an oauth2 callback uri and your oauth service doesn't support ports in the uri.
 
-one more note before we run our server! althttpsd will refuse to run a cgi program if it's writable by users other than its owner. this is considerable because the cgi will run as the user specified in the `-user` option. this user cannot write to the filesystem if those permissions are not set! e.g. in my root i have both the webserver directory structure as well as some code that i as my normal `nic` user (GID 1000) run. when i'm running things manually, i'm `nic`, and, being that `nic` is the owner of the directory (because it's in my home folder), by default only `nic` can modify the filesystem there. thus when i ran my cgi script, i got an io error b/c it didn't have permission to write to a new file. i tried `chomd -R o+rwX <webroot>` but that produced the "cgi program is writable by users other than its owner" error; `chmod o-w <cgiScript>` fixed that problem, but even better would be to have nothing writable by the wub user (e.g. `nobody` or `www`) except for specific directories/files which you know that the cgi scripts should be able to modify.
+one more note before we run our server! althttpsd will refuse to run a cgi program if it's writable by users other than its owner. this is considerable because the cgi will run as the user specified in the `-user` option. this user cannot write to the filesystem if those permissions are not set! e.g. in my root i have both the webserver directory structure as well as some code that i as my normal `nic` user (GID 1000) run. when i'm running things manually, i'm `nic`, and, being that `nic` is the owner of the directory (because it's in my home folder), by default only `nic` can modify the filesystem there. thus when i ran my cgi script, i got an io error b/c it didn't have permission to write to a new file. i tried `chomd -R o+rwX <webroot>` but that produced the "cgi program is writable by users other than its owner" error; `chmod o-w <cgiScript>` fixed that problem, but even better would be to have nothing writable by the web user (e.g. `nobody` or `www`) except for specific directories/files which you know that the cgi scripts should be able to modify.
 
 so finally, run `sudo althttpsd -port 443 -user nobody --cert localhost+2.pem --pkey localhost+2-key.pem`. choose a username that isn't running any other proccesses, since any process run by a given user can affect other procs run by that user. `nobody` is fine for me, but if you're running other procs as `nobody`, then you should create an account, e.g. `www`, exclusively for running your web server.
 

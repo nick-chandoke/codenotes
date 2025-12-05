@@ -152,3 +152,7 @@ dup [ dup file-exists? [ directory? f "is not a directory" ? ] [ drop "does not 
 (written in factor b/c the linux api is unusable.)
 
 still, this code is cleaner & shorter than the functional variant!
+
+''''
+
+TODO: merge this into "fns (and so also lambdas) considered harmful" and "higher-order fns suck". lambdas are just a delayed execution primitive. if & case are also such examples. should the user be able to define their own places of delayed execution? why not have a well-designed, particular delayed execution primitive built into the language, without the user being able to define their own (so like a better version of `case`)? again, consider apls, which use e.g. group or sort without higher-order fns. also, compare macros to higher-order fns. macros are really the exact same thing but which execute at parse time, right? this really begs the question of why anyone would ever want to use a macro instead of a higher-order fn. even in k i defined `case` as a higher-order fn. k has no macros.

@@ -110,3 +110,30 @@ also, code that uses numbers is symmetric, mathematically elegant. consequently,
 each datum or mathematical object is, insofar as it's meaningful, its information. we already know that all info is representable as sequences of bits, and that machine code is the ultimate form of all code that we write & execute, and and risc-v architecture gives all that we need, and it has only `mov`, arithmetic, `jz`, `jmp`, & `lea`. no types, no higher order functions, no language. so we don't need any of that.
 
 suppose that we want to represent `Maybe Positive-Real`; of course we can represent any negative number as `Nothing`, and all positive numbers as `Just` values. but what about `Maybe Real`? a `double` represents all real values, leaving so space for `Nothing`, right? well, actually, no. it has positive & negative infinity, and NaN. surely one of those can represent `Nothing`. supposing not, though, we can represent `Maybe Real` as the duple, `(Boolean, Real)`, or in c, `struct MReal{boolean b; double val;}`. this has painfully bad alignment, so thank goodness for NaN, but still more efficient than most more-featureful languages. in other words, any type can be represented as a product type [adts, type theory] of primitves. this is like prime factorization for types. sum types represent dispatch; they can be represented by `switch` on a number corresponding to the nth constructor of the sum type, where each `case` [c] is like `case` in haskell. you can create an `enum` corresponding to the constructors. if you're storing an array of sum types,...i haven't thought about it, but obviously the naive method of, for each element, allocating space for the largest of the sum type's constructors. idk if there's a better general method, though certainly, frequently you can do better per situation where you'd allocate memory for them, and certainly it's better to exploit primitives (exploit their arithmetic properties) as much as you can, only ever _resorting_ to using multiple primitives to represent a compound type.
+
+== appendix a: arithmetic patterns
+
+* if you can't convert a simd mask to an integer directly, then you can use dot product, since dot product of an array of digits with an array of the nth powers of a radix equals the number itself e.g. `{ 2 5 9 } { 100 10 1 } vdot` is 259.
+* TODO: put the I./2 simd pattern here
+
+=== ℤ/2 (boolean) vs ℤ
+
+* comparisons (=, < etc): difference (-)
+* in interval: where in interval (as a % or other real valued measure)
+* outside interval: shortest distance to interval boundary
+* in multiset: count
+* in set: n/a
+* in indexed set (e.g. sequence, array, sql relation): indices
+
+suppose that we want to store a set of indices, and we want to get an arbitrary element out, separating it from the rest of the set i.e. we uncons/pop the element. in my case, i need 5250 elements. to express this as integers, i need 5250 u16's: 10500 bytes. however, if i instead store it as a bit vector, then it's only 657 bytes. this encoding affords its efficiency by exploiting the order of bits. a collection of integers stores either each element without regard to order (i.e. a set) or with regard to order (a sequence), but this latter case is redundant because the sequence's order is already present in the elements' natural order. however, instead of just popping an element, we must find the index of the first or last set bit, which is a linear search over 657 elements. perhaps there's potential here, but maybe this use case is rare.
+
+=== predicates & sets
+
+* minus (namely set difference): "and not"
+
+if you're iterating through monotonic values, then instead of testing equality, you can test greater or less than. for example, if you're streaming timestamps of live events, and you want to perform an action each time that the new timestamp is of a different day than the prior/current, then start with an initial value of infinity (or the largest integral value of a given size), then do `var now = infinity; loop(streamer, fn(newTime) {if (day(new) > day(now)) action; now := new});` similarly, it's cool that floating-point NaN's are a "never equal" object. sadly, however, there is no standard "always equal" object. also even that is floats-only.
+
+== appendix b: arithmetic schemes
+
+* ascii/unicode codepoints for digits are the interval [0x30,0x39]
+* for /[A-Za-z]/, the 5th (starting at 0) msb is the case: set for minuscule, unset for majiscule. thus for these characters `: >lower ( A -- a ) 0x20 bitor ;` 

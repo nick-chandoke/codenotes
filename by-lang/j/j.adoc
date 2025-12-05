@@ -1130,9 +1130,13 @@ TODO: cf I. & m&i. ; they both use efficient lookups.
 
 == verbs
 
+TODO: this section needs great revision
+
 note that each row of link:https://code.jsoftware.com/wiki/NuVoc[nuvoc]'s table is _operator_ then _operator with dot_ then _operator with colon_.
 
 one can use gerunds for conditionality e.g. +++f`g`h@.(m&i.)+++ or if you want `cond` like in lisp, then you'll need to defer evaluation of both conditions and corresponding bodies; to do this in j, simply have all your conditions and bodies both be gerunds; then fold (`F:.`) through your conditions, returning (exiting early using `Z:`) the index of the first one that evaluates to `1`, then pass that to `@.`.
+
+consider the k scan `{y*y+x}\` (`0 [ [ + ] keep * ] accumulate*` in factor). in j, it's expressed as `0]F:.([*+)`, or `([*+)/\.&.|.`.
 
 NOTE: to avoid the usual b.s. about packaging into tuples, then extracting, performing ops on each, then repackaging, to make the accumulator be a single (composite) datum, just keep each separate datum on each row then use gerunds & rank (`"`) to compute over all rows simultaneously. it's common to use `u/` to combine the result of 2 gerunds.
 

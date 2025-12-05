@@ -1,7 +1,6 @@
 == special notes on installing arch linux
 
-my opinionated guide, with special considerations for virtualbox.
-
+my opinionated guide, with special considerations for virtualbox. these notes are readable and give a clear overview of the whole install process, but they only accompany the link:https://wiki.archlinux.org/title/Installation_guide[arch install guide], since there is so much detail and so much to consider for each installation. these notes' major benefit compared to that install guide is that they're formatted very obviously, as opposed to the wiki, where it's hard to tell where sections end because it's hard to visually tell which section is a subsection vs the next section. box elements also break text flow. this is a problem with the j wiki, too, btw. it isn't an issue with wikipedia, however. idk about wiki's (i'm opposed to them—more generally, opposed to any kind of complex markup), but it's something for wiki maintainers & users to consider.
 
 TODO: virtualization softwares other that virtualbox, e.g. _GNOME Boxes_ and _virt-manager_
 

@@ -26,7 +26,7 @@ pro's:
     *** no scope—just position in the stack.
     *** multi-valued functions act exactly as single-valued ones. all programs are function composition.
       **** factor also supports both lexically and dynamically scoped symbols
-* awesome debugger ("the walker")
+* awesome debugger ("the walker") and profiler (`tools.profiler.sampling` vocab)
 * documentation & source code browsing system: navigable, thorough, offline, and dynamically populated, like in emacs: loading your code automatically makes it searchable in the browser just like any other library.
 * dynamic. though lisp-like macros which evaluate before runtime are available, factor effectively uses quote & eval _instead_ of lambdas. therefore there's rarely a need for macros in factor. factor is so data-oriented that a programmer practically never desires custom syntaxes. indeed, factor macros are more _needed_ when manipulating a number of stack data where the number is given at parse time.
 * virtual sequences make sequence operations efficient
@@ -55,6 +55,7 @@ fixed-arity fns isn't an issue. it's just as well to have a function by one name
 ok, so these notes are:
 
 . overview: why factor is a good code language & system
+. basic factor: its syntax, mechanisms, style, primitives. then use it as a vehicle to discuss concatenate programming.
 . concatenativity
   .. stack, and coding in a cat/stack lang well
 . basic description of factor's vm, language & execution model
@@ -62,6 +63,42 @@ ok, so these notes are:
   .. this section is critical! one must be told the small set of useful words, as browsing through vocabs, large as they are, is unreasonable and draining, especially to find words such as `glue` which are purely for brevity, not representing any unique concept/operation.
 . the listener, walker, and documentation browser
 . useful vocabs, sectioned by purpose
+
+NOTES THAT I'M PUTTING HERE B/C IDK THIS DOC'S STRUCTURE:
+
+exceptions note: they're shown in the listener e.g.
+
+--------------------------------------------
+Unix system call 'open' failed:
+No such file or directory (2)
+It was called with the following arguments:
+"/home/nic/nothere.doc"
+0
+438
+--------------------------------------------
+
+but when running the same code in a compiled executable, you must enter `.s` to print the error as a datum on the stack:
+
+----------------------------------------------------------
+You have triggered a bug in Factor. Please report.
+critical_error: The die word was called by the library.: 0
+Starting low level debugger...
+Basic commands:
+  q ^D             -- quit Factor
+  c                -- continue executing Factor - NOT SAFE
+  t                -- throw exception in Factor - NOT SAFE
+  .s .r .c         -- print data, retain, call stacks
+  help             -- full help, including advanced commands
+
+> .s
+==== DATA STACK:
+T{ #<not a string: f> { "/home/nic/nothere.doc" 0 438 } 2 "No such file or directory" #<not a string: f> }
+T{ #<not a string: f> "Initial" [ ] [ ] 11 T{ #<not a string: f> f f } f #<not a string: f> f T{ #<not a string: f> 0 0 { T{ #<not a string: f> f } T{ #<not a string: f> f } T{ #<not a string: f> f } T{ #<not a string: f> f } } } f }
+----------------------------------------------------------
+
+''''
+
+`flushable` words don't propogate e.g. `5 1 1 - /` will compile (cf `5 0 /` will crash the compiler); apparently `1 1 -` becomes 0, but in the context of `/`, that's considered run-time-computed.
 
 .interesting concatenativity example
 
@@ -142,7 +179,7 @@ we'd do `now [ swap time- duration>seconds 30 < ] curry filter`, but were we to 
 
 remember: your code should clearly associate data with operations. `cleave` associates one datum with many ops. `napply` associates multiple data with one op. `spread` associates with each of many data an op. then there are variants, such as `2tri`, which associates two data with 3 binary ops.
 
-stack management is always simple and organic:
+stack management is almost always simple and organic:
 
 . put together fragments of code as they occur to you. notice which data they consume. 
 . produce those data and put them on the stack
@@ -366,6 +403,7 @@ using many small words is easy in catlangs because we merely copy/cut & paste. m
 
 i defined `c>t` in terms of `dm>timestamp`, and `some-fn` in terms of `timestamp>sec` & `c>t`. true, in factor i must put the stack signature whenever i define a word, but that's little refactoring. to define such granulatiry in an applicative language is cumbersome:
 
+.TODO: this example isn't even fully translated?? what was i doing...?
 -----------------------------------------------------------------
 fn timestamp>sec(t) int { timestamp>millis(t)/1000 }
 #pragma inline timestamp>sec
@@ -438,6 +476,8 @@ it's been suggested that the stack is not suitable for some coding; comomnly the
 ------------------------------------------------
 
 i consider this code more elegant than applicative versions. coming-up with the code wasn't a struggle; in fact, it was quite simple & plain: just identify that there are some computations with `f(b)`, `g(b,c,a)`, then `a`, so naturally we want `b` on the bottom of the stack, `c` & `a` in the middle, and `a` on top.
+
+this is a good example of the stack's constrained model. surely many people coming to a stacklang from an applicative lang will express dismay about needing to order items on the stack. yes, it is extra work. however, organization is the benefit. to a factor-familiar programmer, applicative code looks like true spaghetti code: all sorts of variables with all sorts of names being passed all around across many scopes [namespaces]. (it's verbose as hell, also.) indeed, applicative code is easier to write, but harder to understand. to visualize it, imagine wires running from data to their call/argument sites. applicative code looks like a breadboard with wires all over, whereas factor code looks like many distinct tight bundles of wires. (TODO: make a graphic 'n' put it here) *factor users understand that writing code is less important than understanding the code: the structure/order/information of the data and their relations.*
 
 of course, the solutions that you see on link:https://rosettacode.org/wiki/Roots_of_a_quadratic_function#Factor[rosetta code] are a bit more complex because they have special consideration for numerical precision.
 
@@ -635,7 +675,11 @@ in general, avoid combinators except `keep`. use combinators only for their brev
 
 == continuations
 
+TODO: relate continuations, threads, and errors.
+
 a _continuation_ is a point of execution. for example, in `3 4 5`, the continuation begins before 3. after 3 is evaluated, then the continuation is at 4. the continuation is the cursor in a program (a sequence of words); it's a position to execute from. see <<_factor/j_bilateral_translation_table>> for a simple example.
+
+* `error-in-thread` error is thrown whenever an error occurs and is uncaught or rethrown and breaches the outermost error handler
 
 === other considerations
 
@@ -720,9 +764,37 @@ nb. i use _cuc_ to mean "code under cursor in input field."
   ** `t` is the canonical truthy value
 * `{ 1 2 3 } dup [ [ 1 + ] map! ] dip . .` prints `{ 2 3 4 } { 2 3 4 }`. therefore `dup` duplicates, at least for non-primitives, a pointer, and arrays are mutable...? this seems to suggest so, but `{ } 3 suffix!` confoundingly fails with _sequence index out of bounds_. this example fails when i use `3 [0,b]` instead because ranges are immutable.
 
-.concurrency & parallelism
+=== concurrency & parallelism
 
 see vocab `threads`, vocabs tagged with `concurrency`. parallelism words are in `concurrency.combinators`.
+
+==== `timers` (vocab)
+
+example: change variable at a given time:
+
+[source,factor]
+----------------------------------------------------------------------------------
+[let 0 :> offset!
+  [ 100 offset! ] 6 seconds later
+  drop ! create & start timer. timer object is returned on stack, but i discard it
+  10 [ offset + . 1 seconds sleep ] each-integer
+]
+----------------------------------------------------------------------------------
+
+prints
+
+----
+0
+1
+2
+3
+4
+5
+106
+107
+108
+109
+----
 
 == special builtins
 
@@ -1031,7 +1103,7 @@ all this to say: _never_ use `loop` and `unclip-slice` together. this isn't hask
 
 and it's better to use direct access than sequential access because it considers elements independently of others, enables getting multiple elements at once (array programming) and not tracking context. consider zippers (data structure). they represent the context at one and only one index, and they need a whole data structure for that! contrast this with a set of indices, which represents any number of contexts simply. the obviousness of it is supreme.
 
-an example of "augh! this looping control flow is too complex. let's just modify the stack." is, given two lists A & B, generating `{ { a bs } ... }` where a∈A and bs(a) is the substring of `B` all of whose values are greater than or equal to `a`, when `A` & `B` are both sorted ascending. your first idea may be to use `accumulate*` because B progressively becomes a substring of itself. scans/folds are associated with iterative mutation. however, we're also mapping over `A`! `2reduce` doesn't help b/c we aren't _mapping_ over `B`; we're progressively modifying it in total. this is not a 1:n map. it's a 1:n reduction. it's worth mentioning that an efficient solution (enabled by `sorted-index`) is given by arrays; see the definition of `join<` in _§using the stack well_. such solutions should always be preferred. however, suppose that we use an alternative method which is not sensible for this scenario, but similar scenarios would entail these kinds of control flow concerns: at each iteration, return (a,{b|b∈B,a>=b}), removing all b<a from B for the next iteration.
+an example of "augh! this looping control flow is too complex. let's just modify the stack." is, given two lists A & B, generating `{ { a bs } ... }` where a∈A and bs(a) is the substring of `B` all of whose values are greater than or equal to `a`, when `A` & `B` are both sorted ascending. your first idea may be to use `accumulate*` because `B` progressively becomes a substring of itself. scans/folds are associated with iterative mutation. however, we're also mapping over `A`! `2reduce` doesn't help b/c we aren't _mapping_ over `B`; we're progressively modifying it in total. this is not a 1:n map. it's a 1:n reduction. it's worth mentioning that an efficient solution (enabled by `sorted-index`) is given by arrays; see the definition of `join<` in _§using the stack well_. such solutions should always be preferred. however, suppose that we use an alternative method which is not sensible for this scenario, but similar scenarios would entail these kinds of control flow concerns: at each iteration, return (a,{b|b∈B,a>=b}), removing all b<a from B for the next iteration.
 
 TODO: write this code when i have time
 [source,factor]
@@ -1043,6 +1115,8 @@ TODO: write this code when i have time
 accumulate*
 ! ; inline
 ----
+
+NOTE: `accumulate*! drop` is not the same as `accumulate! 2drop`! `accumulate!` includes the initial element as the first element of the output, whereas `accumulate*!` does not. `accumulate*!` is as in j, k, & haskell.
 
 `combinators.short-circuit` is a helpful vocab. example: `[ { [ sequence? ] [ integer? not ] } 1&&`, meaning scheme `(λ (x) (and (sequence? x) (not (integer? x))))`.
 
@@ -1549,7 +1623,7 @@ terminal: blank or ∈ ["'|{}=()[].!&*+?:~<>]
 
 == debugging
 
-there's no ^C (interrupt) on linux (but iirc there is on windows). to get around this, you can run `listener-window` to spawn a new listener window that shares global variables with the original. create a global variable that you'll set to `t` or `f` to choose whether to exit a loop e.g. you may `SYMBOL: stop? [ ... stop? get-global not ] loop` then you can run the loop in the original listener window and run `t stop? set-global` in the new window whenever you like to stop the loop.
+there's no ^C (interrupt) on linux (but iirc there is on windows). you can enable it ("Ctrl-Break handler" doc) but that's a bit risky. instead, you can run `listener-window` to spawn a new listener window that shares global variables with the original. create a global variable that you'll set to `t` or `f` to choose whether to exit a loop e.g. you may `SYMBOL: stop? [ ... stop? get-global not ] loop` then you can run the loop in the original listener window and run `t stop? set-global` in the new window whenever you like to stop the loop.
 
 firstly, using `prettyprint` is not apt for debugging a running program, though it's fine in the listener to print values that you don't want kept on the stack. to inspect values during runtime, use `B` (an alias for `break` in `tools.continuations` and the inspector (context-click an object then select "Inspector") or factor's logging framework. to produce values for logging, use `unparse` or `unparse-short` of the `prettyprint` vocab.
 
@@ -1599,20 +1673,23 @@ btw, yes, i'd later discover that this exact functionality is implemented by `co
 
 vocabs `logging`, `logging.server`; and less importantly: `logging.analysis`, `logging.insomniac`, `logging.parser`.
 
-factor comes with a framework for logging to log files.
+factor comes with a framework for logging to log files. to clarify the factor docs, never is logging automatically done.
 
 .example
 [source,factor]
 ----
-"myApp" ! here we name the log
-[ 10 0 [ / ] [ \ / log-error ] recover ] ! log-error logs a traceback. notice that log error takes a word as its top input.
-with-logging ! with-logging is needed to actually write to a log
-"myApp" log-path . ! where the log was written
+"~/here-be-logs"
+[ "myApp"                                ! name the log
+  [ 10 0 [ / ] [ \ / log-error ] recover ! log-error logs a traceback. notice that log error takes a word as its top input.
+                                         ! also, errors are not automatically logged; you must catch & log them yourself
+  ] with-logging                         ! with-logging is needed to actually write to a log
+  "myApp" log-path print                 ! where the log was written
+] with-log-root                          ! set the directory
 ----
 
 NOTE: use `path q with-log-root`, not `log-root path q with-variable`; the latter does not work, and the former has a specialized definition to accomodate multithreading.
 
-to disable logging temporarily,...huh, i thought there was some simple built-in functionality for that, such as setting off a dynamic variable. well, you can just replace `with-logging` by `log? get-global [ with-logging ] [ nip call ] if` after you've created the `log?` symbol.
+avoid using `with-logging` in your library code; use only `log-message` &al there, use `with-logging` only within the listener or in your main word. if you want to either log if possible, else print, use `log-root [ ERROR log-message ] [ drop print ] if`.
 
 === reading tracebacks
 
@@ -2075,6 +2152,8 @@ USING: http http.server http.server.responses prettyprint ;
 8080 httpd ! start the server on port 8080
 ------------------------------------------------------------------------------
 
+TIP: you may set `main-responder` to a `dispatcher` or a responder. also, there's an undocumented convenience word called `add-main-responder`. ignore it. btw, were i to write it, i'd write it as `over "" reach responders>> [ set-at ] curry 2bi@`; it's much more symmetric!
+
 run `stop-server: ( server -- )` whenever you're ready to shutdown & cleanup the server. see the `io.servers` vocab for more useful words, namely `stop-all-servers`, which is useful if you've accidentally lost the server object from the stack (or if you wanted to avoid ever needing to retain it on the stack!)
 
 .server with pages at /headers and /query
@@ -2108,7 +2187,7 @@ the responder paths' are split on slashes, and the first one is tested against t
 <dispatcher> "myroot" <static> "fs" add-responder
 -----------------------------------------------------------------------------
 
-if you're wondering how it is that it doesn't try to find the file at `/fs/path/to/file`, let me explain: the `path` input supplied to `file-responder`'s `call-responder*` method is a slice that doesn't include the head; this is so because the `path` parameter is supplied by the `dispatcher` class' `call-responder*` method which employs `find-responder`, which employs `rest-slice`. so this changes the `path` given to `call-responder*`; however, you'll find that `request get url>> path>>` is the full path including the leading `/fs`. the request object is never modified.
+so when the url path's first segment is `/fs`, the dispatcher will invoke `find-responder` which looks up a responder in a hashtable whose keys are the first segment of the uri path—in this case, a static file responder—then passes the uri path without the first segment to said responder. thus the uri path `/fs/path/to/file` translates to the filepath `path/to/file`. however, you'll find that `request get url>> path>>` is the full path including the leading `/fs`. the `request` object is never modified.
 
 this is by far the most elegant, simple, capable server design that i've seen. by this dispatch design, the url's path's 1st segment is the function, the rest of the path segments are the command line arguments, and parameters are given by the url's query. e.g. the command line `git commit -am 'my commit'` could be represented by the url `/git/commit?a&m=my20%commit`.
 
@@ -2699,6 +2778,8 @@ TIP: the types that can be used for specialized arrays' are c types: primitve ty
 
 .array of structs (AoS) vs struct of arrays (SoA)
 
+basically, store as a columnar database rather than a row-oriented one.
+
 depending on your coding situation and favored coding style, you might want to store your code a la apl, as vectors; instead of a struct each of whose fields stores one value (aka an "atom" or "scalar"), have it represent an array of values. if you have multiple variables each of which represents an array, then it's just called "array programming". if, however, you group multiple variables together, e.g. by putting them together as fields of a struct, then this representation is called a "struct of arrays" or "SoA", as opposed to an array of structs, "AoS". in apl it's called "inverted tables". or it can be described as a _column-major_ db table. this design is inherently more memory- & cpu-performant, regardless of programming language / runtime/vm, and, being of the array programming paradigm, enables all the wonders of that paradigm, provided that your language supports it.
 
 NOTE: factor structs don't support specialized array fields. rather, they do, but only in a roundabout way if you type them as `void*`. however, you can store them as a tuple, which is just as well, since the actual efficiency is in using specialized arrays, and we're just storing pointers to them anyway.
@@ -2748,6 +2829,8 @@ where `: (trades) ( ... ticker time-range q: ( results -- ... ) -- ... ) ... ;`
 * they support the following methods: `clone`, `length`, `like`, `new-sequence`, `resize`, `nth`, `set-nth`.
 * the fact of them being sequences means that they can be used with `map-as` or any word that uses `like` and/or `new-sequence`.
 * see document "Specialized array words" for other useful words.
+
+TIP: to virtually clear a specialized vector w/o manipulating memory, simply `0 >>length`
 
 .using tuple arrays
 
@@ -2800,7 +2883,8 @@ important notes:
 
 * the file did not end with a newline. if you're getting off-by-1 errors, check whether anything writing the file is writing a newline
 * i seeked to one byte before the string's length because `0 seek-end` sets the position to append to the file's end
-* seeking is sensible only in append mode / with a file appender, not in write mode / with a file writer. `<file-writer>` opens a file with mode `"wb"` (see `fopen(3)`) which truncates the file (discards its entire content then seeks to 0). `<file-appender>` uses mode `"ab"` which opens in append mode, which really should be called "overwrite mode", even though it does start the stream position at the file's end. the `b` is for _binary_, btw. append/overwrite overwrites anything already existing or else appends, expanding the file size.
+* seeking is sensible only in append mode / with a file appender, not in write mode / with a file writer. `<file-writer>` opens a file with mode `"wb"` (see `fopen(3)`) which truncates the file (discards its entire content then seeks to 0). `<file-appender>` uses mode `"ab"` which opens in append mode, which really should be called "overwrite mode", *even though it does start the stream position at the file's end*. the `b` is for _binary_, btw. append/overwrite overwrites anything already existing or else appends, expanding the file size.
+  ** wrt the bold text: if you want to overwrite select parts of a binary file, then you must use a file appender, but if you want the index to begin at the start of the file, use `0 seek-absolute seek-output`!
 
 tl;dr: think of `with-file-writer` as "set file content" and `with-file-appender` as "modify file content."
 
@@ -2809,11 +2893,31 @@ tl;dr: think of `with-file-writer` as "set file content" and `with-file-appender
 think of the integer argument passed to `seek-absolute` as "skip this number of bytes, then read." the same is true of writing, naturally. with a file called `TEST` whose content is `12345` followed by a newline, the following makes it `123ZZ` followed by a newline:
 
 [source,factor]
----------
+-------------------------------------------------------------------------------------
 "TEST" binary [ 3 seek-absolute seek-output "ZZ" B{ } like write ] with-file-appender
----------
+-------------------------------------------------------------------------------------
 
-==== inspecting binary files
+you can also read the last n bytes from a file—here, the last 10:
+
+[source,factor]
+-------------------------------------------------------------------------
+"TEST" binary [ -10 seek-end seek-output read-contents ] with-file-reader
+-------------------------------------------------------------------------
+
+==== reading & writing together
+
+factor doesn't come with a word to open files in "rw" mode (or "ra" mode). instead, just nest `with-file-reader` & `with-file-appender`. this example uppercases the first 12 (ascii) characters in place:
+
+[source,factor]
+-----------------------------------------------------------------
+"~/things" dup binary
+[ 12 read "" like >upper B{ } like swap
+  binary [ 0 seek-absolute seek-output write ] with-file-appender
+  0 seek-absolute seek-input 12 read "" like print
+] with-file-reader
+-----------------------------------------------------------------
+
+==== manually inspecting binary files outside of factor
 
 this isn't a factor-specific section, but it accomodates the other sections on working with binary in factor. it's good to have external tools to double-check your binary files whenever you doubt that your factor code is working correctly.
 
@@ -2939,6 +3043,8 @@ dark-mode listener-window
 then, in the new window: evaluate `S_ get-global set-datastack`.
 
 === bugs
+
+at least sometimes when calling `deploy`, it errors b/c `/tmp/factor-temp/` doesn't exist. simply making the directory manually fixes the problem.
 
 === stack effect checking defects
 
@@ -3114,3 +3220,8 @@ granted, ideally i'd add some delimiters for clarity, but this is sufficiently r
 == antipatterns & solutions
 
 * `[ at ] curry { a b c d } swap map first4-unsafe` should be `[ a b c d ] dip [ at ] curry 4 napply`, or if you want to apply functions to the key values, then you must use `{ [ a of f ] [ b of g ] ... } cleave`.
+* `dup q dip` should be `q keep`
+
+== PR's to consider
+
+* `calendar.unix:current-timeval` is defined in terms of the obsolete link:https://man7.org/linux/man-pages/man2/settimeofday.2.html[`gettimeofday(3)`]. link:https://man7.org/linux/man-pages/man2/clock_gettime.2.html[`clock_gettime` (with CLOCK_REALTIME)] (also posix) is recommended now. i would say "who cares since they do the same thing" but the manpage indicates that `gettimeofday` may be removed in the future.
