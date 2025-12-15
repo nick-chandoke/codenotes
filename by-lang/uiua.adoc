@@ -36,6 +36,17 @@ my interest in uiua in order:
   .. generalizes an asymetric glut of combinators to a single symmetric structure
   .. parsing programs is easy b/c prims don't have ambivalent valence
 
+.example of uiua vs factor
+
+goal: express λa b c x. (a+x)*(b*x-c). i give the uiua solution provided on its site alongside factor ones that i came up with:
+
+----------------------------------------------------------------------------------------------
+×⊃(+⊙⋅⋅∘|-⊃⋅⋅∘(×⋅⊙⋅∘))                      # given uiua solution
+-rot [ [ [ + ] keep ] dip * ] dip - *       ! factor solution with stack shuffling
+-rot [ [ + ] keep ] [ * ] [ - * ] tri*      ! same, but expressed using tri*
+[ + ] [ * ] bi-curry [ bi* ] 2curry dip - * ! factor solution using curry (no stack shuffling)
+----------------------------------------------------------------------------------------------
+
 == good designs
 
 * rtl, top of stack displayed at bottom. makes prefix operators e.g. √4 look normal

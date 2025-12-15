@@ -1,0 +1,3 @@
+part of my "considered harmful" series. implies that frameworks are also considered harmful.
+another way to phrase "just use lists". use factor's `cookie` as example.
+it's an example of arbitrary coupling, btw.

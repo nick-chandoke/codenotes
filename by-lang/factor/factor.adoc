@@ -481,6 +481,17 @@ this is a good example of the stack's constrained model. surely many people comi
 
 of course, the solutions that you see on link:https://rosettacode.org/wiki/Roots_of_a_quadratic_function#Factor[rosetta code] are a bit more complex because they have special consideration for numerical precision.
 
+.example of uiua vs factor
+
+goal: express λa b c x. (a+x)*(b*x-c). i give the uiua solution provided on its site alongside factor ones that i came up with:
+
+----------------------------------------------------------------------------------------------
+×⊃(+⊙⋅⋅∘|-⊃⋅⋅∘(×⋅⊙⋅∘))                      # given uiua solution
+-rot [ [ [ + ] keep ] dip * ] dip - *       ! factor solution with stack shuffling
+-rot [ [ + ] keep ] [ * ] [ - * ] tri*      ! same, but expressed using tri*
+[ + ] [ * ] bi-curry [ bi* ] 2curry dip - * ! factor solution using curry (no stack shuffling)
+----------------------------------------------------------------------------------------------
+
 === primitives
 
 `word` & `tuple` are the most general objects in factor. tuples are basically product types (ml-based langs e.g. haskell) or structs (c) or classes (oop langs). words are, as the docs say, "the fundamental unit of code"; a factor program is a sequence of words. the word which executes words, `(execute)`, is a primitve. macros (`MACRO:`) or syntax (`SYNTAX:`) are functions from words to words. words are most commonly functions defined by the `:` syntax, but may also be _symbols_—words which evaluate to themselves, just like symbols in lisp, except that the factor parser requires the programmer to explicitly declare words as symbols via the `SYMBOL:` syntax, rather than there being a literal symbol syntax—or classes, or maybe other things, too. words are not only functions in factor, though; it's just that they may be treated as functions, namely if their `def` attribute is set. run the following in the listener to observe the great amount of information stored in various words:
@@ -795,6 +806,23 @@ prints
 108
 109
 ----
+
+==== mailboxes
+
+"producer-consumer" example: spawn a background thread that handles data as it comes-in:
+
+[source,factor]
+-------------------------------------------------------------------------------
+USING: concurrency.mailboxes threads ;
+<mailbox> [ mailbox-put ] [ mailbox-get [ 10 + >dec write 32 write1 ] each nl flush t ] bi-curry
+"helper" spawn-server drop
+{  4     6 } over call ! print 14 16
+{ 99 102 5 } over call ! print 109 112 15
+-------------------------------------------------------------------------------
+
+the bg thread spawns & begins running immediately, but its first word, `mailbox-get-all` blocks immediately. i used `spawn-server` so that i can push arrays to the queue multiple times; if i'd used `spawn`, then on the first `mailbox-put`, the quotation would run, and then the thread would be...idk what the preferred nomenclature is—"finished?"
+
+TODO: if i don't encounter a real-world example myself, pull a full-blown multi-agent concurrency example from _parallel and concurrent programming in haskell_ or _java: concurrency in practice_.
 
 == special builtins
 
@@ -2132,12 +2160,32 @@ the thing that defines a responder is that it implements the generic word `call-
 
 TIP: if, for whatever reason, you want to define your own class that implements `call-responder*`, then know that `call-responder*`'s `path` argument is given as an array e.g. path `"/hi/there"` is given as `{ "hi" "there" }`.
 
-. the `response` class has obvious fields. `body` is the interesting part, since it's the actual payload. `body` may be a string, or anything else that implements `call-template*` (of the `html-templates` vocab).
+. the `response` class has obvious fields. `body` is the interesting part since it's the actual payload. `body` may be a string, or anything else that implements `call-template*` (of the `html-templates` vocab).
   .. `callable` is my preferred type for `body`. of course the `callable` that i use is just an inline quotation; even if i define a word e.g. `: my-responder ( -- ) ... ;`, then i use `[ my-responder ]` as the value for the response's `body`. as i mentioned recently, its effect must be `( -- )`. `callable` is it's so general and has smaller code and runtime complexities/costs than collecting into, then outputting, a string.
 . usually i do not directly set the `body` field of a `response`. instead, i pass the body value to `<html-content>` or `<text-content>` (of the `http.server.responses` vocab); both accept a body value, which is directly put into the `response` object
   .. yes, any class that implements `call-template*` may be passed to `<html-content>` or `<text-content>`!
   .. sometimes i may create a `response` myself, but it's usually easier to create one via `<html-content>` or `<text-content>`, then modify whatever few slots i want of the resultant `response`.
 . finally, i must pass the `response` to `<trivial-responder>`
+
+it seems that the only way for the response's http status code, headers, and other properties of the response to depend on the request is to create your own tuple type then make it implement `call-responder*`. in the following example, i define a responder just like `trivial-responder` except that whereas `trivial-responder` takes a response of a type implementing `call-template*`, my responder accepts only a quotation, and instead of the quotation producing a body alone, my tuple requires the quotation to write output to `output-stream` and return a `response`.
+
+.respond with status given by one of the request's url params
+[source,factor]
+-----------------------------------------------------------------------
+TUPLE: q-resp { responder callable } ; ! idk a good tuple name
+M: q-resp call-responder* nip responder>> call( -- resp ) clone ;
+[ <response> "status" param string>number >>code "you decide" >>message
+  utf8 >>content-encoding "text/plain" >>content-type
+  "howdy-doooo" >>body
+] q-resp boa main-responder set-global
+8080 httpd drop
+-----------------------------------------------------------------------
+
+an example request is `http://localhost:8080?status=420`. to observe the response's status code & message, use curl, or, in a web browser such as firefox, open the web inspector, click on the "Network" tab, then (re)load the url; look for the status in that "tray" window. remember that if you don't provide a proper natural number for status, factor will raise an error.
+
+since we're creating a whole response anyway, there's no reason to set the ``response``'s `body` to a quotation anymore. just use a string or stream. for the record, though, `[ "howdy-doooo" ] >>body` also works just fine.
+
+surely this is not what any of the factor devs expected, but i really am satisfied exclusively with writing a function from request to response.
 
 === example servers
 

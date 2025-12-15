@@ -19,10 +19,48 @@ to echo http requests, simply run netcat as a server (`netcat -l -p 8080`) then 
 * link:https://github.com/civetweb/civetweb[civet] is a fork of mongoose before they dual-licensed. MIT license. has many features that i don't understand/need.
 * redbean is worth study for developing a web server
 * https://lwan.ws/[lwan] sounds like the best thing ever, for what it is: a web server implementing a subset of HTTP/1.0 & HTTP/1.1 without a security focus, but with such good code that security is implicit. made as a product of exploration of / experimentation with low-level apis to see how tuned a web server could be. it doesn't prioritize features.
-* link:https://github.com/caddyserver/caddy[caddy]'s main feature is that it uses tls by default and makes doing so easy. otherwise, though large, seems not only sensibly designed, but _well_ designed. supports HTTP/1-2-3.
+* link:https://github.com/caddyserver/caddy[caddy]'s main feature is that it uses tls by default and makes doing so easy. otherwise, though large, seems not only sensibly designed, but _well_ designed. supports HTTP/1-2-3. written in go, so fast and safer than c.
 * openbsd's httpd. i haven't learned about it but i hear that it's very good.
 
-=== cgi scripts
+=== caddy
+
+caddy supports link:https://caddyserver.com/docs/config-adapters[many config formats], but link:https://caddyserver.com/docs/json/[json] is its canonical one and supports all of its functionality. all config files ultimately are turned into api calls to link:https://caddyserver.com/docs/api[caddy's api]. the link:https://caddyserver.com/docs/caddyfile[caddyfile] format is recommended to write by hand.
+
+TIP: when running caddy on the command line (not as a service), prefix with `sudo -E` to (effectively) reduce permissions after the server binds to the port. idk the details.
+
+TIP: you get http 502 if caddy tries using a reverse proxy url that it can't connect to.
+
+before we get started, when you'll you https with an actual certificate (as opposed to running on localhost), read <https://caddyserver.com/docs/automatic-https> first.
+
+==== config
+
+firstly, agreeing with its https-savvy design, each must be in a "site [domain] block". i'll use `localhost` in all my example configs as a convention. otherwise, familiarize yourself with the link:https://caddyserver.com/docs/caddyfile/concepts#structure[caddyfile structure] before or while reading these docs.
+
+when you request's path starts with `/foo/`, serve files from the local filesystem directory, `/baz`:
+
+----------------------
+localhost {
+  handle_path /foo/* {
+    root * /baz
+    file_server
+  }
+}
+----------------------
+
+link:https://caddyserver.com/docs/caddyfile/directives/handle_path[`handle_path`] strips the matched prefix before performing its directives. we can't do
+
+----------------------
+localhost {
+    root /foo/* /baz # when url path starts with "/foo", use the root /baz
+    file_server /baz # serve files from directory, /baz
+}
+----------------------
+
+because, although e.g. `/foo/thing.txt` would match the `root` directive, caddy would try to serve the file at path `/baz/foo/thing.txt`. unlike in some other frameworks, caddy's request matchers are not functions from uri path to handler! instead, the request (and so uri & its path) remain unchanged, and the matchers indeed just try to match against the request. this is actually the design that i'd expect; i came to expect the "map path [prefix] to handler" design only because factor uses it; but when i first tried to do it in factor, i thought that factor's design was stupid and "who'd think of that?! it's so confusing!". my conclusion is that both designs are fine, and both documentations suck, because neither plainly tells how the uri is routed! consider <https://caddyserver.com/docs/caddyfile/response-matchers>; it tells what mathers can do, and their syntax, and lists some builtin matchers, and where they "typically appear" (as config inside of certain other directives). it's a bunch of statements about some abstract structure whose definition is never given. we're programming, here: computations on data—definite, ordered structures of characters/numbers with precise, definite values—not mathematical abstractions. i can understand splitting a uri path by predicate, and mapping the sub-paths to computations a la `case/switch`. it leaves nothing to the imagination, and any fool can understand it immediately. i'll push for documentation to be simplified computations—not english, not the literal code: _basically_ the code, so that i know _literally but not precisely_ what the code is doing. btw, the other amazingly stupid yet common blunder that caddy's docs made is to provide such simple examples that they illustrate the most basic case, and suggest nothing about non-trivial cases. wildcards aren't illustrative, and are usually too encompassing, like the `Any` type in typed languages, or the identity function. i want to see structure, and know how parts of a system interact, far more than i want to see a simple system that achieves a commonly desired result.
+
+TIP: for a production server, disable the admin interface to remove link:https://bou.ke/blog/hacking-developers/[a localhost vulnerablity] (which i haven't tested/verified, but it seems that it applies to caddy's admin interface). this isn't necessary if caddy is the only network-facing service, but that's just one more risk to track.
+
+== cgi scripts
 
 * envars corresponding to request params are set. any POST body is on stdin.
 * output must be headers\n\nbody, and headers cannot be empty.
